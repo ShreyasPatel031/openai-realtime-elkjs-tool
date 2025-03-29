@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
+import ElkRender from "./ElkRender";
 
-const functionDescription = `
-Call this function when a user asks for a color palette.
+const elkGraphDescription = `
+Call this function to create a node-edge graph visualization. Provide a graph structure with nodes and edges,
+and it will be automatically laid out. Useful for:
+- Dependency graphs
+- Network diagrams
+- Tree structures
+- Flow diagrams
 `;
 
 const sessionUpdate = {
@@ -10,57 +16,116 @@ const sessionUpdate = {
     tools: [
       {
         type: "function",
-        name: "display_color_palette",
-        description: functionDescription,
+        name: "display_elk_graph",
+        description: elkGraphDescription,
         parameters: {
           type: "object",
           strict: true,
           properties: {
-            theme: {
+            title: {
               type: "string",
-              description: "Description of the theme for the color scheme.",
+              description: "Title for the graph visualization",
             },
-            colors: {
-              type: "array",
-              description: "Array of five hex color codes based on the theme.",
-              items: {
-                type: "string",
-                description: "Hex color code",
+            graph: {
+              type: "object",
+              description: "ELK graph structure with hierarchical support",
+              properties: {
+                id: { type: "string" },
+                children: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    description: "A node that can contain children and its own edges",
+                    properties: {
+                      id: { type: "string" },
+                      width: { type: "number" },
+                      height: { type: "number" },
+                      children: { 
+                        type: "array",
+                        description: "Nested child nodes",
+                        items: { "$ref": "#/properties/graph/properties/children/items" }
+                      },
+                      edges: {
+                        type: "array",
+                        description: "Edges between nodes within this container",
+                        items: {
+                          type: "object",
+                          properties: {
+                            id: { type: "string" },
+                            sources: { type: "array", items: { type: "string" } },
+                            targets: { type: "array", items: { type: "string" } }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                edges: {
+                  type: "array",
+                  description: "Top-level edges between nodes",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      sources: { type: "array", items: { type: "string" } },
+                      targets: { type: "array", items: { type: "string" } }
+                    }
+                  }
+                },
+                layoutOptions: {
+                  type: "object",
+                  description: "ELK layout algorithm options",
+                  properties: {
+                    algorithm: { 
+                      type: "string",
+                      description: "Layout algorithm (e.g., 'elk.layered')"
+                    },
+                    hierarchyHandling: {
+                      type: "string",
+                      description: "How to handle hierarchy ('INCLUDE_CHILDREN' or 'SEPARATE_CHILDREN')"
+                    }
+                  }
+                }
               },
-            },
+              required: ["id"]
+            }
           },
-          required: ["theme", "colors"],
-        },
-      },
+          required: ["title", "graph"]
+        }
+      }
     ],
     tool_choice: "auto",
   },
 };
 
 function FunctionCallOutput({ functionCallOutput }) {
-  const { theme, colors } = JSON.parse(functionCallOutput.arguments);
+  if (!functionCallOutput) return null;
 
-  const colorBoxes = colors.map((color) => (
-    <div
-      key={color}
-      className="w-full h-16 rounded-md flex items-center justify-center border border-gray-200"
-      style={{ backgroundColor: color }}
-    >
-      <p className="text-sm font-bold text-black bg-slate-100 rounded-md p-2 border border-black">
-        {color}
-      </p>
-    </div>
-  ));
+  try {
+    const { title, graph } = JSON.parse(functionCallOutput.arguments);
+    console.log("Rendering graph with data:", {
+      title,
+      graphId: graph.id,
+      childCount: graph.children?.length || 0,
+      edgeCount: graph.edges?.length || 0,
+      layoutOptions: graph.layoutOptions
+    });
 
-  return (
-    <div className="flex flex-col gap-2">
-      <p>Theme: {theme}</p>
-      {colorBoxes}
-      <pre className="text-xs bg-gray-100 rounded-md p-2 overflow-x-auto">
-        {JSON.stringify(functionCallOutput, null, 2)}
-      </pre>
-    </div>
-  );
+    return (
+      <div className="flex flex-col gap-2">
+        <h3 className="font-bold text-lg">{title}</h3>
+        <div className="bg-white rounded-md p-4 border border-gray-200">
+          <ElkRender initialGraph={graph} />
+        </div>
+        <pre className="text-xs bg-gray-100 rounded-md p-2 overflow-x-auto">
+          {JSON.stringify(functionCallOutput, null, 2)}
+        </pre>
+      </div>
+    );
+  } catch (error) {
+    console.error('Error in FunctionCallOutput:', error);
+    return <div>Error rendering graph</div>;
+  }
 }
 
 export default function ToolPanel({
@@ -86,19 +151,22 @@ export default function ToolPanel({
       mostRecentEvent.response.output
     ) {
       mostRecentEvent.response.output.forEach((output) => {
-        if (
-          output.type === "function_call" &&
-          output.name === "display_color_palette"
-        ) {
+        if (output.type === "function_call" && output.name === "display_elk_graph") {
+          console.log("Agent output:", output);
+          console.log("Function arguments:", JSON.parse(output.arguments));
+          const { title, graph } = JSON.parse(output.arguments);
+          console.log("Graph structure:", {
+            title,
+            nodes: graph.children,
+            edges: graph.edges,
+            layoutOptions: graph.layoutOptions
+          });
           setFunctionCallOutput(output);
           setTimeout(() => {
             sendClientEvent({
               type: "response.create",
               response: {
-                instructions: `
-                ask for feedback about the color palette - don't repeat 
-                the colors, just ask if they like the colors.
-              `,
+                instructions: `ask for feedback about the graph visualization - don't repeat the graph details, just ask if they like the layout.`
               },
             });
           }, 500);
@@ -117,15 +185,20 @@ export default function ToolPanel({
   return (
     <section className="h-full w-full flex flex-col gap-4">
       <div className="h-full bg-gray-50 rounded-md p-4">
-        <h2 className="text-lg font-bold">Color Palette Tool</h2>
+        <h2 className="text-lg font-bold">AI Tools</h2>
         {isSessionActive ? (
           functionCallOutput ? (
             <FunctionCallOutput functionCallOutput={functionCallOutput} />
           ) : (
-            <p>Ask for advice on a color palette...</p>
+            <div>
+              <p className="mb-2">Ask for:</p>
+              <ul className="list-disc pl-5">
+                <li>A graph visualization with nodes and edges</li>
+              </ul>
+            </div>
           )
         ) : (
-          <p>Start the session to use this tool...</p>
+          <p>Start the session to use these tools...</p>
         )}
       </div>
     </section>

@@ -1,23 +1,15 @@
 import { useEffect, useState } from "react";
 import ElkRender from "./ElkRender";
+import { elkGraphDescription } from "./elkGraphDescription";
 
-const elkGraphDescription = `
-Call this function to create a node-edge graph visualization. Provide a graph structure with nodes and edges,
-and it will be automatically laid out. Useful for:
-- Dependency graphs
-- Network diagrams
-- Tree structures
-- Flow diagrams
-`;
-
-const sessionUpdate = {
+const minimalSessionUpdate = {
   type: "session.update",
   session: {
     tools: [
       {
         type: "function",
         name: "display_elk_graph",
-        description: elkGraphDescription,
+        description: "Function to create node-edge graph visualizations",
         parameters: {
           type: "object",
           strict: true,
@@ -141,7 +133,28 @@ export default function ToolPanel({
 
     const firstEvent = events[events.length - 1];
     if (!functionAdded && firstEvent.type === "session.created") {
-      sendClientEvent(sessionUpdate);
+      console.log("Session created, sending minimal update...");
+      sendClientEvent(minimalSessionUpdate);
+      
+      // Send the full description in a separate message
+      setTimeout(() => {
+        console.log("Sending full description...");
+        sendClientEvent({
+          type: "conversation.item.create",
+          item: {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: `Here are the detailed instructions for creating ELK.js graphs:\n\n${elkGraphDescription}`
+              }
+            ]
+          }
+        });
+        sendClientEvent({ type: "response.create" });
+      }, 1000);
+      
       setFunctionAdded(true);
     }
 

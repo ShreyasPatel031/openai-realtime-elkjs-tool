@@ -8,6 +8,8 @@ export default function App() {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [events, setEvents] = useState([]);
   const [dataChannel, setDataChannel] = useState(null);
+  const [isDataChannelReady, setIsDataChannelReady] = useState(false);
+  const messageQueue = useRef([]);
   const peerConnection = useRef(null);
   const audioElement = useRef(null);
 
@@ -82,63 +84,118 @@ export default function App() {
 
   // Send a message to the model
   function sendClientEvent(message) {
+    if (!isDataChannelReady) {
+      console.log("Data channel not ready, queueing message");
+      console.log("Message size:", JSON.stringify(message).length);
+      messageQueue.current.push(message);
+      return;
+    }
+
     if (dataChannel) {
       const timestamp = new Date().toLocaleTimeString();
       message.event_id = message.event_id || crypto.randomUUID();
 
-      // send event before setting timestamp since the backend peer doesn't expect this field
-      dataChannel.send(JSON.stringify(message));
-
-      // if guard just in case the timestamp exists by miracle
-      if (!message.timestamp) {
-        message.timestamp = timestamp;
+      try {
+        console.log("Sending message, size:", JSON.stringify(message).length);
+        console.log("Data channel state:", dataChannel.readyState);
+        dataChannel.send(JSON.stringify(message));
+        if (!message.timestamp) {
+          message.timestamp = timestamp;
+        }
+        setEvents((prev) => [message, ...prev]);
+      } catch (error) {
+        console.error("Failed to send message:", error);
+        console.log("Message size that failed:", JSON.stringify(message).length);
+        messageQueue.current.push(message);
       }
-      setEvents((prev) => [message, ...prev]);
     } else {
-      console.error(
-        "Failed to send message - no data channel available",
-        message,
-      );
+      console.error("Failed to send message - no data channel available", message);
+      messageQueue.current.push(message);
+    }
+  }
+
+  // Process queued messages
+  function processMessageQueue() {
+    while (messageQueue.current.length > 0 && isDataChannelReady) {
+      const message = messageQueue.current.shift();
+      if (message) {
+        const timestamp = new Date().toLocaleTimeString();
+        message.event_id = message.event_id || crypto.randomUUID();
+        
+        try {
+          dataChannel.send(JSON.stringify(message));
+          if (!message.timestamp) {
+            message.timestamp = timestamp;
+          }
+          setEvents((prev) => [message, ...prev]);
+        } catch (error) {
+          console.error("Failed to send queued message:", error);
+          messageQueue.current.unshift(message); // Put it back at the front of the queue
+          break;
+        }
+      }
     }
   }
 
   // Send a text message to the model
   function sendTextMessage(message) {
-    const event = {
-      type: "conversation.item.create",
-      item: {
-        type: "message",
-        role: "user",
-        content: [
-          {
-            type: "input_text",
-            text: message,
-          },
-        ],
-      },
-    };
+    // Split message into chunks of 4000 characters
+    const chunkSize = 40000;
+    const chunks = [];
+    for (let i = 0; i < message.length; i += chunkSize) {
+      chunks.push(message.slice(i, i + chunkSize));
+    }
 
-    sendClientEvent(event);
-    sendClientEvent({ type: "response.create" });
+    // Send each chunk as a separate message
+    chunks.forEach((chunk, index) => {
+      const event = {
+        type: "conversation.item.create",
+        item: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: chunk,
+            },
+          ],
+        },
+      };
+
+      sendClientEvent(event);
+      
+      // Only send response.create after the last chunk
+      if (index === chunks.length - 1) {
+        sendClientEvent({ type: "response.create" });
+      }
+    });
   }
 
   // Attach event listeners to the data channel when a new one is created
   useEffect(() => {
     if (dataChannel) {
-      // Append new server events to the list
+      console.log("Data channel created, state:", dataChannel.readyState);
+      
       dataChannel.addEventListener("message", (e) => {
         const event = JSON.parse(e.data);
         if (!event.timestamp) {
           event.timestamp = new Date().toLocaleTimeString();
         }
-
         setEvents((prev) => [event, ...prev]);
       });
 
-      // Set session active when the data channel is opened
       dataChannel.addEventListener("open", () => {
+        console.log("Data channel opened");
         setIsSessionActive(true);
+        setIsDataChannelReady(true);
         setEvents([]);
+        processMessageQueue();
+      });
+
+      dataChannel.addEventListener("close", () => {
+        console.log("Data channel closed");
+        setIsDataChannelReady(false);
+        setIsSessionActive(false);
       });
     }
   }, [dataChannel]);

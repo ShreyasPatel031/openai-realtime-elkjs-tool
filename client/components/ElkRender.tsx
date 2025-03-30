@@ -61,7 +61,7 @@ function flattenGraph(
  * 2) Provide 'elkt' text in a separate input and call the /api/conversion to get JSON
  */
 export default function ElkRender({ initialGraph }: ElkRenderProps) {
-  const [graphLayout, setGraphLayout] = useState<any | null>(null);
+  const [graphLayout, setGraphLayout] = useState(null);
   const elk = new ELK();
 
   useEffect(() => {

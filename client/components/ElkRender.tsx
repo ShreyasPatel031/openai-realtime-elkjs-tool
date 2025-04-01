@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import ELK from "elkjs/lib/elk.bundled.js";
 
 interface ElkRenderProps {
@@ -135,14 +135,27 @@ export default function ElkRender({ initialGraph }: ElkRenderProps) {
 
     // Draw nodes first
     const nodeElements = nodes.map((n) => (
-      <rect
-        key={n.id}
-        x={shiftX(n.x)}
-        y={shiftY(n.y)}
-        width={n.width ?? 40}
-        height={n.height ?? 40}
-        style={getNodeStyle(n)}
-      />
+      <g key={n.id}>
+        <rect
+          x={shiftX(n.x)}
+          y={shiftY(n.y)}
+          width={n.width ?? 40}
+          height={n.height ?? 40}
+          style={getNodeStyle(n)}
+        />
+        {n.labels && n.labels[0] && (
+          <text
+            x={shiftX(n.x) + (n.labels[0].x ?? 5)}
+            y={shiftY(n.y) + (n.labels[0].y ?? 5)}
+            textAnchor="start"
+            dominantBaseline="hanging"
+            fontSize="12"
+            fill="black"
+          >
+            {n.labels[0].text}
+          </text>
+        )}
+      </g>
     ));
 
     // Then edges

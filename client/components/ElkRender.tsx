@@ -55,13 +55,24 @@ function flattenGraph(
   }
 }
 
+// Ensure every element has an ID
+function ensureIds(node: any, parentId: string = '') {
+  if (!node.id) {
+    node.id = `${parentId}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+  
+  if (Array.isArray(node.children)) {
+    node.children.forEach((child: any) => ensureIds(child, node.id));
+  }
+}
+
 /**
  * Page: Renders a UI with two ways to get an ELK graph:
  * 1) Paste a JSON/JS-like object into the textarea and let elkjs layout
  * 2) Provide 'elkt' text in a separate input and call the /api/conversion to get JSON
  */
 export default function ElkRender({ initialGraph }: ElkRenderProps) {
-  const [graphLayout, setGraphLayout] = useState(null);
+  const [graphLayout, setGraphLayout] = useState<any>(null);
   const elk = new ELK();
 
   useEffect(() => {
@@ -77,6 +88,9 @@ export default function ElkRender({ initialGraph }: ElkRenderProps) {
             ...initialGraph.layoutOptions
           }
         };
+
+        // Add IDs to all elements
+        ensureIds(graphWithOptions);
 
         console.log('Laying out graph:', graphWithOptions); // Debug log
         const layoutResult = await elk.layout(graphWithOptions);

@@ -28,15 +28,21 @@ interface BaseElement {
 
 interface RectangleElement extends BaseElement {
   type: 'rectangle';
+  id: string;
   x: number;
   y: number;
   width: number;
   height: number;
   backgroundColor?: string;
+  boundElements?: Array<{
+    id: string;
+    type: 'arrow';
+  }>;
 }
 
 interface TextElement extends BaseElement {
   type: 'text';
+  id: string;
   x: number;
   y: number;
   text: string;
@@ -45,11 +51,26 @@ interface TextElement extends BaseElement {
 
 interface ArrowElement extends BaseElement {
   type: 'arrow';
+  id: string;
   x: number;
   y: number;
   points: [number, number][];
   startArrowhead?: string;
   endArrowhead?: string;
+  startArrowheadSize?: number;
+  endArrowheadSize?: number;
+  label?: string;
+  roughness?: number;
+  startBinding?: {
+    elementId: string;
+    // focus: number;
+    // gap: number;
+  };
+  endBinding?: {
+    elementId: string;
+    // focus: number;
+    // gap: number;
+  };
 }
 
 type ExcalidrawElement = RectangleElement | TextElement | ArrowElement;
@@ -78,8 +99,13 @@ export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderPr
 
     console.log(`Node ${node.id} absolute position:`, { x: absX, y: absY });
 
-    // Shallow copy w/ absolute coords
-    const newNode = { ...node, x: absX, y: absY };
+    // Shallow copy w/ absolute coords and ensure id exists
+    const newNode = { 
+      ...node, 
+      x: absX, 
+      y: absY,
+      id: node.id || `node-${Math.random().toString(36).substr(2, 9)}` // Ensure id exists
+    };
     accum.nodes.push(newNode);
 
     // Process edges at current level
@@ -189,14 +215,12 @@ export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderPr
     // Process nodes
     console.log('\nProcessing nodes...');
     for (const node of accum.nodes) {
-      console.log(`Creating rectangle for node ${node.id}:`, {
-        position: { x: node.x, y: node.y },
-        size: { width: node.width, height: node.height }
-      });
+      console.log(`Creating rectangle for node:`, node);
 
       // Add node rectangle
       elements.push({
         type: 'rectangle',
+        id: node.id,
         x: node.x,
         y: node.y,
         width: node.width ?? 40,
@@ -204,12 +228,14 @@ export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderPr
         backgroundColor: Array.isArray(node.children) && node.children.length > 0 ? 'transparent' : '#e5e7eb',
         strokeColor: '#000000',
         strokeWidth: 1,
+        boundElements: [] // Initialize empty boundElements array
       });
 
       // Add node label
       if (node.labels && node.labels[0]) {
         elements.push({
           type: 'text',
+          id: node.id,
           x: node.x + (node.labels[0].x ?? 5),
           y: node.y + (node.labels[0].y ?? 5),
           text: node.labels[0].text,
@@ -221,13 +247,7 @@ export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderPr
     // Process edges
     console.log('\nProcessing edges...');
     for (const edge of accum.edges) {
-      console.log('Processing edge:', {
-        id: edge.id,
-        hasContainer: !!edge.container,
-        container: edge.container,
-        sectionCount: edge.sections?.length,
-        sections: edge.sections
-      });
+      console.log('Processing edge:', edge);
 
       if (!edge.sections) {
         console.log(`Edge ${edge.id} has no sections, skipping...`);
@@ -235,53 +255,94 @@ export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderPr
       }
 
       for (const section of edge.sections) {
-        console.log('Processing section:', {
-          startPoint: section.startPoint,
-          endPoint: section.endPoint,
-          hasBendPoints: !!section.bendPoints,
-          bendPointCount: section.bendPoints?.length
-        });
+        console.log('Processing section:', section);
 
         if (!section.startPoint || !section.endPoint) {
           console.log('Section missing start or end point, skipping...');
           continue;
         }
 
+        // Find source and target nodes
+        const sourceNode = accum.nodes.find(n => n.id === edge.sources[0]);
+        const targetNode = accum.nodes.find(n => n.id === edge.targets[0]);
+
+        // Skip if either node is missing
+        if (!sourceNode || !targetNode) {
+          console.log('Skipping arrow - missing nodes:', {
+            sourceId: edge.sources[0],
+            targetId: edge.targets[0]
+          });
+          continue;
+        }
+
         // Create points array with absolute coordinates
         const points: [number, number][] = [];
         
-        // Add start point
+        // Add start point (relative to arrow's x,y)
         points.push([
-          Number(section.startPoint.x),
-          Number(section.startPoint.y)
+          Number(section.startPoint.x) - Number(section.startPoint.x),
+          Number(section.startPoint.y) - Number(section.startPoint.y)
         ]);
 
-        // Add bend points if they exist
+        // Add bend points if they exist (relative to arrow's x,y)
         if (section.bendPoints) {
           section.bendPoints.forEach((bp: any) => {
-            points.push([Number(bp.x), Number(bp.y)]);
+            points.push([
+              Number(bp.x) - Number(section.startPoint.x),
+              Number(bp.y) - Number(section.startPoint.y)
+            ]);
           });
         }
 
-        // Add end point
+        // Add end point (relative to arrow's x,y)
         points.push([
-          Number(section.endPoint.x),
-          Number(section.endPoint.y)
+          Number(section.endPoint.x) - Number(section.startPoint.x),
+          Number(section.endPoint.y) - Number(section.startPoint.y)
         ]);
 
-        console.log('Created arrow points:', points);
+        // Use the edge's existing ID instead of generating a new one
+        const arrowId = edge.id;
 
-        // Create arrow element
+        // Create arrow element with proper bindings
         const arrowElement: ArrowElement = {
           type: 'arrow',
+          id: arrowId,
           x: Number(section.startPoint.x),
           y: Number(section.startPoint.y),
           points,
           strokeColor: '#000000',
           strokeWidth: 1,
-          startArrowhead: 'dot',
+        //   startArrowhead: 'dot',
           endArrowhead: 'arrow',
+          startArrowheadSize: 1,
+          endArrowheadSize: 1,
+          label: edge.id,
+          roughness: 0,
+          startBinding: {
+            elementId: sourceNode.id,
+            // focus: 0.5,
+            // gap: 5
+          },
+          endBinding: {
+            elementId: targetNode.id,
+            // focus: 0.5,
+            // gap: 5
+          }
         };
+
+        // Add the arrow to the boundElements of both source and target rectangles
+        const sourceRect = elements.find(e => e.type === 'rectangle' && e.id === sourceNode.id) as RectangleElement;
+        const targetRect = elements.find(e => e.type === 'rectangle' && e.id === targetNode.id) as RectangleElement;
+
+        if (sourceRect) {
+          sourceRect.boundElements = sourceRect.boundElements || [];
+          sourceRect.boundElements.push({ id: arrowId, type: 'arrow' });
+        }
+
+        if (targetRect) {
+          targetRect.boundElements = targetRect.boundElements || [];
+          targetRect.boundElements.push({ id: arrowId, type: 'arrow' });
+        }
 
         console.log('Adding arrow element:', arrowElement);
         elements.push(arrowElement);
@@ -299,8 +360,17 @@ export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderPr
       ...elementCounts,
       elements: elements.map(e => ({
         type: e.type,
-        ...(e.type === 'arrow' ? { points: (e as ArrowElement).points } : {}),
-        ...(e.type === 'rectangle' ? { x: e.x, y: e.y } : {}),
+        id: e.id,
+        ...(e.type === 'arrow' ? { 
+          points: (e as ArrowElement).points,
+          startBinding: (e as ArrowElement).startBinding,
+          endBinding: (e as ArrowElement).endBinding
+        } : {}),
+        ...(e.type === 'rectangle' ? { 
+          x: e.x, 
+          y: e.y,
+          boundElements: (e as RectangleElement).boundElements 
+        } : {}),
         ...(e.type === 'text' ? { text: (e as TextElement).text } : {})
       }))
     });
@@ -357,6 +427,75 @@ export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderPr
     }
   };
 
+  // Handle render button click
+  const handleRender = () => {
+    try {
+      // Deep clone the current JSON
+      const currentJson = JSON.parse(JSON.stringify(excalidrawJson));
+      
+      // Ensure the JSON has the required structure
+      if (!currentJson || !currentJson.elements || !Array.isArray(currentJson.elements)) {
+        console.error('Invalid JSON structure:', currentJson);
+        return;
+      }
+
+      // Ensure each element has required properties
+      const validatedElements = currentJson.elements.map((element: any) => {
+        if (!element) return null;
+        
+        // Ensure points array exists for arrows
+        if (element.type === 'arrow' && (!element.points || !Array.isArray(element.points))) {
+          console.error('Invalid arrow element:', element);
+          return null;
+        }
+
+        // Ensure dimensions exist for rectangles
+        if (element.type === 'rectangle' && (!element.width || !element.height)) {
+          console.error('Invalid rectangle element:', element);
+          return null;
+        }
+
+        // Ensure text exists for text elements
+        if (element.type === 'text' && !element.text) {
+          console.error('Invalid text element:', element);
+          return null;
+        }
+
+        return element;
+      }).filter(Boolean); // Remove null elements
+
+      // Create a new JSON object with validated elements
+      const validatedJson = {
+        type: 'excalidraw',
+        version: 2,
+        source: 'elk-graph',
+        elements: validatedElements,
+        appState: {
+          viewBackgroundColor: '#ffffff',
+          gridSize: 20,
+        },
+      };
+
+      console.log('Validated JSON before render:', {
+        elementCount: validatedJson.elements.length,
+        elements: validatedJson.elements.map((e: any) => ({
+          type: e.type,
+          ...(e.type === 'arrow' ? { points: e.points } : {}),
+          ...(e.type === 'rectangle' ? { width: e.width, height: e.height } : {}),
+          ...(e.type === 'text' ? { text: e.text } : {})
+        }))
+      });
+
+      // Force a re-render with validated data
+      setExcalidrawJson(null);
+      setTimeout(() => {
+        setExcalidrawJson(validatedJson);
+      }, 0);
+    } catch (err) {
+      console.error('Error refreshing diagram:', err);
+    }
+  };
+
   if (!excalidrawJson) {
     return <div>Loading...</div>;
   }
@@ -386,7 +525,13 @@ export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderPr
           />
         </Suspense>
       </div>
-      <div className="flex justify-end">
+      <div className="flex justify-end space-x-2">
+        <button
+          onClick={handleRender}
+          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+        >
+          Render
+        </button>
         <button
           onClick={downloadJson}
           className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"

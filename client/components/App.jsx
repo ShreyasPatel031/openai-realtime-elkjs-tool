@@ -3,12 +3,44 @@ import logo from "/assets/openai-logomark.svg";
 import EventLog from "./EventLog";
 import SessionControls from "./SessionControls";
 import ToolPanel from "./ToolPanel";
+import ElkTestPage from "./ElkTestPage";
+
+function MainContent({ events, isSessionActive, startSession, stopSession, sendClientEvent, sendTextMessage }) {
+  return (
+    <>
+      <section className="absolute top-0 left-0 right-[380px] bottom-0 flex">
+        <section className="absolute top-0 left-0 right-0 bottom-32 px-4 overflow-y-auto">
+          <EventLog events={events} />
+        </section>
+        <section className="absolute h-32 left-0 right-0 bottom-0 p-4">
+          <SessionControls
+            startSession={startSession}
+            stopSession={stopSession}
+            sendClientEvent={sendClientEvent}
+            sendTextMessage={sendTextMessage}
+            events={events}
+            isSessionActive={isSessionActive}
+          />
+        </section>
+      </section>
+      <section className="absolute top-0 w-[380px] right-0 bottom-0 p-4 pt-0 overflow-y-auto">
+        <ToolPanel
+          sendClientEvent={sendClientEvent}
+          sendTextMessage={sendTextMessage}
+          events={events}
+          isSessionActive={isSessionActive}
+        />
+      </section>
+    </>
+  );
+}
 
 export default function App() {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [events, setEvents] = useState([]);
   const [dataChannel, setDataChannel] = useState(null);
   const [isDataChannelReady, setIsDataChannelReady] = useState(false);
+  const [currentPage, setCurrentPage] = useState('main');
   const messageQueue = useRef([]);
   const peerConnection = useRef(null);
   const audioElement = useRef(null);
@@ -206,32 +238,29 @@ export default function App() {
         <div className="flex items-center gap-4 w-full m-4 pb-2 border-0 border-b border-solid border-gray-200">
           <img style={{ width: "24px" }} src={logo} />
           <h1>realtime console</h1>
+          <button 
+            onClick={() => setCurrentPage(currentPage === 'main' ? 'test' : 'main')}
+            className="ml-auto text-sm text-gray-600 hover:text-gray-900"
+          >
+            {currentPage === 'main' ? 'Test ELK' : 'Back to Main'}
+          </button>
         </div>
       </nav>
       <main className="absolute top-16 left-0 right-0 bottom-0">
-        <section className="absolute top-0 left-0 right-[380px] bottom-0 flex">
-          <section className="absolute top-0 left-0 right-0 bottom-32 px-4 overflow-y-auto">
-            <EventLog events={events} />
-          </section>
-          <section className="absolute h-32 left-0 right-0 bottom-0 p-4">
-            <SessionControls
-              startSession={startSession}
-              stopSession={stopSession}
-              sendClientEvent={sendClientEvent}
-              sendTextMessage={sendTextMessage}
-              events={events}
-              isSessionActive={isSessionActive}
-            />
-          </section>
-        </section>
-        <section className="absolute top-0 w-[380px] right-0 bottom-0 p-4 pt-0 overflow-y-auto">
-          <ToolPanel
-            sendClientEvent={sendClientEvent}
-            sendTextMessage={sendTextMessage}
+        {currentPage === 'test' ? (
+          <div className="p-4">
+            <ElkTestPage />
+          </div>
+        ) : (
+          <MainContent
             events={events}
             isSessionActive={isSessionActive}
+            startSession={startSession}
+            stopSession={stopSession}
+            sendClientEvent={sendClientEvent}
+            sendTextMessage={sendTextMessage}
           />
-        </section>
+        )}
       </main>
     </>
   );

@@ -33,6 +33,7 @@ interface RectangleElement extends BaseElement {
   y: number;
   width: number;
   height: number;
+  roughness?: number;
   backgroundColor?: string;
   boundElements?: Array<{
     id: string;
@@ -77,6 +78,12 @@ type ExcalidrawElement = RectangleElement | TextElement | ArrowElement;
 
 export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderProps) {
   const [excalidrawJson, setExcalidrawJson] = useState<any>(null);
+  const GRID_SIZE = 10;
+
+  // Helper function to snap coordinates to grid
+  const snapToGrid = (value: number): number => {
+    return Math.round(value / GRID_SIZE) * GRID_SIZE;
+  };
 
   /**
    * Flatten child coordinates by adding parent offsets so that
@@ -93,9 +100,9 @@ export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderPr
       parent: { x: parentX, y: parentY }
     });
 
-    // Calculate absolute coordinates
-    const absX = (node.x ?? 0) + parentX;
-    const absY = (node.y ?? 0) + parentY;
+    // Calculate absolute coordinates and snap to grid
+    const absX = snapToGrid((node.x ?? 0) + parentX);
+    const absY = snapToGrid((node.y ?? 0) + parentY);
 
     console.log(`Node ${node.id} absolute position:`, { x: absX, y: absY });
 
@@ -108,83 +115,40 @@ export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderPr
     };
     accum.nodes.push(newNode);
 
-    // Process edges at current level
+    // Process edges at all levels
     if (Array.isArray(node.edges)) {
-      console.log(`Found ${node.edges.length} edges for node ${node.id}`);
+      console.log('\nProcessing edges for node:', node.id);
       for (const edge of node.edges) {
-        console.log(`Processing edge in node ${node.id}:`, {
-          edgeId: edge.id,
-          container: edge.container,
-          sources: edge.sources,
-          targets: edge.targets,
-          sections: edge.sections
-        });
-
-        if (!edge.sections) {
-          console.log(`No sections found for edge ${edge.id}, skipping...`);
-          continue;
-        }
-
-        const newEdge = {
-          ...edge,
-          sections: edge.sections.map((section: any, idx: number) => {
-            console.log(`Edge section ${idx} before transformation:`, {
-              startPoint: section.startPoint,
-              endPoint: section.endPoint,
-              bendPoints: section.bendPoints,
-              parentOffset: { x: absX, y: absY }
-            });
-
-            // Transform coordinates if this edge belongs to this container
-            const shouldTransform = edge.container === node.id;
-            
-            // Transform coordinates
-            const start = shouldTransform ? {
-              x: section.startPoint.x + absX,
-              y: section.startPoint.y + absY,
-            } : section.startPoint;
-
-            const end = shouldTransform ? {
-              x: section.endPoint.x + absX,
-              y: section.endPoint.y + absY,
-            } : section.endPoint;
-
-            const bendPoints = shouldTransform && section.bendPoints ? 
-              section.bendPoints.map((bp: any) => ({
-                x: bp.x + absX,
-                y: bp.y + absY,
-              })) : section.bendPoints;
-
-            console.log(`Edge section ${idx} after transformation:`, {
-              start,
-              end,
-              bendPoints,
-              wasTransformed: shouldTransform
-            });
-
-            return { ...section, startPoint: start, endPoint: end, bendPoints };
-          }),
-        };
-        accum.edges.push(newEdge);
-        console.log(`Added edge ${edge.id} to accumulator, total edges: ${accum.edges.length}`);
-      }
-    }
-
-    // Process root level edges
-    if (node.id === 'root' && Array.isArray(node.edges)) {
-      console.log('\nProcessing root level edges');
-      for (const edge of node.edges) {
-        console.log('Processing root edge:', {
+        console.log('Processing edge:', {
           id: edge.id,
           sources: edge.sources,
           targets: edge.targets,
           sections: edge.sections
         });
         if (edge.sections) {
-          accum.edges.push(edge);
-          console.log(`Added root edge ${edge.id} to accumulator`);
+          // Snap edge coordinates to grid and adjust for parent position
+          const snappedEdge = {
+            ...edge,
+            sections: edge.sections.map((section: any) => ({
+              ...section,
+              startPoint: {
+                x: snapToGrid(section.startPoint.x + absX),
+                y: snapToGrid(section.startPoint.y + absY)
+              },
+              endPoint: {
+                x: snapToGrid(section.endPoint.x + absX),
+                y: snapToGrid(section.endPoint.y + absY)
+              },
+              bendPoints: section.bendPoints?.map((bp: any) => ({
+                x: snapToGrid(bp.x + absX),
+                y: snapToGrid(bp.y + absY)
+              }))
+            }))
+          };
+          accum.edges.push(snappedEdge);
+          console.log(`Added edge ${edge.id} to accumulator with adjusted coordinates:`, snappedEdge);
         } else {
-          console.log(`Root edge ${edge.id} has no sections, skipping...`);
+          console.log(`Edge ${edge.id} has no sections, skipping...`);
         }
       }
     }
@@ -217,27 +181,28 @@ export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderPr
     for (const node of accum.nodes) {
       console.log(`Creating rectangle for node:`, node);
 
-      // Add node rectangle
+      // Add node rectangle with snapped coordinates
       elements.push({
         type: 'rectangle',
         id: node.id,
-        x: node.x,
-        y: node.y,
-        width: node.width ?? 40,
-        height: node.height ?? 40,
+        x: snapToGrid(node.x),
+        y: snapToGrid(node.y),
+        roughness: 0,
+        width: snapToGrid(node.width ?? 40),
+        height: snapToGrid(node.height ?? 40),
         backgroundColor: Array.isArray(node.children) && node.children.length > 0 ? 'transparent' : '#e5e7eb',
         strokeColor: '#000000',
         strokeWidth: 1,
         boundElements: [] // Initialize empty boundElements array
       });
 
-      // Add node label
+      // Add node label with snapped coordinates
       if (node.labels && node.labels[0]) {
         elements.push({
           type: 'text',
           id: node.id,
-          x: node.x + (node.labels[0].x ?? 5),
-          y: node.y + (node.labels[0].y ?? 5),
+          x: snapToGrid(node.x + (node.labels[0].x ?? 5)),
+          y: snapToGrid(node.y + (node.labels[0].y ?? 5)),
           text: node.labels[0].text,
           fontSize: 12,
         });
@@ -275,44 +240,43 @@ export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderPr
           continue;
         }
 
-        // Create points array with absolute coordinates
+        // Create points array with snapped coordinates
         const points: [number, number][] = [];
         
         // Add start point (relative to arrow's x,y)
         points.push([
-          Number(section.startPoint.x) - Number(section.startPoint.x),
-          Number(section.startPoint.y) - Number(section.startPoint.y)
+          snapToGrid(Number(section.startPoint.x) - Number(section.startPoint.x)),
+          snapToGrid(Number(section.startPoint.y) - Number(section.startPoint.y))
         ]);
 
         // Add bend points if they exist (relative to arrow's x,y)
         if (section.bendPoints) {
           section.bendPoints.forEach((bp: any) => {
             points.push([
-              Number(bp.x) - Number(section.startPoint.x),
-              Number(bp.y) - Number(section.startPoint.y)
+              snapToGrid(Number(bp.x) - Number(section.startPoint.x)),
+              snapToGrid(Number(bp.y) - Number(section.startPoint.y))
             ]);
           });
         }
 
         // Add end point (relative to arrow's x,y)
         points.push([
-          Number(section.endPoint.x) - Number(section.startPoint.x),
-          Number(section.endPoint.y) - Number(section.startPoint.y)
+          snapToGrid(Number(section.endPoint.x) - Number(section.startPoint.x)),
+          snapToGrid(Number(section.endPoint.y) - Number(section.startPoint.y))
         ]);
 
         // Use the edge's existing ID instead of generating a new one
         const arrowId = edge.id;
 
-        // Create arrow element with proper bindings
+        // Create arrow element with proper bindings and snapped coordinates
         const arrowElement: ArrowElement = {
           type: 'arrow',
           id: arrowId,
-          x: Number(section.startPoint.x),
-          y: Number(section.startPoint.y),
+          x: snapToGrid(Number(section.startPoint.x)),
+          y: snapToGrid(Number(section.startPoint.y)),
           points,
           strokeColor: '#000000',
           strokeWidth: 1,
-        //   startArrowhead: 'dot',
           endArrowhead: 'arrow',
           startArrowheadSize: 1,
           endArrowheadSize: 1,
@@ -320,13 +284,9 @@ export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderPr
           roughness: 0,
           startBinding: {
             elementId: sourceNode.id,
-            // focus: 0.5,
-            // gap: 5
           },
           endBinding: {
             elementId: targetNode.id,
-            // focus: 0.5,
-            // gap: 5
           }
         };
 
@@ -401,7 +361,7 @@ export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderPr
       elements,
       appState: {
         viewBackgroundColor: '#ffffff',
-        gridSize: 20,
+        gridSize: 10,
       },
     };
 
@@ -472,7 +432,7 @@ export default function ElkExcalidrawRender({ graphData }: ElkExcalidrawRenderPr
         elements: validatedElements,
         appState: {
           viewBackgroundColor: '#ffffff',
-          gridSize: 20,
+          gridSize: 10,
         },
       };
 

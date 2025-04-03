@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import ElkRender from "./ElkRender";
 import { elkGraphDescription } from "./elkGraphDescription";
+import ReactFlowGraph from "./ReactFlowGraph";
 
 const minimalSessionUpdate = {
   type: "session.update",
@@ -127,6 +128,8 @@ export default function ToolPanel({
 }) {
   const [functionAdded, setFunctionAdded] = useState(false);
   const [functionCallOutput, setFunctionCallOutput] = useState(null);
+  const [activeTab, setActiveTab] = useState('elk'); // 'elk' or 'reactflow'
+  const [graphData, setGraphData] = useState(null);
 
   useEffect(() => {
     if (!events || events.length === 0) return;
@@ -178,6 +181,10 @@ export default function ToolPanel({
               edges: graph.edges,
               layoutOptions: graph.layoutOptions
             });
+            
+            // Store the parsed graph data for ReactFlow
+            setGraphData(parsedArgs);
+            
             setFunctionCallOutput(output);
             setTimeout(() => {
               sendClientEvent({
@@ -202,16 +209,58 @@ export default function ToolPanel({
     if (!isSessionActive) {
       setFunctionAdded(false);
       setFunctionCallOutput(null);
+      setGraphData(null);
     }
   }, [isSessionActive]);
 
   return (
     <section className="h-full w-full flex flex-col gap-4">
       <div className="h-full bg-gray-50 rounded-md p-4">
-        <h2 className="text-lg font-bold">AI Tools</h2>
+        <h2 className="text-lg font-bold mb-4">AI Tools</h2>
+        
+        {/* Tabs */}
+        <div className="flex border-b mb-4">
+          <button
+            className={`px-4 py-2 font-medium ${
+              activeTab === 'elk'
+                ? 'border-b-2 border-blue-500 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('elk')}
+          >
+            Elk Graph
+          </button>
+          <button
+            className={`px-4 py-2 font-medium ${
+              activeTab === 'reactflow'
+                ? 'border-b-2 border-blue-500 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+            onClick={() => setActiveTab('reactflow')}
+          >
+            ReactFlow
+          </button>
+        </div>
+        
+        {/* Tab Content */}
         {isSessionActive ? (
           functionCallOutput ? (
-            <FunctionCallOutput functionCallOutput={functionCallOutput} />
+            activeTab === 'elk' ? (
+              <FunctionCallOutput functionCallOutput={functionCallOutput} />
+            ) : (
+              <div>
+                <h3 className="text-lg font-medium mb-2">ReactFlow Visualization</h3>
+                <div className="border rounded p-4 bg-white h-[500px]">
+                  {graphData ? (
+                    <ReactFlowGraph graphData={graphData} />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-gray-500">
+                      No graph data available
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
           ) : (
             <div>
               <p className="mb-2">Ask for:</p>

@@ -4,15 +4,23 @@ import EventLog from "./EventLog";
 import SessionControls from "./SessionControls";
 import ToolPanel from "./ToolPanel";
 import ElkTestPage from "./ElkTestPage";
+import ErrorBoundary from "./ErrorBoundary";
 
 function MainContent({ events, isSessionActive, startSession, stopSession, sendClientEvent, sendTextMessage }) {
   return (
     <>
-      <section className="absolute top-0 left-0 right-[380px] bottom-0 flex">
-        <section className="absolute top-0 left-0 right-0 bottom-32 px-4 overflow-y-auto">
-          <EventLog events={events} />
+      <section className="absolute top-0 left-0 w-[80%] bottom-0 flex flex-col">
+        <section className="flex-1 px-4 overflow-y-auto">
+          <ErrorBoundary>
+            <ToolPanel
+              sendClientEvent={sendClientEvent}
+              sendTextMessage={sendTextMessage}
+              events={events}
+              isSessionActive={isSessionActive}
+            />
+          </ErrorBoundary>
         </section>
-        <section className="absolute h-32 left-0 right-0 bottom-0 p-4">
+        <section className="h-32 p-4">
           <SessionControls
             startSession={startSession}
             stopSession={stopSession}
@@ -23,13 +31,10 @@ function MainContent({ events, isSessionActive, startSession, stopSession, sendC
           />
         </section>
       </section>
-      <section className="absolute top-0 w-[380px] right-0 bottom-0 p-4 pt-0 overflow-y-auto">
-        <ToolPanel
-          sendClientEvent={sendClientEvent}
-          sendTextMessage={sendTextMessage}
-          events={events}
-          isSessionActive={isSessionActive}
-        />
+      <section className="absolute top-0 right-0 w-[20%] bottom-0 p-4 pt-0 overflow-y-auto">
+        <ErrorBoundary>
+          <EventLog events={events} />
+        </ErrorBoundary>
       </section>
     </>
   );
@@ -209,11 +214,22 @@ export default function App() {
       console.log("Data channel created, state:", dataChannel.readyState);
       
       dataChannel.addEventListener("message", (e) => {
-        const event = JSON.parse(e.data);
-        if (!event.timestamp) {
-          event.timestamp = new Date().toLocaleTimeString();
+        try {
+          const event = JSON.parse(e.data);
+          if (!event.timestamp) {
+            event.timestamp = new Date().toLocaleTimeString();
+          }
+          setEvents((prev) => [event, ...prev]);
+        } catch (error) {
+          console.error("Error parsing message data:", error);
+          console.error("Raw data:", e.data);
+          // Add a safe event to the list
+          setEvents((prev) => [{
+            type: "error",
+            timestamp: new Date().toLocaleTimeString(),
+            error: "Failed to parse message data"
+          }, ...prev]);
         }
-        setEvents((prev) => [event, ...prev]);
       });
 
       dataChannel.addEventListener("open", () => {
@@ -249,7 +265,9 @@ export default function App() {
       <main className="absolute top-16 left-0 right-0 bottom-0">
         {currentPage === 'test' ? (
           <div className="p-4">
-            <ElkTestPage />
+            <ErrorBoundary>
+              <ElkTestPage />
+            </ErrorBoundary>
           </div>
         ) : (
           <MainContent

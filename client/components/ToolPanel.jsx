@@ -166,23 +166,33 @@ export default function ToolPanel({
       mostRecentEvent.response.output.forEach((output) => {
         if (output.type === "function_call" && output.name === "display_elk_graph") {
           console.log("Agent output:", output);
-          console.log("Function arguments:", JSON.parse(output.arguments));
-          const { title, graph } = JSON.parse(output.arguments);
-          console.log("Graph structure:", {
-            title,
-            nodes: graph.children,
-            edges: graph.edges,
-            layoutOptions: graph.layoutOptions
-          });
-          setFunctionCallOutput(output);
-          setTimeout(() => {
-            sendClientEvent({
-              type: "response.create",
-              response: {
-                instructions: `ask for feedback about the graph visualization - don't repeat the graph details, just ask if they like the layout.`
-              },
+          try {
+            console.log("Function arguments:", output.arguments);
+            const parsedArgs = JSON.parse(output.arguments);
+            console.log("Parsed arguments:", parsedArgs);
+            
+            const { title, graph } = parsedArgs;
+            console.log("Graph structure:", {
+              title,
+              nodes: graph.children,
+              edges: graph.edges,
+              layoutOptions: graph.layoutOptions
             });
-          }, 500);
+            setFunctionCallOutput(output);
+            setTimeout(() => {
+              sendClientEvent({
+                type: "response.create",
+              });
+            }, 1000);
+          } catch (error) {
+            console.error("Error parsing function arguments:", error);
+            console.error("Raw arguments:", output.arguments);
+            // Set a safe default or show an error message
+            setFunctionCallOutput({
+              ...output,
+              error: "Failed to parse function arguments"
+            });
+          }
         }
       });
     }

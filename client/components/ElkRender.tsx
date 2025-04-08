@@ -2,6 +2,25 @@
 import React, { useState, useEffect } from "react";
 import ELK from "elkjs/lib/elk.bundled.js";
 
+// Add default options constants
+const ROOT_DEFAULT_OPTIONS = {
+  layoutOptions: {
+    "algorithm": "layered",
+    "elk.direction": "RIGHT",
+    "hierarchyHandling": "INCLUDE_CHILDREN",
+    "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
+  }
+};
+
+const NON_ROOT_DEFAULT_OPTIONS = {
+  width: 80,
+  height: 80,
+  layoutOptions: {
+    "nodeLabels.placement": "INSIDE V_TOP H_LEFT",
+    "elk.padding": "[top=40.0,left=20.0,bottom=20.0,right=20.0]"
+  }
+};
+
 interface ElkRenderProps {
   initialGraph: any;
 }
@@ -55,15 +74,40 @@ function flattenGraph(
   }
 }
 
-// Ensure every element has an ID
+// Modify the ensureIds function to also apply default options
 function ensureIds(node: any, parentId: string = '') {
+  if (!node) return node;
+  
+  // Apply defaults directly to the node
+  if (!parentId) {
+    // Root node
+    Object.assign(node, {
+      ...ROOT_DEFAULT_OPTIONS,
+      layoutOptions: {
+        ...ROOT_DEFAULT_OPTIONS.layoutOptions,
+        ...(node.layoutOptions || {})
+      }
+    });
+  } else {
+    // Non-root node - ensure width and height are set
+    node.width = node.width || NON_ROOT_DEFAULT_OPTIONS.width;
+    node.height = node.height || NON_ROOT_DEFAULT_OPTIONS.height;
+    node.layoutOptions = {
+      ...NON_ROOT_DEFAULT_OPTIONS.layoutOptions,
+      ...(node.layoutOptions || {})
+    };
+  }
+
   if (!node.id) {
     node.id = `${parentId}-${Math.random().toString(36).substr(2, 9)}`;
   }
   
+  // Update children recursively
   if (Array.isArray(node.children)) {
     node.children.forEach((child: any) => ensureIds(child, node.id));
   }
+
+  return node;
 }
 
 /**
@@ -78,19 +122,8 @@ export default function ElkRender({ initialGraph }: ElkRenderProps) {
   useEffect(() => {
     async function layoutGraph() {
       try {
-        // Add default layout options if none provided
-        const graphWithOptions = {
-          ...initialGraph,
-          layoutOptions: {
-            'elk.algorithm': 'layered',
-            'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
-            'elk.spacing.nodeNode': '50',
-            ...initialGraph.layoutOptions
-          }
-        };
-
-        // Add IDs to all elements
-        ensureIds(graphWithOptions);
+        // Apply defaults through ensureIds
+        const graphWithOptions = ensureIds(initialGraph);
 
         console.log('Laying out graph:', graphWithOptions); // Debug log
         const layoutResult = await elk.layout(graphWithOptions);

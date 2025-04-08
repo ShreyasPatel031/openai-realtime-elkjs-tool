@@ -1,14 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import ElkRender from './ElkRender';
 import ElkExcalidrawRender from './ElkExcalidrawRender';
+import {
+  addNode,
+  deleteNode,
+  moveNode,
+  addEdge,
+  deleteEdge,
+  moveEdge,
+  groupNodes,
+  removeGroup
+} from '../utils/graph_helper_functions';
+import type { ElkNode } from '../utils/graph_helper_functions';
 
 type PreviewMode = 'elk' | 'excalidraw';
 
 export default function ElkTestPage() {
   const [jsonInput, setJsonInput] = useState('');
-  const [graphData, setGraphData] = useState(null);
-  const [error, setError] = useState(null);
+  const [graphData, setGraphData] = useState<ElkNode | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState('elk');
+
+  // Add new state for operation inputs
+  const [nodeOperation, setNodeOperation] = useState({
+    nodeName: '',
+    parentId: '',
+    oldParentId: '',
+    newParentId: ''
+  });
+
+  const [edgeOperation, setEdgeOperation] = useState({
+    edgeId: '',
+    sourceId: '',
+    targetId: '',
+    newSourceId: '',
+    newTargetId: ''
+  });
+
+  const [groupOperation, setGroupOperation] = useState({
+    groupId: '',
+    nodeIds: '',  // Comma-separated list of node IDs
+    parentId: ''
+  });
 
   // Log when preview mode changes
   useEffect(() => {
@@ -54,18 +87,195 @@ export default function ElkTestPage() {
     }
   };
 
+  // Operation handlers
+  const handleNodeOperation = (operation: string) => {
+    if (!graphData) return;
+    let updatedGraph: ElkNode;
+
+    switch (operation) {
+      case 'add':
+        updatedGraph = addNode(nodeOperation.nodeName, nodeOperation.parentId, graphData);
+        break;
+      case 'delete':
+        updatedGraph = deleteNode(nodeOperation.nodeName, graphData);
+        break;
+      case 'move':
+        updatedGraph = moveNode(
+          nodeOperation.nodeName,
+          nodeOperation.oldParentId,
+          nodeOperation.newParentId,
+          graphData
+        );
+        break;
+      default:
+        return;
+    }
+    setGraphData({ ...updatedGraph });
+  };
+
+  const handleEdgeOperation = (operation: string) => {
+    if (!graphData) return;
+    let updatedGraph: ElkNode;
+
+    switch (operation) {
+      case 'add':
+        updatedGraph = addEdge(
+          edgeOperation.edgeId,
+          null,
+          edgeOperation.sourceId,
+          edgeOperation.targetId,
+          graphData
+        );
+        break;
+      case 'delete':
+        updatedGraph = deleteEdge(edgeOperation.edgeId, graphData);
+        break;
+      case 'move':
+        updatedGraph = moveEdge(
+          edgeOperation.edgeId,
+          edgeOperation.newSourceId,
+          edgeOperation.newTargetId,
+          graphData
+        );
+        break;
+      default:
+        return;
+    }
+    setGraphData({ ...updatedGraph });
+  };
+
+  const handleGroupOperation = (operation: string) => {
+    if (!graphData) return;
+    let updatedGraph: ElkNode;
+
+    switch (operation) {
+      case 'group':
+        updatedGraph = groupNodes(
+          groupOperation.nodeIds.split(',').map(id => id.trim()),
+          groupOperation.parentId,
+          groupOperation.groupId,
+          graphData
+        );
+        break;
+      case 'removeGroup':
+        updatedGraph = removeGroup(groupOperation.groupId, graphData);
+        break;
+      default:
+        return;
+    }
+    setGraphData({ ...updatedGraph });
+  };
+
   return (
     <div className="p-4">
       <h1 className="text-2xl font-bold mb-4">ELK Graph Test Page</h1>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <h2 className="text-lg font-semibold mb-2">Input JSON</h2>
+      <div className="grid grid-cols-12 gap-4">
+        <div className="col-span-4 h-[calc(100vh-8rem)] overflow-y-auto">
+          <h2 className="text-lg font-semibold mb-2 sticky top-0 bg-white z-10">Input JSON</h2>
           <textarea
-            className="w-full h-[600px] p-2 border rounded font-mono text-sm"
+            className="w-full h-[300px] p-2 border rounded font-mono text-sm mb-4"
             value={jsonInput}
             onChange={handleJsonChange}
             placeholder="Paste your ELK graph JSON here..."
           />
+
+          <div className="space-y-6">
+            <div className="border p-4 rounded">
+              <h3 className="font-semibold mb-2">🟩 Node Operations</h3>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="Node Name"
+                  className="w-full p-2 border rounded"
+                  value={nodeOperation.nodeName}
+                  onChange={e => setNodeOperation({...nodeOperation, nodeName: e.target.value})}
+                />
+                <input
+                  type="text"
+                  placeholder="Parent ID"
+                  className="w-full p-2 border rounded"
+                  value={nodeOperation.parentId}
+                  onChange={e => setNodeOperation({...nodeOperation, parentId: e.target.value})}
+                />
+                <input
+                  type="text"
+                  placeholder="New Parent ID (for move)"
+                  className="w-full p-2 border rounded"
+                  value={nodeOperation.newParentId}
+                  onChange={e => setNodeOperation({...nodeOperation, newParentId: e.target.value})}
+                />
+                <div className="flex space-x-2">
+                  <button onClick={() => handleNodeOperation('add')} className="bg-green-500 text-white px-4 py-2 rounded">Add</button>
+                  <button onClick={() => handleNodeOperation('delete')} className="bg-red-500 text-white px-4 py-2 rounded">Delete</button>
+                  <button onClick={() => handleNodeOperation('move')} className="bg-blue-500 text-white px-4 py-2 rounded">Move</button>
+                </div>
+              </div>
+            </div>
+
+            <div className="border p-4 rounded">
+              <h3 className="font-semibold mb-2">🟧 Edge Operations</h3>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="Edge ID"
+                  className="w-full p-2 border rounded"
+                  value={edgeOperation.edgeId}
+                  onChange={e => setEdgeOperation({...edgeOperation, edgeId: e.target.value})}
+                />
+                <input
+                  type="text"
+                  placeholder="Source ID"
+                  className="w-full p-2 border rounded"
+                  value={edgeOperation.sourceId}
+                  onChange={e => setEdgeOperation({...edgeOperation, sourceId: e.target.value})}
+                />
+                <input
+                  type="text"
+                  placeholder="Target ID"
+                  className="w-full p-2 border rounded"
+                  value={edgeOperation.targetId}
+                  onChange={e => setEdgeOperation({...edgeOperation, targetId: e.target.value})}
+                />
+                <div className="flex space-x-2">
+                  <button onClick={() => handleEdgeOperation('add')} className="bg-green-500 text-white px-4 py-2 rounded">Add</button>
+                  <button onClick={() => handleEdgeOperation('delete')} className="bg-red-500 text-white px-4 py-2 rounded">Delete</button>
+                  <button onClick={() => handleEdgeOperation('move')} className="bg-blue-500 text-white px-4 py-2 rounded">Move</button>
+                </div>
+              </div>
+            </div>
+
+            <div className="border p-4 rounded">
+              <h3 className="font-semibold mb-2">🟦 Group Operations</h3>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="Group ID"
+                  className="w-full p-2 border rounded"
+                  value={groupOperation.groupId}
+                  onChange={e => setGroupOperation({...groupOperation, groupId: e.target.value})}
+                />
+                <input
+                  type="text"
+                  placeholder="Node IDs (comma-separated)"
+                  className="w-full p-2 border rounded"
+                  value={groupOperation.nodeIds}
+                  onChange={e => setGroupOperation({...groupOperation, nodeIds: e.target.value})}
+                />
+                <input
+                  type="text"
+                  placeholder="Parent ID"
+                  className="w-full p-2 border rounded"
+                  value={groupOperation.parentId}
+                  onChange={e => setGroupOperation({...groupOperation, parentId: e.target.value})}
+                />
+                <div className="flex space-x-2">
+                  <button onClick={() => handleGroupOperation('group')} className="bg-green-500 text-white px-4 py-2 rounded">Group</button>
+                  <button onClick={() => handleGroupOperation('removeGroup')} className="bg-red-500 text-white px-4 py-2 rounded">Remove Group</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {error && (
             <div className="mt-2">
               <p className="text-red-500">{error}</p>
@@ -73,7 +283,7 @@ export default function ElkTestPage() {
             </div>
           )}
         </div>
-        <div>
+        <div className="col-span-8">
           <h2 className="text-lg font-semibold mb-2">Preview</h2>
           <div className="mb-2 flex space-x-2">
             <button
@@ -103,7 +313,7 @@ export default function ElkTestPage() {
               Excalidraw View
             </button>
           </div>
-          <div className="border rounded p-4 bg-white h-[600px] overflow-auto">
+          <div className="border rounded p-4 bg-white h-[calc(100vh-12rem)] overflow-auto">
             {graphData ? (
               <div className="min-w-full min-h-full">
                 {previewMode === 'elk' ? (

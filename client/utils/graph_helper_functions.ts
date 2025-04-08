@@ -1,0 +1,431 @@
+// Define interfaces for ELK JS layout.
+interface ElkLabel {
+  text: string;
+}
+
+export interface ElkEdge {
+  id: string;
+  sources: string[];
+  targets: string[];
+}
+
+export interface ElkNode {
+  id: string;
+  labels: ElkLabel[];
+  children?: ElkNode[];
+  edges?: ElkEdge[];
+}
+
+// Used to hold edge arrays during traversal.
+interface EdgeCollection {
+  edgeArr: ElkEdge[];
+  parent: ElkNode;
+}
+
+// ──────────────────────────────────────────────
+// HELPER FUNCTIONS
+// ──────────────────────────────────────────────
+
+/**
+ * Recursively finds a node by its id.
+ */
+function findNodeById(node: ElkNode, id: string): ElkNode | null {
+  if (node.id === id) return node;
+  if (node.children) {
+    for (const child of node.children) {
+      const found = findNodeById(child, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/**
+ * Recursively finds the parent of a node by its id.
+ */
+function findParentOfNode(
+  root: ElkNode,
+  id: string,
+  parent: ElkNode | null = null
+): ElkNode | null {
+  if (root.id === id) return parent;
+  if (root.children) {
+    for (const child of root.children) {
+      const result = findParentOfNode(child, id, root);
+      if (result) return result;
+    }
+  }
+  return null;
+}
+
+/**
+ * Get the path from the root to a target node.
+ */
+function getPathToNode(
+  node: ElkNode,
+  nodeId: string,
+  path: ElkNode[] = []
+): ElkNode[] | null {
+  if (node.id === nodeId) return [...path, node];
+  if (node.children) {
+    for (const child of node.children) {
+      const result = getPathToNode(child, nodeId, [...path, node]);
+      if (result) return result;
+    }
+  }
+  return null;
+}
+
+/*
+ * Find the common ancestor of two nodes.
+ */
+function findCommonAncestor(
+  layout: ElkNode,
+  id1: string,
+  id2: string
+): ElkNode | null {
+  const path1 = getPathToNode(layout, id1);
+  const path2 = getPathToNode(layout, id2);
+  if (!path1 || !path2) return null;
+  let common: ElkNode | null = null;
+  for (let i = 0; i < Math.min(path1.length, path2.length); i++) {
+    if (path1[i].id === path2[i].id) {
+      common = path1[i];
+    } else {
+      break;
+    }
+  }
+  return common;
+}
+
+/**
+ * Recursively traverses the layout and collects all edge arrays with their parent node.
+ */
+function collectEdges(node: ElkNode, collection: EdgeCollection[] = []): EdgeCollection[] {
+  if (node.edges) {
+    collection.push({ edgeArr: node.edges, parent: node });
+  }
+  if (node.children) {
+    for (const child of node.children) {
+      collectEdges(child, collection);
+    }
+  }
+  return collection;
+}
+
+/**
+ * Reattaches edges involving a moved node so that each edge is placed
+ * under the common ancestor of its endpoints.
+ */
+function updateEdgesForNode(nodeId: string, layout: ElkNode): ElkNode {
+  const allEdges = collectEdges(layout);
+  for (const { edgeArr, parent } of allEdges) {
+    // Loop backwards in case we need to remove any edges.
+    for (let i = edgeArr.length - 1; i >= 0; i--) {
+      const edge = edgeArr[i];
+      if (edge.sources.includes(nodeId) || edge.targets.includes(nodeId)) {
+        // For simplicity, assume one source and one target per edge.
+        const sourceId = edge.sources[0];
+        const targetId = edge.targets[0];
+        const commonAncestor = findCommonAncestor(layout, sourceId, targetId);
+        if (commonAncestor && (!parent || parent.id !== commonAncestor.id)) {
+          // Remove the edge from the current parent's edge list.
+          edgeArr.splice(i, 1);
+          if (!commonAncestor.edges) commonAncestor.edges = [];
+          commonAncestor.edges.push(edge);
+        }
+      }
+    }
+  }
+  return layout;
+}
+
+// ──────────────────────────────────────────────
+// PRIMITIVE OPERATIONS
+// ──────────────────────────────────────────────
+
+//
+// 🟩 NODE OPERATIONS
+//
+
+/**
+ * addNode(nodename, parentId)
+ * Creates a new node and adds it under the given parent.
+ */
+export function addNode(nodename: string, parentId: string, layout: ElkNode): ElkNode {
+  const parent = findNodeById(layout, parentId);
+  if (!parent) {
+    console.error(`Parent node not found: ${parentId}`);
+    return layout;
+  }
+  // Create new node: using nodename for both id and label.
+  const newNode: ElkNode = {
+    id: nodename,
+    labels: [{ text: nodename }],
+    children: [],
+    edges: []
+  };
+  if (!parent.children) parent.children = [];
+  parent.children.push(newNode);
+  return layout;
+}
+
+/**
+ * deleteNode(nodeId)
+ * Deletes a node from the layout and removes related edge references.
+ */
+export function deleteNode(nodeId: string, layout: ElkNode): ElkNode {
+  const parent = findParentOfNode(layout, nodeId);
+  if (!parent || !parent.children) {
+    console.error(`Node not found or trying to remove root: ${nodeId}`);
+    return layout;
+  }
+  parent.children = parent.children.filter(child => child.id !== nodeId);
+  if (parent.edges) {
+    parent.edges = parent.edges.filter(
+      edge => !(edge.sources.includes(nodeId) || edge.targets.includes(nodeId))
+    );
+  }
+  return layout;
+}
+
+/**
+ * moveNode(nodeId, oldParentId, newParentId)
+ * Moves a node from one parent to another and updates its edge attachments.
+ */
+export function moveNode(
+  nodeId: string,
+  oldParentId: string,
+  newParentId: string,
+  layout: ElkNode
+): ElkNode {
+  const oldParent = findNodeById(layout, oldParentId);
+  const newParent = findNodeById(layout, newParentId);
+  if (!oldParent || !newParent || !oldParent.children) {
+    console.error("Old or new parent not found");
+    return layout;
+  }
+  let node: ElkNode | undefined;
+  oldParent.children = oldParent.children.filter(child => {
+    if (child.id === nodeId) {
+      node = child;
+      return false;
+    }
+    return true;
+  });
+  if (!node) {
+    console.error(`Node not found in old parent: ${nodeId}`);
+    return layout;
+  }
+  if (!newParent.children) newParent.children = [];
+  newParent.children.push(node);
+  layout = updateEdgesForNode(nodeId, layout);
+  return layout;
+}
+
+//
+// 🟧 EDGE OPERATIONS
+//
+
+/**
+ * addEdge(edgeId, parentId, sourceId, targetId)
+ * Adds a new edge between two nodes.
+ * The edge will be attached at the common ancestor.
+ */
+export function addEdge(
+  edgeId: string,
+  parentId: string | null,  // kept for interface consistency, not used directly
+  sourceId: string,
+  targetId: string,
+  layout: ElkNode
+): ElkNode {
+  const commonAncestor = findCommonAncestor(layout, sourceId, targetId);
+  if (!commonAncestor) {
+    console.error(`Common ancestor not found for nodes: ${sourceId}, ${targetId}`);
+    return layout;
+  }
+  const newEdge: ElkEdge = {
+    id: edgeId,
+    sources: [sourceId],
+    targets: [targetId]
+  };
+  if (!commonAncestor.edges) commonAncestor.edges = [];
+  commonAncestor.edges.push(newEdge);
+  return layout;
+}
+
+/**
+ * deleteEdge(edgeId)
+ * Deletes an edge from the layout.
+ */
+export function deleteEdge(edgeId: string, layout: ElkNode): ElkNode {
+  function removeEdge(node: ElkNode): void {
+    if (node.edges) {
+      node.edges = node.edges.filter(edge => edge.id !== edgeId);
+    }
+    if (node.children) {
+      for (const child of node.children) {
+        removeEdge(child);
+      }
+    }
+  }
+  removeEdge(layout);
+  return layout;
+}
+
+/**
+ * moveEdge(edgeId, newSourceId, newTargetId)
+ * Moves an edge to new endpoints and reattaches it at the proper common ancestor.
+ */
+export function moveEdge(
+  edgeId: string,
+  newSourceId: string,
+  newTargetId: string,
+  layout: ElkNode
+): ElkNode {
+  let edge: ElkEdge | null = null;
+  function findAndRemoveEdge(node: ElkNode): void {
+    if (node.edges) {
+      for (let i = 0; i < node.edges.length; i++) {
+        if (node.edges[i].id === edgeId) {
+          edge = node.edges[i];
+          node.edges.splice(i, 1);
+          return;
+        }
+      }
+    }
+    if (node.children) {
+      for (const child of node.children) {
+        findAndRemoveEdge(child);
+        if (edge) return;
+      }
+    }
+  }
+  findAndRemoveEdge(layout);
+  if (!edge) {
+    console.error(`Edge not found: ${edgeId}`);
+    return layout;
+  }
+  edge.sources = [newSourceId];
+  edge.targets = [newTargetId];
+  const commonAncestor = findCommonAncestor(layout, newSourceId, newTargetId);
+  if (!commonAncestor) {
+    console.error("Common ancestor not found for new endpoints");
+    return layout;
+  }
+  if (!commonAncestor.edges) commonAncestor.edges = [];
+  commonAncestor.edges.push(edge);
+  return layout;
+}
+
+//
+// 🟦 GROUP OPERATIONS
+//
+
+/**
+ * groupNodes(nodeIds, parentId, groupId)
+ * Creates a new group node under the given parent,
+ * moves the specified nodes into the group, and updates edge attachments.
+ */
+export function groupNodes(
+  nodeIds: string[],
+  parentId: string,
+  groupId: string,
+  layout: ElkNode
+): ElkNode {
+  const parent = findNodeById(layout, parentId);
+  if (!parent || !parent.children) {
+    console.error(`Parent not found: ${parentId}`);
+    return layout;
+  }
+  const groupNode: ElkNode = {
+    id: groupId,
+    labels: [{ text: groupId }],
+    children: [],
+    edges: []
+  };
+  // Move the specified nodes into the new group.
+  for (const nodeId of nodeIds) {
+    const idx = parent.children.findIndex(child => child.id === nodeId);
+    if (idx !== -1) {
+      const node = parent.children.splice(idx, 1)[0];
+      groupNode.children!.push(node);
+    } else {
+      console.warn(`Node not found in parent: ${nodeId}`);
+    }
+  }
+  parent.children.push(groupNode);
+  // Update edges for moved nodes.
+  groupNode.children?.forEach(child => {
+    layout = updateEdgesForNode(child.id, layout);
+  });
+  return layout;
+}
+
+/**
+ * removeGroup(groupId)
+ * Removes a group node by moving its children up to the parent and updating edges.
+ */
+export function removeGroup(groupId: string, layout: ElkNode): ElkNode {
+  const groupNode = findNodeById(layout, groupId);
+  if (!groupNode) {
+    console.error(`Group not found: ${groupId}`);
+    return layout;
+  }
+  const parent = findParentOfNode(layout, groupId);
+  if (!parent || !parent.children) {
+    console.error("The group node does not have a parent (maybe it is the root).");
+    return layout;
+  }
+  if (groupNode.children) {
+    for (const child of groupNode.children) {
+      parent.children.push(child);
+      layout = updateEdgesForNode(child.id, layout);
+    }
+  }
+  parent.children = parent.children.filter(child => child.id !== groupId);
+  return layout;
+}
+
+// ──────────────────────────────────────────────
+// USAGE EXAMPLE
+// ──────────────────────────────────────────────
+
+// Assuming you have an initial layout like this:
+let layout: ElkNode = {
+  id: "root",
+  labels: [{ text: "Root" }],
+  children: [
+    {
+      id: "ui",
+      labels: [{ text: "UI" }],
+      children: [
+        {
+          id: "webapp",
+          labels: [{ text: "Web App" }]
+        }
+      ]
+    },
+    // Other nodes go here…
+  ],
+  edges: []
+};
+
+// Example usage:
+// Add a new node under "ui"
+layout = addNode("newNode", "ui", layout);
+
+// Move a node from "ui" to "aws"
+layout = moveNode("webapp", "ui", "aws", layout);
+
+// Add an edge connecting "newNode" to "webapp"
+layout = addEdge("edge1", null, "newNode", "webapp", layout);
+
+// Group two nodes under a new group called "group1" within "aws"
+layout = groupNodes(["api", "lambda"], "aws", "group1", layout);
+
+// Remove the group (ungroup)
+layout = removeGroup("group1", layout);
+
+// The modified layout can now be used with ELK JS.
+console.log(JSON.stringify(layout, null, 2));

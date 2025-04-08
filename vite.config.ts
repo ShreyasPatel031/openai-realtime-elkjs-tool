@@ -19,4 +19,9 @@ export default defineConfig({
   ssr: {
     noExternal: ['@excalidraw/excalidraw'],
   },
+  build: {
+    rollupOptions: {
+      external: [/\.(test|spec)\.(ts|tsx)$/],
+    },
+  },
 }); 

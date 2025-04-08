@@ -7,7 +7,10 @@
     "build:client": "vite build --outDir dist/client --ssrManifest",
     "build:server": "vite build --outDir dist/server --ssr /index.js",
     "devinstall": "zx ../../devinstall.mjs -- node server.js --dev",
-    "lint": "eslint . --ext .js,.jsx --fix"
+    "lint": "eslint . --ext .js,.jsx --fix",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "0.17.3",
@@ -39,6 +42,7 @@
     "postcss-preset-env": "^7.7.1",
     "tailwindcss": "^3.4.1",
     "ts-jest": "^29.3.1",
+    "ts-node": "^10.9.2",
     "typescript": "^5.8.2",
     "vite": "^5.0.2"
   }

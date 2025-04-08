@@ -9,11 +9,16 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
-    "isolatedModules": true,
+    "isolatedModules": false,
     "jsx": "preserve",
     "incremental": true,
-    "types": ["react", "react-dom"]
+    "types": ["react", "react-dom", "jest", "@testing-library/jest-dom"]
   },
-  "include": ["client/**/*.ts", "client/**/*.tsx"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "**/*.test.ts",
+    "**/*.test.tsx"
+  ],
   "exclude": ["node_modules"]
 } 

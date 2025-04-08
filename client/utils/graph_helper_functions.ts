@@ -175,17 +175,31 @@ export function addNode(nodename: string, parentId: string, layout: ElkNode): El
  * Deletes a node from the layout and removes related edge references.
  */
 export function deleteNode(nodeId: string, layout: ElkNode): ElkNode {
+  // First, find and remove the node from its parent
   const parent = findParentOfNode(layout, nodeId);
   if (!parent || !parent.children) {
     console.error(`Node not found or trying to remove root: ${nodeId}`);
     return layout;
   }
   parent.children = parent.children.filter(child => child.id !== nodeId);
-  if (parent.edges) {
-    parent.edges = parent.edges.filter(
-      edge => !(edge.sources.includes(nodeId) || edge.targets.includes(nodeId))
-    );
+
+  // Function to remove edges related to the deleted node
+  function removeEdges(node: ElkNode): void {
+    if (node.edges) {
+      node.edges = node.edges.filter(edge => 
+        !edge.sources.includes(nodeId) && !edge.targets.includes(nodeId)
+      );
+    }
+    if (node.children) {
+      for (const child of node.children) {
+        removeEdges(child);
+      }
+    }
   }
+
+  // Remove edges from all levels of the graph
+  removeEdges(layout);
+
   return layout;
 }
 
@@ -288,7 +302,7 @@ export function moveEdge(
     if (node.edges) {
       for (let i = 0; i < node.edges.length; i++) {
         if (node.edges[i].id === edgeId) {
-          edge = node.edges[i];
+          edge = node.edges[i] as ElkEdge;
           node.edges.splice(i, 1);
           return;
         }
@@ -306,15 +320,17 @@ export function moveEdge(
     console.error(`Edge not found: ${edgeId}`);
     return layout;
   }
-  edge.sources = [newSourceId];
-  edge.targets = [newTargetId];
   const commonAncestor = findCommonAncestor(layout, newSourceId, newTargetId);
   if (!commonAncestor) {
     console.error("Common ancestor not found for new endpoints");
     return layout;
   }
   if (!commonAncestor.edges) commonAncestor.edges = [];
-  commonAncestor.edges.push(edge);
+  commonAncestor.edges.push({
+    id: edgeId,
+    sources: [newSourceId],
+    targets: [newTargetId]
+  });
   return layout;
 }
 

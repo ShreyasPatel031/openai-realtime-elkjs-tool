@@ -127,8 +127,11 @@ export default function ElkRender({ initialGraph }: ElkRenderProps) {
   useEffect(() => {
     async function layoutGraph() {
       try {
+        // Create a deep copy of the graph to avoid modifying the original
+        const graphCopy = JSON.parse(JSON.stringify(initialGraph));
+        
         // Apply defaults through ensureIds
-        const graphWithOptions = ensureIds(initialGraph);
+        const graphWithOptions = ensureIds(graphCopy);
 
         console.log('Laying out graph:', graphWithOptions); // Debug log
         const layoutResult = await elk.layout(graphWithOptions);

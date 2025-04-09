@@ -13,23 +13,21 @@ import {
 } from "../utils/graph_helper_functions";
 import ELK from "elkjs/lib/elk.bundled.js";
 
-// Create an initial ELK graph layout based on the description
-const getInitialElkGraph = () => {
-  // Parse the example graph from elkGraphDescription
-  const descriptionText = elkGraphDescription;
-  const graphStartIndex = descriptionText.indexOf('{');
-  const graphEndIndex = descriptionText.lastIndexOf('}');
-  
-  if (graphStartIndex > -1 && graphEndIndex > -1) {
-    try {
-      const graphJson = descriptionText.substring(graphStartIndex, graphEndIndex + 1);
-      return JSON.parse(graphJson);
-    } catch (error) {
-      console.error("Error parsing initial graph:", error);
+// Helper function to find a node by ID
+const findNodeById = (node, id) => {
+  if (node.id === id) return node;
+  if (node.children) {
+    for (const child of node.children) {
+      const found = findNodeById(child, id);
+      if (found) return found;
     }
   }
-  
-  // Fallback to a simple graph if parsing fails
+  return null;
+};
+
+// Create an initial ELK graph layout based on the description
+const getInitialElkGraph = () => {
+  // Directly return the simple graph
   return {
     "id": "root",
     "children": [
@@ -45,7 +43,6 @@ const getInitialElkGraph = () => {
       },
       { 
         "id": "aws",
-        
         "labels": [{ "text": "AWS" }],
         "children": [
           { 
@@ -133,16 +130,13 @@ const minimalSessionUpdate = {
       {
         type: "function",
         name: "display_elk_graph",
-        description: "Function to display the current ELK graph layout",
+        description: "Function to display and return the current ELK graph layout",
         parameters: {
           type: "object",
           properties: {
-            title: {
-              type: "string",
-              description: "Title for the graph visualization",
-            }
+            // No parameters needed as it simply returns the current graph state
           },
-          required: ["title"]
+          required: []
         }
       },
       {
@@ -291,7 +285,10 @@ function FunctionCallOutput({ title, elkGraph }) {
     <div className="flex flex-col gap-2">
       <h3 className="font-bold text-lg">{title}</h3>
       <div className="bg-white rounded-md p-4 border border-gray-200">
-        <ElkRender initialGraph={elkGraph} />
+        <ElkRender 
+          key={JSON.stringify(elkGraph)} 
+          initialGraph={elkGraph} 
+        />
       </div>
       <pre className="text-xs bg-gray-100 rounded-md p-2 overflow-x-auto">
         {JSON.stringify(elkGraph, null, 2)}
@@ -312,15 +309,6 @@ export default function ToolPanel({
   const [graphData, setGraphData] = useState(null);
   const elk = new ELK();
 
-  const updateGraphLayout = async (graph) => {
-    try {
-      const layout = await elk.layout(graph);
-      setElkGraph(layout);
-    } catch (error) {
-      console.error("Error updating graph layout:", error);
-    }
-  };
-
   useEffect(() => {
     if (!events || events.length === 0) return;
 
@@ -328,9 +316,6 @@ export default function ToolPanel({
     if (!functionAdded && firstEvent.type === "session.created") {
       console.log("Session created, sending minimal update...");
       sendClientEvent(minimalSessionUpdate);
-      
-      // Initialize the ELK graph
-      updateGraphLayout(getInitialElkGraph());
       
       // Send the full description in a separate message
       setTimeout(() => {
@@ -343,7 +328,10 @@ export default function ToolPanel({
             content: [
               {
                 type: "input_text",
-                text: `Here are the detailed instructions for creating and editing ELK.js graphs:\n\n${elkGraphDescription}\n\nYou can use the following tools to manipulate the graph:
+                text: `
+                Under no circumstances should you say anything to the user, do not acknowledge their requests, do not explain your actions, just perform the actions they tell you to do.
+
+                Here are the detailed instructions for creating and editing ELK.js graphs:\n\n${elkGraphDescription}\n\nYou can use the following tools to manipulate the graph:
                 - display_elk_graph: Show the current graph
                 - add_node: Add a new node to the graph
                 - delete_node: Remove a node from the graph
@@ -353,7 +341,7 @@ export default function ToolPanel({
                 - group_nodes: Group multiple nodes together
                 - remove_group: Ungroup nodes
 
-                Try to manipulate the graph by adding a new service component!`
+                `
               }
             ]
           }
@@ -366,8 +354,7 @@ export default function ToolPanel({
 
     const mostRecentEvent = events[0];
     if (
-      mostRecentEvent.type === "response.done" &&
-      mostRecentEvent.response.output
+      mostRecentEvent.type === "response.done" && mostRecentEvent.response.output
     ) {
       mostRecentEvent.response.output.forEach((output) => {
         if (output.type === "function_call") {
@@ -375,76 +362,342 @@ export default function ToolPanel({
           
           try {
             const args = JSON.parse(output.arguments);
-            console.log("Function call:", output.name, args);
+            // console.log("Function call:", output.name, args);
+            let updatedGraph = null;
             
             // Process each function based on its name
             switch(output.name) {
               case "display_elk_graph":
-                if (args.title) {
-                  setGraphTitle(args.title);
+                try {
+                  
+                  // Return the current graph layout JSON
+                  updatedGraph = { ...elkGraph };
+                  setElkGraph(updatedGraph);
+                  
+                  // Add more debugging
+                  console.log("Sending graph to agent:", JSON.stringify(updatedGraph).substring(0, 100) + "...");
+                  
+                  // Send the current graph layout JSON back to the agent
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Graph data: \n\`\`\`json\n${JSON.stringify(updatedGraph, null, 2)}\n\`\`\``
+                        }
+                      ]
+                    }
+                  });
+                } catch (displayError) {
+                  // Enhanced error logging with full details
+                  console.error(`Error in display_elk_graph operation:`, displayError);
+                  console.error(`Attempted to display graph layout`);
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in display_elk_graph operation: ${displayError.message}.`
+                        }
+                      ]
+                    }
+                  });
+                  return;
                 }
-                // Use current graph state, no changes
                 break;
                 
               case "add_node":
-                setElkGraph(currentGraph => {
-                  const updatedGraph = addNode(args.nodename, args.parentId, currentGraph);
-                  updateGraphLayout(updatedGraph);
-                  return updatedGraph;
-                });
+                try {
+                  // Check if parent exists
+                  const parent = findNodeById(elkGraph, args.parentId);
+                  if (!parent) {
+                    throw new Error(`Parent node '${args.parentId}' not found in the graph`);
+                  }
+                  
+                  updatedGraph = addNode(args.nodename, args.parentId, elkGraph);
+                  setElkGraph(updatedGraph);
+                } catch (addNodeError) {
+                  // Enhanced error logging with full details
+                  console.error(`Error in add_node operation:`, addNodeError);
+                  // console.error(`Error stack:`, addNodeError.stack);
+                  console.error(`Attempted to add node '${args.nodename}' to parent '${args.parentId}'`);
+                  // console.error(`Current graph:`, elkGraph);
+                  
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in add_node operation: ${addNodeError.message}. Current graph remains unchanged. Check that the parent node exists.`
+                        }
+                      ]
+                    }
+                  });
+                  return;
+                }
                 break;
                 
               case "delete_node":
-                setElkGraph(currentGraph => {
-                  const updatedGraph = deleteNode(args.nodeId, currentGraph);
-                  updateGraphLayout(updatedGraph);
-                  return updatedGraph;
-                });
+                try {
+                  // Check if node exists before attempting to delete
+                  const node = findNodeById(elkGraph, args.nodeId);
+                  if (!node) {
+                    throw new Error(`Node '${args.nodeId}' not found in the graph`);
+                  }
+                  
+                  updatedGraph = deleteNode(args.nodeId, elkGraph);
+                  setElkGraph(updatedGraph);
+                } catch (deleteError) {
+                  // Enhanced error logging with full details
+                  console.error(`Error in delete_node operation:`, deleteError);
+                  // console.error(`Error stack:`, deleteError.stack);
+                  console.error(`Attempted to delete node '${args.nodeId}'`);
+                  // console.error(`Current graph:`, elkGraph);
+                  
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in delete_node operation: ${deleteError.message}. Current graph remains unchanged. Check that the node exists.`
+                        }
+                      ]
+                    }
+                  });
+                  return;
+                }
                 break;
                 
               case "move_node":
-                setElkGraph(currentGraph => {
-                  const updatedGraph = moveNode(args.nodeId, args.oldParentId, args.newParentId, currentGraph);
-                  updateGraphLayout(updatedGraph);
-                  return updatedGraph;
-                });
+                try {
+                  // Check if the node exists
+                  const node = findNodeById(elkGraph, args.nodeId);
+                  if (!node) {
+                    throw new Error(`Node '${args.nodeId}' not found in the graph`);
+                  }
+                  updatedGraph = moveNode(args.nodeId, args.newParentId, elkGraph);
+                  console.log("Updated graph after move_node:", updatedGraph);
+                  setElkGraph(updatedGraph);
+                } catch (moveError) {
+                  // Enhanced error logging with full details
+                  console.error(`Error in move_node operation:`, moveError);
+                  console.error(`Attempted to move node '${args.nodeId}' to '${args.newParentId}'`);
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in move_node operation: ${moveError.message}. Current graph remains unchanged. Check that the node exists.`
+                        }
+                      ]
+                    }
+                  });
+                  return;
+                }
                 break;
                 
               case "add_edge":
-                setElkGraph(currentGraph => {
-                  const updatedGraph = addEdge(args.edgeId, null, args.sourceId, args.targetId, currentGraph);
-                  updateGraphLayout(updatedGraph);
-                  return updatedGraph;
-                });
+                try {
+                  // Check if source and target nodes exist
+                  const sourceNode = findNodeById(elkGraph, args.sourceId);
+                  const targetNode = findNodeById(elkGraph, args.targetId);
+                  
+                  if (!sourceNode) {
+                    throw new Error(`Source node '${args.sourceId}' not found in the graph`);
+                  }
+                  if (!targetNode) {
+                    throw new Error(`Target node '${args.targetId}' not found in the graph`);
+                  }
+                  
+                  updatedGraph = addEdge(args.edgeId, null, args.sourceId, args.targetId, elkGraph);
+                  setElkGraph(updatedGraph);
+                } catch (addEdgeError) {
+                  // Enhanced error logging with full details
+                  console.error(`Error in add_edge operation:`, addEdgeError);
+                  // console.error(`Error stack:`, addEdgeError.stack);
+                  console.error(`Attempted to add edge '${args.edgeId}' from '${args.sourceId}' to '${args.targetId}'`);
+                  // console.error(`Current graph:`, elkGraph);
+                  
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in add_edge operation: ${addEdgeError.message}. Current graph remains unchanged. Check that source and target nodes exist.`
+                        }
+                      ]
+                    }
+                  });
+                  return;
+                }
                 break;
                 
               case "delete_edge":
-                setElkGraph(currentGraph => {
-                  const updatedGraph = deleteEdge(args.edgeId, currentGraph);
-                  updateGraphLayout(updatedGraph);
-                  return updatedGraph;
-                });
+                try {
+                  // Check if edge exists (need to find it in any node's edges array)
+                  let edgeExists = false;
+                  
+                  const checkEdgeExists = (node) => {
+                    if (node.edges) {
+                      for (const edge of node.edges) {
+                        if (edge.id === args.edgeId) {
+                          edgeExists = true;
+                          return;
+                        }
+                      }
+                    }
+                    if (node.children) {
+                      for (const child of node.children) {
+                        checkEdgeExists(child);
+                        if (edgeExists) return;
+                      }
+                    }
+                  };
+                  
+                  checkEdgeExists(elkGraph);
+                  
+                  if (!edgeExists) {
+                    throw new Error(`Edge '${args.edgeId}' not found in the graph`);
+                  }
+                  
+                  updatedGraph = deleteEdge(args.edgeId, elkGraph);
+                  setElkGraph(updatedGraph);
+                } catch (deleteEdgeError) {
+                  // Enhanced error logging with full details
+                  console.error(`Error in delete_edge operation:`, deleteEdgeError);
+                  // console.error(`Error stack:`, deleteEdgeError.stack);
+                  console.error(`Attempted to delete edge '${args.edgeId}'`);
+                  // console.error(`Current graph:`, elkGraph);
+                  
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in delete_edge operation: ${deleteEdgeError.message}. Current graph remains unchanged. Check that the edge exists.`
+                        }
+                      ]
+                    }
+                  });
+                  return;
+                }
                 break;
                 
               case "group_nodes":
-                setElkGraph(currentGraph => {
-                  const updatedGraph = groupNodes(args.nodeIds, args.parentId, args.groupId, currentGraph);
-                  updateGraphLayout(updatedGraph);
-                  return updatedGraph;
-                });
+                try {
+                  // Check if parent and all nodes exist
+                  const parent = findNodeById(elkGraph, args.parentId);
+                  if (!parent) {
+                    throw new Error(`Parent node '${args.parentId}' not found in the graph`);
+                  }
+                  
+                  for (const nodeId of args.nodeIds) {
+                    const node = findNodeById(elkGraph, nodeId);
+                    if (!node) {
+                      throw new Error(`Node '${nodeId}' not found in the graph`);
+                    }
+                  }
+                  
+                  updatedGraph = groupNodes(args.nodeIds, args.parentId, args.groupId, elkGraph);
+                  setElkGraph(updatedGraph);
+                } catch (groupNodesError) {
+                  // Enhanced error logging with full details
+                  console.error(`Error in group_nodes operation:`, groupNodesError);
+                  // console.error(`Error stack:`, groupNodesError.stack);
+                  console.error(`Attempted to group nodes '${args.nodeIds}' under parent '${args.parentId}' into group '${args.groupId}'`);
+                  // console.error(`Current graph:`, elkGraph);
+                  
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in group_nodes operation: ${groupNodesError.message}. Current graph remains unchanged. Check that parent and all nodes exist.`
+                        }
+                      ]
+                    }
+                  });
+                  return;
+                }
                 break;
                 
               case "remove_group":
-                setElkGraph(currentGraph => {
-                  const updatedGraph = removeGroup(args.groupId, currentGraph);
-                  updateGraphLayout(updatedGraph);
-                  return updatedGraph;
-                });
+                try {
+                  // Check if group exists
+                  const group = findNodeById(elkGraph, args.groupId);
+                  if (!group) {
+                    throw new Error(`Group '${args.groupId}' not found in the graph`);
+                  }
+                  
+                  updatedGraph = removeGroup(args.groupId, elkGraph);
+                  setElkGraph(updatedGraph);
+                } catch (removeGroupError) {
+                  // Enhanced error logging with full details
+                  console.error(`Error in remove_group operation:`, removeGroupError);
+                  // console.error(`Error stack:`, removeGroupError.stack);
+                  console.error(`Attempted to remove group '${args.groupId}'`);
+                  // console.error(`Current graph:`, elkGraph);
+                  
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in remove_group operation: ${removeGroupError.message}. Current graph remains unchanged. Check that the group exists.`
+                        }
+                      ]
+                    }
+                  });
+                  return;
+                }
                 break;
             }
             
+            // At this point, no errors happened in any of the cases
             // Store the data for ReactFlow
-            setGraphData({ title: graphTitle, graph: elkGraph });
+            setGraphData({ title: graphTitle, graph: updatedGraph || elkGraph });
+            
+            // Return the updated graph to the agent
+            sendClientEvent({
+              type: "conversation.item.create",
+              item: {
+                type: "message",
+                role: "user",
+                content: [
+                  {
+                    type: "input_text",
+                    text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph || elkGraph)}`
+                  }
+                ]
+              }
+            });
             
             // Prompt for another interaction
             setTimeout(() => {
@@ -453,9 +706,34 @@ export default function ToolPanel({
               });
             }, 1000);
             
-          } catch (error) {
-            console.error("Error processing function call:", error);
+          } catch (parseError) {
+            console.error("Error parsing function arguments:", parseError);
             console.error("Raw arguments:", output.arguments);
+            
+            // Log the error detail for debugging
+            console.log(`Error parsing function arguments for ${output.name}:`, parseError);
+            
+            // Return the parse error to the agent
+            sendClientEvent({
+              type: "conversation.item.create", 
+              item: {
+                type: "message",
+                role: "user",
+                content: [
+                  {
+                    type: "input_text",
+                    text: `Error parsing function arguments for ${output.name}: ${parseError.message}. Please check your input format.`
+                  }
+                ]
+              }
+            });
+            
+            // Prompt for another interaction
+            setTimeout(() => {
+              sendClientEvent({
+                type: "response.create", 
+              });
+            }, 1000);
           }
         }
       });

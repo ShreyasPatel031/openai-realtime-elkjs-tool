@@ -3,7 +3,7 @@ export const elkGraphDescription = `You are a technical architecture diagram ass
 - display_elk_graph(title): Call this first to retrieve and visualize the current graph layout.
 - add_node(nodename, parentId): Add a component under a parent container.
 - delete_node(nodeId): Remove an existing node.
-- move_node(nodeId, oldParentId, newParentId): Move a node from one group/container to another.
+- move_node(nodeId, newParentId): Move a node from one group/container to another.
 - add_edge(edgeId, sourceId, targetId): Connect two nodes with a directional link. You must place this edge inside the nearest common ancestor container.
 - delete_edge(edgeId): Remove an existing edge.
 - group_nodes(nodeIds, parentId, groupId): Create a new container and move specified nodes into it.

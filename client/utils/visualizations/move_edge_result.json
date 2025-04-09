@@ -1,10 +1,6 @@
 {
   "id": "root",
-  "labels": [
-    {
-      "text": "Root"
-    }
-  ],
+  "labels": [],
   "children": [
     {
       "id": "ui",
@@ -216,10 +212,10 @@
     {
       "id": "e0",
       "sources": [
-        "webapp"
+        "api"
       ],
       "targets": [
-        "vector"
+        "embed"
       ]
     }
   ]

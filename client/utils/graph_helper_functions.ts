@@ -76,10 +76,10 @@ function getPathToNode(
   return null;
 }
 
-/*
+/**
  * Find the common ancestor of two nodes.
  */
-function findCommonAncestor(
+export function findCommonAncestor(
   layout: ElkNode,
   id1: string,
   id2: string
@@ -287,52 +287,6 @@ export function deleteEdge(edgeId: string, layout: ElkNode): ElkNode {
   return layout;
 }
 
-/**
- * moveEdge(edgeId, newSourceId, newTargetId)
- * Moves an edge to new endpoints and reattaches it at the proper common ancestor.
- */
-export function moveEdge(
-  edgeId: string,
-  newSourceId: string,
-  newTargetId: string,
-  layout: ElkNode
-): ElkNode {
-  let edge: ElkEdge | null = null;
-  function findAndRemoveEdge(node: ElkNode): void {
-    if (node.edges) {
-      for (let i = 0; i < node.edges.length; i++) {
-        if (node.edges[i].id === edgeId) {
-          edge = node.edges[i] as ElkEdge;
-          node.edges.splice(i, 1);
-          return;
-        }
-      }
-    }
-    if (node.children) {
-      for (const child of node.children) {
-        findAndRemoveEdge(child);
-        if (edge) return;
-      }
-    }
-  }
-  findAndRemoveEdge(layout);
-  if (!edge) {
-    console.error(`Edge not found: ${edgeId}`);
-    return layout;
-  }
-  const commonAncestor = findCommonAncestor(layout, newSourceId, newTargetId);
-  if (!commonAncestor) {
-    console.error("Common ancestor not found for new endpoints");
-    return layout;
-  }
-  if (!commonAncestor.edges) commonAncestor.edges = [];
-  commonAncestor.edges.push({
-    id: edgeId,
-    sources: [newSourceId],
-    targets: [newTargetId]
-  });
-  return layout;
-}
 
 //
 // 🟦 GROUP OPERATIONS
@@ -354,27 +308,48 @@ export function groupNodes(
     console.error(`Parent not found: ${parentId}`);
     return layout;
   }
+  
   const groupNode: ElkNode = {
     id: groupId,
     labels: [{ text: groupId }],
     children: [],
     edges: []
   };
-  // Move the specified nodes into the new group.
+  
+  // Find and move the specified nodes into the new group
   for (const nodeId of nodeIds) {
-    const idx = parent.children.findIndex(child => child.id === nodeId);
-    if (idx !== -1) {
-      const node = parent.children.splice(idx, 1)[0];
-      groupNode.children!.push(node);
-    } else {
-      console.warn(`Node not found in parent: ${nodeId}`);
+    // Find the node anywhere in the hierarchy
+    const node = findNodeById(layout, nodeId);
+    if (!node) {
+      console.warn(`Node not found: ${nodeId}`);
+      continue;
+    }
+    
+    // Find the actual parent of this node
+    const actualParent = findParentOfNode(layout, nodeId);
+    if (!actualParent || !actualParent.children) {
+      console.warn(`Parent of node ${nodeId} not found`);
+      continue;
+    }
+    
+    // Remove the node from its actual parent
+    actualParent.children = actualParent.children.filter(child => child.id !== nodeId);
+    
+    // Add the node to the group
+    if (!groupNode.children) groupNode.children = [];
+    groupNode.children.push(node);
+  }
+  
+  // Add the group node to the parent
+  parent.children.push(groupNode);
+  
+  // Update edges for moved nodes
+  if (groupNode.children) {
+    for (const child of groupNode.children) {
+      layout = updateEdgesForNode(child.id, layout);
     }
   }
-  parent.children.push(groupNode);
-  // Update edges for moved nodes.
-  groupNode.children?.forEach(child => {
-    layout = updateEdgesForNode(child.id, layout);
-  });
+  
   return layout;
 }
 

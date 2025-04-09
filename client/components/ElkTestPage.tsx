@@ -7,7 +7,6 @@ import {
   moveNode,
   addEdge,
   deleteEdge,
-  moveEdge,
   groupNodes,
   removeGroup
 } from '../utils/graph_helper_functions';
@@ -25,7 +24,6 @@ export default function ElkTestPage() {
   const [nodeOperation, setNodeOperation] = useState({
     nodeName: '',
     parentId: '',
-    oldParentId: '',
     newParentId: ''
   });
 
@@ -33,8 +31,6 @@ export default function ElkTestPage() {
     edgeId: '',
     sourceId: '',
     targetId: '',
-    newSourceId: '',
-    newTargetId: ''
   });
 
   const [groupOperation, setGroupOperation] = useState({
@@ -54,7 +50,7 @@ export default function ElkTestPage() {
   }, [graphData]);
 
   const stripComments = (jsonString: string) => {
-    console.log('Stripping comments from input:', jsonString);
+    // console.log('Stripping comments from input:', jsonString);
     const cleaned = jsonString
       .replace(/\/\/.*/g, '') // Remove single-line comments
       .replace(/\/\*[\s\S]*?\*\//g, '') // Remove multi-line comments
@@ -64,8 +60,8 @@ export default function ElkTestPage() {
   };
 
   const handleJsonChange = (e: { target: { value: string } }) => {
-    console.log('\n--- New JSON Input ---');
-    console.log('Raw input:', e.target.value);
+    // console.log('\n--- New JSON Input ---');
+    // console.log('Raw input:', e.target.value);
     setJsonInput(e.target.value);
     
     try {
@@ -87,83 +83,99 @@ export default function ElkTestPage() {
     }
   };
 
-  // Operation handlers
+  // Operation handlers - Operate directly on JSON string
   const handleNodeOperation = (operation: string) => {
-    if (!graphData) return;
-    let updatedGraph: ElkNode;
+    try {
+      const currentGraph = JSON.parse(stripComments(jsonInput));
+      let updatedGraph: ElkNode;
 
-    switch (operation) {
-      case 'add':
-        updatedGraph = addNode(nodeOperation.nodeName, nodeOperation.parentId, graphData);
-        break;
-      case 'delete':
-        updatedGraph = deleteNode(nodeOperation.nodeName, graphData);
-        break;
-      case 'move':
-        updatedGraph = moveNode(
-          nodeOperation.nodeName,
-          nodeOperation.oldParentId,
-          nodeOperation.newParentId,
-          graphData
-        );
-        break;
-      default:
-        return;
+      switch (operation) {
+        case 'add':
+          updatedGraph = addNode(nodeOperation.nodeName, nodeOperation.parentId, currentGraph);
+          break;
+        case 'delete':
+          updatedGraph = deleteNode(nodeOperation.nodeName, currentGraph);
+          break;
+        case 'move':
+          updatedGraph = moveNode(
+            nodeOperation.nodeName,
+            nodeOperation.parentId,
+            nodeOperation.newParentId,
+            currentGraph
+          );
+          break;
+        default:
+          return;
+      }
+      const updatedJson = JSON.stringify(updatedGraph, null, 2);
+      setJsonInput(updatedJson);
+      setGraphData(updatedGraph);
+      setError(null);
+    } catch (err) {
+        console.error('Error during node operation:', err);
+        setError(`Operation failed: ${err.message}`);
     }
-    setGraphData({ ...updatedGraph });
   };
 
   const handleEdgeOperation = (operation: string) => {
-    if (!graphData) return;
-    let updatedGraph: ElkNode;
+    try {
+      const currentGraph = JSON.parse(stripComments(jsonInput));
+      let updatedGraph: ElkNode;
 
-    switch (operation) {
-      case 'add':
-        updatedGraph = addEdge(
-          edgeOperation.edgeId,
-          null,
-          edgeOperation.sourceId,
-          edgeOperation.targetId,
-          graphData
-        );
-        break;
-      case 'delete':
-        updatedGraph = deleteEdge(edgeOperation.edgeId, graphData);
-        break;
-      case 'move':
-        updatedGraph = moveEdge(
-          edgeOperation.edgeId,
-          edgeOperation.newSourceId,
-          edgeOperation.newTargetId,
-          graphData
-        );
-        break;
-      default:
-        return;
+      switch (operation) {
+        case 'add':
+          updatedGraph = addEdge(
+            edgeOperation.edgeId,
+            null,
+            edgeOperation.sourceId,
+            edgeOperation.targetId,
+            currentGraph
+          );
+          break;
+        case 'delete':
+          updatedGraph = deleteEdge(edgeOperation.edgeId, currentGraph);
+          break;
+        default:
+          return;
+      }
+      const updatedJson = JSON.stringify(updatedGraph, null, 2);
+      setJsonInput(updatedJson);
+      setGraphData(updatedGraph);
+      setError(null);
+    } catch (err) {
+      console.error('Error during edge operation:', err);
+      setError(`Operation failed: ${err.message}`);
     }
-    setGraphData({ ...updatedGraph });
   };
 
   const handleGroupOperation = (operation: string) => {
-    if (!graphData) return;
-    let updatedGraph: ElkNode;
+    try {
+      const currentGraph = JSON.parse(stripComments(jsonInput));
+      let updatedGraph: ElkNode;
 
-    switch (operation) {
-      case 'group':
-        updatedGraph = groupNodes(
-          groupOperation.nodeIds.split(',').map(id => id.trim()),
-          groupOperation.parentId,
-          groupOperation.groupId,
-          graphData
-        );
-        break;
-      case 'removeGroup':
-        updatedGraph = removeGroup(groupOperation.groupId, graphData);
-        break;
-      default:
-        return;
+      switch (operation) {
+        case 'group':
+          updatedGraph = groupNodes(
+            groupOperation.nodeIds.split(',').map(id => id.trim()),
+            groupOperation.parentId,
+            groupOperation.groupId,
+            currentGraph
+          );
+          break;
+        case 'removeGroup':
+          updatedGraph = removeGroup(groupOperation.groupId, currentGraph);
+          break;
+        default:
+          return;
+      }
+      const updatedJson = JSON.stringify(updatedGraph, null, 2);
+      setJsonInput(updatedJson);
+      setGraphData(updatedGraph);
+      setError(null);
+    } catch (err) {
+      console.error('Error during group operation:', err);
+      setError(`Operation failed: ${err.message}`);
     }
-    setGraphData({ ...updatedGraph });
   };
 
   return (
@@ -192,14 +204,14 @@ export default function ElkTestPage() {
                 />
                 <input
                   type="text"
-                  placeholder="Parent ID"
+                  placeholder="Parent ID (for add/move source)"
                   className="w-full p-2 border rounded"
                   value={nodeOperation.parentId}
                   onChange={e => setNodeOperation({...nodeOperation, parentId: e.target.value})}
                 />
                 <input
                   type="text"
-                  placeholder="New Parent ID (for move)"
+                  placeholder="New Parent ID (for move destination)"
                   className="w-full p-2 border rounded"
                   value={nodeOperation.newParentId}
                   onChange={e => setNodeOperation({...nodeOperation, newParentId: e.target.value})}
@@ -239,7 +251,6 @@ export default function ElkTestPage() {
                 <div className="flex space-x-2">
                   <button onClick={() => handleEdgeOperation('add')} className="bg-green-500 text-white px-4 py-2 rounded">Add</button>
                   <button onClick={() => handleEdgeOperation('delete')} className="bg-red-500 text-white px-4 py-2 rounded">Delete</button>
-                  <button onClick={() => handleEdgeOperation('move')} className="bg-blue-500 text-white px-4 py-2 rounded">Move</button>
                 </div>
               </div>
             </div>

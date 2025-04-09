@@ -9,6 +9,11 @@ const ROOT_DEFAULT_OPTIONS = {
     "elk.direction": "RIGHT",
     "hierarchyHandling": "INCLUDE_CHILDREN",
     "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
+    "elk.layered.considerModelOrder": "true",
+    // "elk.layered.options.CrossingMinimizationStrategy": "INTERACTIVE",
+    // "elk.alg.layered.components.ComponentOrderingStrategy": "FORCE_MODEL_ORDER",
+    // "elk.layered.crossingMinimization.semiInteractive": "true",
+    // "elk.layered.crossingMinimization.strategy": "INTERACTIVE",
   }
 };
 

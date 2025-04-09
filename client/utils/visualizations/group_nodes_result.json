@@ -1,10 +1,6 @@
 {
   "id": "root",
-  "labels": [
-    {
-      "text": "Root"
-    }
-  ],
+  "labels": [],
   "children": [
     {
       "id": "ui",
@@ -94,31 +90,20 @@
           ]
         },
         {
-          "id": "dataStore",
+          "id": "vector",
           "labels": [
             {
-              "text": "dataStore"
+              "text": "Vector"
             }
-          ],
-          "children": [
+          ]
+        },
+        {
+          "id": "storage",
+          "labels": [
             {
-              "id": "vector",
-              "labels": [
-                {
-                  "text": "Vector"
-                }
-              ]
-            },
-            {
-              "id": "storage",
-              "labels": [
-                {
-                  "text": "Storage"
-                }
-              ]
+              "text": "Storage"
             }
-          ],
-          "edges": []
+          ]
         }
       ],
       "edges": [
@@ -194,6 +179,16 @@
           ]
         }
       ]
+    },
+    {
+      "id": "dataStore",
+      "labels": [
+        {
+          "text": "dataStore"
+        }
+      ],
+      "children": [],
+      "edges": []
     }
   ],
   "edges": [

@@ -204,33 +204,28 @@ export function deleteNode(nodeId: string, layout: ElkNode): ElkNode {
 }
 
 /**
- * moveNode(nodeId, oldParentId, newParentId)
+ * moveNode(nodeId, newParentId)
  * Moves a node from one parent to another and updates its edge attachments.
  */
 export function moveNode(
   nodeId: string,
-  oldParentId: string,
   newParentId: string,
   layout: ElkNode
 ): ElkNode {
-  const oldParent = findNodeById(layout, oldParentId);
+  const node = findNodeById(layout, nodeId);
   const newParent = findNodeById(layout, newParentId);
-  if (!oldParent || !newParent || !oldParent.children) {
-    console.error("Old or new parent not found");
+  if (!node || !newParent) {
+    console.error("Node or new parent not found");
     return layout;
   }
-  let node: ElkNode | undefined;
-  oldParent.children = oldParent.children.filter(child => {
-    if (child.id === nodeId) {
-      node = child;
-      return false;
-    }
-    return true;
-  });
-  if (!node) {
-    console.error(`Node not found in old parent: ${nodeId}`);
+  const oldParent = findParentOfNode(layout, nodeId);
+  if (!oldParent || !oldParent.children) {
+    console.error(`Node not found in any parent: ${nodeId}`);
     return layout;
   }
+  // Remove the node from its old parent
+  oldParent.children = oldParent.children.filter(child => child.id !== nodeId);
+  // Add the node to the new parent
   if (!newParent.children) newParent.children = [];
   newParent.children.push(node);
   layout = updateEdgesForNode(nodeId, layout);
@@ -407,7 +402,7 @@ let layout: ElkNode = {
 layout = addNode("newNode", "ui", layout);
 
 // Move a node from "ui" to "aws"
-layout = moveNode("webapp", "ui", "aws", layout);
+layout = moveNode("webapp", "aws", layout);
 
 // Add an edge connecting "newNode" to "webapp"
 layout = addEdge("edge1", null, "newNode", "webapp", layout);

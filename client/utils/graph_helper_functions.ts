@@ -373,6 +373,50 @@ export function removeGroup(groupId: string, layout: ElkNode): ElkNode {
   return layout;
 }
 
+/**
+ * batchUpdate(operations)
+ * Executes a series of graph operations in order.
+ * Each operation must have a name and args matching the individual function signatures.
+ */
+export function batchUpdate(
+  operations: Array<{name: string, args: any}>,
+  layout: ElkNode
+): ElkNode {
+  let updatedLayout = { ...layout };
+  
+  for (const operation of operations) {
+    const { name, args } = operation;
+    
+    switch (name) {
+      case "add_node":
+        updatedLayout = addNode(args.nodename, args.parentId, updatedLayout);
+        break;
+      case "delete_node":
+        updatedLayout = deleteNode(args.nodeId, updatedLayout);
+        break;
+      case "move_node":
+        updatedLayout = moveNode(args.nodeId, args.newParentId, updatedLayout);
+        break;
+      case "add_edge":
+        updatedLayout = addEdge(args.edgeId, null, args.sourceId, args.targetId, updatedLayout);
+        break;
+      case "delete_edge":
+        updatedLayout = deleteEdge(args.edgeId, updatedLayout);
+        break;
+      case "group_nodes":
+        updatedLayout = groupNodes(args.nodeIds, args.parentId, args.groupId, updatedLayout);
+        break;
+      case "remove_group":
+        updatedLayout = removeGroup(args.groupId, updatedLayout);
+        break;
+      default:
+        console.warn(`Unknown operation: ${name}`);
+    }
+  }
+  
+  return updatedLayout;
+}
+
 // ──────────────────────────────────────────────
 // USAGE EXAMPLE
 // ──────────────────────────────────────────────

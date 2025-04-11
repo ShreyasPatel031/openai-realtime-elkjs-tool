@@ -9,7 +9,8 @@ import {
   addEdge,
   deleteEdge,
   groupNodes,
-  removeGroup
+  removeGroup,
+  batchUpdate
 } from "../utils/graph_helper_functions";
 import ELK from "elkjs/lib/elk.bundled.js";
 
@@ -134,7 +135,6 @@ const minimalSessionUpdate = {
         parameters: {
           type: "object",
           properties: {
-            // No parameters needed as it simply returns the current graph state
           },
           required: []
         }
@@ -184,16 +184,12 @@ const minimalSessionUpdate = {
               type: "string",
               description: "ID of the node to move"
             },
-            oldParentId: {
-              type: "string",
-              description: "ID of the current parent node"
-            },
             newParentId: {
               type: "string",
               description: "ID of the new parent node"
             }
           },
-          required: ["nodeId", "oldParentId", "newParentId"]
+          required: ["nodeId", "newParentId"]
         }
       },
       {
@@ -271,6 +267,35 @@ const minimalSessionUpdate = {
             }
           },
           required: ["groupId"]
+        }
+      },
+      {
+        type: "function",
+        name: "batch_update",
+        description: "Executes a series of graph operations in order",
+        parameters: {
+          type: "object",
+          properties: {
+            operations: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  name: {
+                    type: "string",
+                    description: "Name of the operation to perform"
+                  },
+                  args: {
+                    type: "object",
+                    description: "Arguments for the operation"
+                  }
+                },
+                required: ["name", "args"]
+              },
+              description: "List of operations to execute"
+            }
+          },
+          required: ["operations"]
         }
       }
     ],
@@ -671,6 +696,194 @@ export default function ToolPanel({
                         {
                           type: "input_text",
                           text: `Error in remove_group operation: ${removeGroupError.message}. Current graph remains unchanged. Check that the group exists.`
+                        }
+                      ]
+                    }
+                  });
+                  return;
+                }
+                break;
+                
+              case "batch_update":
+                try {
+                  console.log("Batch update called with operations:", args.operations);
+                  
+                  // Normalize operations to have consistent structure
+                  const normalizedOperations = args.operations.map(operation => {
+                    // If operation already has args property, keep it as is
+                    if (operation.args) {
+                      return operation;
+                    }
+                    
+                    // If operation has parameters property, use that as args
+                    if (operation.parameters) {
+                      return { name: operation.name, args: operation.parameters };
+                    }
+                    
+                    // Otherwise, extract name and create args from remaining properties excluding name
+                    const { name, parameters, args, ...restProps } = operation;
+                    return { name, args: Object.keys(restProps).length > 0 ? restProps : {} };
+                  });
+                  
+                  // Add debug log before executing batch
+                  console.log("Normalized operations:", normalizedOperations);
+                  
+                  // Execute operations one by one, collecting results and errors
+                  let updatedGraph = { ...elkGraph };
+                  const results = [];
+                  
+                  for (let i = 0; i < normalizedOperations.length; i++) {
+                    const operation = normalizedOperations[i];
+                    const { name, args: opArgs } = operation;
+                    
+                    try {
+                      // Validate and execute each operation
+                      switch(name) {
+                        case "add_node":
+                          if (!findNodeById(updatedGraph, opArgs.parentId)) {
+                            throw new Error(`Parent node '${opArgs.parentId}' not found for add_node operation`);
+                          }
+                          updatedGraph = addNode(opArgs.nodename, opArgs.parentId, updatedGraph);
+                          results.push({ operation: i, name, status: "success" });
+                          break;
+                          
+                        case "delete_node":
+                          if (!findNodeById(updatedGraph, opArgs.nodeId)) {
+                            throw new Error(`Node '${opArgs.nodeId}' not found for delete_node operation`);
+                          }
+                          updatedGraph = deleteNode(opArgs.nodeId, updatedGraph);
+                          results.push({ operation: i, name, status: "success" });
+                          break;
+                          
+                        case "move_node":
+                          const nodeToMove = findNodeById(updatedGraph, opArgs.nodeId);
+                          const newParent = findNodeById(updatedGraph, opArgs.newParentId);
+                          if (!nodeToMove) {
+                            throw new Error(`Node '${opArgs.nodeId}' not found for move_node operation`);
+                          }
+                          if (!newParent) {
+                            throw new Error(`New parent node '${opArgs.newParentId}' not found for move_node operation`);
+                          }
+                          updatedGraph = moveNode(opArgs.nodeId, opArgs.newParentId, updatedGraph);
+                          results.push({ operation: i, name, status: "success" });
+                          break;
+                          
+                        case "add_edge":
+                          if (!findNodeById(updatedGraph, opArgs.sourceId)) {
+                            throw new Error(`Source node '${opArgs.sourceId}' not found for add_edge operation`);
+                          }
+                          if (!findNodeById(updatedGraph, opArgs.targetId)) {
+                            throw new Error(`Target node '${opArgs.targetId}' not found for add_edge operation`);
+                          }
+                          updatedGraph = addEdge(opArgs.edgeId, null, opArgs.sourceId, opArgs.targetId, updatedGraph);
+                          results.push({ operation: i, name, status: "success" });
+                          break;
+                          
+                        case "delete_edge":
+                          let edgeExists = false;
+                          const checkEdgeExists = (node) => {
+                            if (node.edges) {
+                              for (const edge of node.edges) {
+                                if (edge.id === opArgs.edgeId) {
+                                  edgeExists = true;
+                                  return;
+                                }
+                              }
+                            }
+                            if (node.children) {
+                              for (const child of node.children) {
+                                checkEdgeExists(child);
+                                if (edgeExists) return;
+                              }
+                            }
+                          };
+                          checkEdgeExists(updatedGraph);
+                          if (!edgeExists) {
+                            throw new Error(`Edge '${opArgs.edgeId}' not found for delete_edge operation`);
+                          }
+                          updatedGraph = deleteEdge(opArgs.edgeId, updatedGraph);
+                          results.push({ operation: i, name, status: "success" });
+                          break;
+                          
+                        case "group_nodes":
+                          if (!findNodeById(updatedGraph, opArgs.parentId)) {
+                            throw new Error(`Parent node '${opArgs.parentId}' not found for group_nodes operation`);
+                          }
+                          for (const nodeId of opArgs.nodeIds) {
+                            if (!findNodeById(updatedGraph, nodeId)) {
+                              throw new Error(`Node '${nodeId}' not found for group_nodes operation`);
+                            }
+                          }
+                          updatedGraph = groupNodes(opArgs.nodeIds, opArgs.parentId, opArgs.groupId, updatedGraph);
+                          results.push({ operation: i, name, status: "success" });
+                          break;
+                          
+                        case "remove_group":
+                          if (!findNodeById(updatedGraph, opArgs.groupId)) {
+                            throw new Error(`Group '${opArgs.groupId}' not found for remove_group operation`);
+                          }
+                          updatedGraph = removeGroup(opArgs.groupId, updatedGraph);
+                          results.push({ operation: i, name, status: "success" });
+                          break;
+                          
+                        default:
+                          throw new Error(`Unknown operation: ${name}`);
+                      }
+                    } catch (operationError) {
+                      // Log the error but continue with other operations
+                      console.error(`Error in operation ${i} (${name}):`, operationError);
+                      results.push({ 
+                        operation: i, 
+                        name, 
+                        status: "error", 
+                        error: operationError.message 
+                      });
+                    }
+                  }
+                  
+                  // Update the graph with whatever operations succeeded
+                  console.log("Updated graph after batch_update:", updatedGraph);
+                  setElkGraph(updatedGraph);
+                  
+                  // Generate a summary of the results
+                  const successCount = results.filter(r => r.status === "success").length;
+                  const errorCount = results.filter(r => r.status === "error").length;
+                  const errorMessages = results
+                    .filter(r => r.status === "error")
+                    .map(r => `Operation ${r.operation} (${r.name}): ${r.error}`)
+                    .join("\n");
+                  
+                  // Send a detailed response
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Batch update completed with ${successCount} successes and ${errorCount} errors.
+${errorCount > 0 ? `\nErrors:\n${errorMessages}` : ''}
+\nUpdated graph structure: \n\`\`\`json\n${JSON.stringify(updatedGraph, null, 2)}\n\`\`\``
+                        }
+                      ]
+                    }
+                  });
+                  
+                } catch (batchError) {
+                  // This should only happen for errors outside the operation loop
+                  console.error(`Error in batch_update operation:`, batchError);
+                  console.error(`Attempted batch operations:`, args.operations);
+                  
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in batch_update operation: ${batchError.message}. Current graph remains unchanged.`
                         }
                       ]
                     }

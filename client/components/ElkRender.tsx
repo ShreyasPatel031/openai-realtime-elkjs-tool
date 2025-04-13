@@ -14,6 +14,7 @@ const ROOT_DEFAULT_OPTIONS = {
     "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
     "elk.layered.priority.direction": 0,
     "org.eclipse.elk.debugMode": true,
+    
   
   }
 };
@@ -23,12 +24,20 @@ const NON_ROOT_DEFAULT_OPTIONS = {
   height: 80,
   layoutOptions: {
     "nodeLabels.placement": "INSIDE V_TOP H_LEFT",
-    "elk.padding": "[top=40.0,left=20.0,bottom=20.0,right=20.0]"
+    "elk.padding": "[top=50.0,left=50.0,bottom=50.0,right=50.0]",
+    "spacing.edgeNode": 50,
+    "spacing.nodeNode": 50,
+    "spacing.edgeEdge": 50,
+    "spacing.nodeNodeBetweenLayers": 50,
+    "spacing.edgeNodeBetweenLayers": 50,
+    "spacing.edgeEdgeBetweenLayers": 50,
+    
   }
 };
 
 interface ElkRenderProps {
   initialGraph: any;
+  onLayoutComplete?: (layoutedGraph: any) => void;
 }
 
 /**
@@ -121,7 +130,7 @@ function ensureIds(node: any, parentId: string = '') {
  * 1) Paste a JSON/JS-like object into the textarea and let elkjs layout
  * 2) Provide 'elkt' text in a separate input and call the /api/conversion to get JSON
  */
-export default function ElkRender({ initialGraph }: ElkRenderProps) {
+export default function ElkRender({ initialGraph, onLayoutComplete }: ElkRenderProps) {
   const [graphLayout, setGraphLayout] = useState<any>(null);
   const elk = new ELK();
 
@@ -134,25 +143,31 @@ export default function ElkRender({ initialGraph }: ElkRenderProps) {
         // Apply defaults through ensureIds
         const graphWithOptions = ensureIds(graphCopy);
 
-        console.log('Laying out graph:', graphWithOptions); // Debug log
+        console.log('ElkRender: Laying out graph with options:', graphWithOptions); // Debug log
         
         // Add additional debug logging with promise chain
         elk.layout(graphWithOptions).then(result => {
-          console.log('Debug result:', result); // Look for debug sections in the result graph
+          console.log('ElkRender: Debug result:', result); // Look for debug sections in the result graph
         });
         
         const layoutResult = await elk.layout(graphWithOptions);
-        console.log('Layout result:', layoutResult); // Debug log
+        console.log('ElkRender: Layout result:', layoutResult); // Debug log
         setGraphLayout(layoutResult);
+        
+        // Call the callback if provided
+        if (onLayoutComplete) {
+          console.log('ElkRender: Notifying parent component of layout completion');
+          onLayoutComplete(layoutResult);
+        }
       } catch (err) {
-        console.error("Error laying out graph:", err);
+        console.error("ElkRender: Error laying out graph:", err);
       }
     }
     
     if (initialGraph) {
       layoutGraph();
     }
-  }, [initialGraph]);
+  }, [initialGraph, onLayoutComplete]);
 
   /**
    * Render the final ELK graph in an <svg> by flattening node coords.

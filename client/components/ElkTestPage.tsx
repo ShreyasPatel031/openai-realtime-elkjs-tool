@@ -14,65 +14,7 @@ import {
 } from '../utils/graph_helper_functions';
 import type { ElkNode as HelperElkNode, ElkEdge } from '../utils/graph_helper_functions';
 
-// Add default options constants - same as in ElkRender
-const ROOT_DEFAULT_OPTIONS = {
-  layoutOptions: {
-    "algorithm": "layered",
-    "elk.direction": "RIGHT",
-    "hierarchyHandling": "INCLUDE_CHILDREN",
-    "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
-    "elk.layered.considerModelOrder": true,
-    "elk.layered.nodePlacement.favorStraightEdges": true,
-    "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
-    "elk.layered.priority.direction": 0,
-    "org.eclipse.elk.debugMode": true,
-  }
-};
 
-const NON_ROOT_DEFAULT_OPTIONS = {
-  width: 80,
-  height: 80,
-  layoutOptions: {
-    "nodeLabels.placement": "INSIDE V_TOP H_LEFT",
-    "elk.padding": "[top=40.0,left=20.0,bottom=20.0,right=20.0]"
-  }
-};
-
-// Helper function to apply default options
-function applyDefaults(node, parentId = '') {
-  if (!node) return node;
-  
-  // Apply defaults directly to the node
-  if (!parentId) {
-    // Root node
-    Object.assign(node, {
-      ...ROOT_DEFAULT_OPTIONS,
-      layoutOptions: {
-        ...ROOT_DEFAULT_OPTIONS.layoutOptions,
-        ...(node.layoutOptions || {})
-      }
-    });
-  } else {
-    // Non-root node - ensure width and height are set
-    node.width = node.width || NON_ROOT_DEFAULT_OPTIONS.width;
-    node.height = node.height || NON_ROOT_DEFAULT_OPTIONS.height;
-    node.layoutOptions = {
-      ...NON_ROOT_DEFAULT_OPTIONS.layoutOptions,
-      ...(node.layoutOptions || {})
-    };
-  }
-
-  if (!node.id) {
-    node.id = `${parentId}-${Math.random().toString(36).substr(2, 9)}`;
-  }
-  
-  // Update children recursively
-  if (Array.isArray(node.children)) {
-    node.children.forEach(child => applyDefaults(child, node.id));
-  }
-
-  return node;
-}
 
 type PreviewMode = 'elk' | 'excalidraw' | 'reactflow';
 
@@ -110,6 +52,9 @@ export default function ElkTestPage() {
     parentId: ''
   });
 
+  // Special state for the layouted graph (after ELK processing)
+  const [layoutedGraphData, setLayoutedGraphData] = useState<LayoutElkNode | null>(null);
+
   // Log when preview mode changes
   useEffect(() => {
     console.log('Preview mode changed:', previewMode);
@@ -124,35 +69,22 @@ export default function ElkTestPage() {
   useEffect(() => {
     if (!graphData) return;
     
-    console.log("ElkTestPage: Preparing graph for layout:", graphData);
+    console.log("ElkTestPage: Using original graph data", graphData);
+    // No need to apply defaults - let ElkRender handle that
     
-    // Create a deep copy and apply defaults
-    const graphCopy = JSON.parse(JSON.stringify(graphData));
-    
-    // Apply defaults
-    try {
-      const graphWithDefaults = applyDefaults(graphCopy);
-      console.log("ElkTestPage: Graph with defaults applied:", graphWithDefaults);
-      
-      const elk = new ELK();
-      // Layout the graph with ELK
-      elk.layout(graphWithDefaults).then(layoutedGraph => {
-        if (!layoutedGraph) {
-          console.log("ElkTestPage: No layout result returned from ELK");
-          return;
-        }
-        
-        console.log("ElkTestPage: Layout complete, setting graph data:", layoutedGraph);
-        
-        // Store the layouted graph
-        setGraphData(layoutedGraph as unknown as LayoutElkNode);
-      }).catch(err => {
-        console.error("ElkTestPage: Error during ELK layout:", err);
-      });
-    } catch (err) {
-      console.error("ElkTestPage: Error applying defaults:", err);
-    }
+    // Simple state update to trigger the child components
+    setGraphData(graphData);
+    setLayoutedGraphData(null); // Reset layouted data so we get a fresh layout
   }, [jsonInput]); // Only run when JSON input changes
+
+  // Add effect to log when layoutedGraphData changes
+  useEffect(() => {
+    if (layoutedGraphData) {
+      console.log('ElkTestPage: Layouted graph data updated:', layoutedGraphData);
+      console.log('ElkTestPage: Graph has layout coordinates:', 
+        layoutedGraphData.x !== undefined && layoutedGraphData.y !== undefined);
+    }
+  }, [layoutedGraphData]);
 
   const stripComments = (jsonString: string) => {
     // console.log('Stripping comments from input:', jsonString);
@@ -445,12 +377,22 @@ export default function ElkTestPage() {
             {graphData ? (
               <div className="min-w-full min-h-full">
                 {previewMode === 'elk' ? (
-                  <ElkRender initialGraph={graphData} />
+                  <ElkRender 
+                    initialGraph={graphData} 
+                    onLayoutComplete={(layoutedGraph) => {
+                      console.log("ElkTestPage: Received layouted graph from ElkRender:", layoutedGraph);
+                      setLayoutedGraphData(layoutedGraph);
+                    }}
+                  />
                 ) : previewMode === 'excalidraw' ? (
                   <ElkExcalidrawRender graphData={graphData} />
                 ) : (
                   <div style={{ height: '600px', width: '100%' }}>
-                    <ReactFlowGraph graphData={graphData} />
+                    <ReactFlowGraph graphData={layoutedGraphData || graphData} />
+                    {layoutedGraphData ? 
+                      <div className="text-xs text-gray-500 mt-1">Using layouted graph from ELK</div> : 
+                      <div className="text-xs text-gray-500 mt-1">Waiting for layouted graph...</div>
+                    }
                   </div>
                 )}
               </div>

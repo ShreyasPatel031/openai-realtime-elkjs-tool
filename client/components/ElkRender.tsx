@@ -9,11 +9,12 @@ const ROOT_DEFAULT_OPTIONS = {
     "elk.direction": "RIGHT",
     "hierarchyHandling": "INCLUDE_CHILDREN",
     "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
-    "elk.layered.considerModelOrder": "true",
-    // "elk.layered.options.CrossingMinimizationStrategy": "INTERACTIVE",
-    // "elk.alg.layered.components.ComponentOrderingStrategy": "FORCE_MODEL_ORDER",
-    // "elk.layered.crossingMinimization.semiInteractive": "true",
-    // "elk.layered.crossingMinimization.strategy": "INTERACTIVE",
+    "elk.layered.considerModelOrder": true,
+    "elk.layered.nodePlacement.favorStraightEdges": true,
+    "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
+    "elk.layered.priority.direction": 0,
+    "org.eclipse.elk.debugMode": true,
+  
   }
 };
 
@@ -134,6 +135,12 @@ export default function ElkRender({ initialGraph }: ElkRenderProps) {
         const graphWithOptions = ensureIds(graphCopy);
 
         console.log('Laying out graph:', graphWithOptions); // Debug log
+        
+        // Add additional debug logging with promise chain
+        elk.layout(graphWithOptions).then(result => {
+          console.log('Debug result:', result); // Look for debug sections in the result graph
+        });
+        
         const layoutResult = await elk.layout(graphWithOptions);
         console.log('Layout result:', layoutResult); // Debug log
         setGraphLayout(layoutResult);

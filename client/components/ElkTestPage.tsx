@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import ElkRender from './ElkRender';
 import ElkExcalidrawRender from './ElkExcalidrawRender';
+import ReactFlowGraph from './ReactFlowGraph';
+import ELK from 'elkjs';
 import {
   addNode,
   deleteNode,
@@ -10,15 +12,84 @@ import {
   groupNodes,
   removeGroup
 } from '../utils/graph_helper_functions';
-import type { ElkNode } from '../utils/graph_helper_functions';
+import type { ElkNode as HelperElkNode, ElkEdge } from '../utils/graph_helper_functions';
 
-type PreviewMode = 'elk' | 'excalidraw';
+// Add default options constants - same as in ElkRender
+const ROOT_DEFAULT_OPTIONS = {
+  layoutOptions: {
+    "algorithm": "layered",
+    "elk.direction": "RIGHT",
+    "hierarchyHandling": "INCLUDE_CHILDREN",
+    "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
+    "elk.layered.considerModelOrder": true,
+    "elk.layered.nodePlacement.favorStraightEdges": true,
+    "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
+    "elk.layered.priority.direction": 0,
+    "org.eclipse.elk.debugMode": true,
+  }
+};
+
+const NON_ROOT_DEFAULT_OPTIONS = {
+  width: 80,
+  height: 80,
+  layoutOptions: {
+    "nodeLabels.placement": "INSIDE V_TOP H_LEFT",
+    "elk.padding": "[top=40.0,left=20.0,bottom=20.0,right=20.0]"
+  }
+};
+
+// Helper function to apply default options
+function applyDefaults(node, parentId = '') {
+  if (!node) return node;
+  
+  // Apply defaults directly to the node
+  if (!parentId) {
+    // Root node
+    Object.assign(node, {
+      ...ROOT_DEFAULT_OPTIONS,
+      layoutOptions: {
+        ...ROOT_DEFAULT_OPTIONS.layoutOptions,
+        ...(node.layoutOptions || {})
+      }
+    });
+  } else {
+    // Non-root node - ensure width and height are set
+    node.width = node.width || NON_ROOT_DEFAULT_OPTIONS.width;
+    node.height = node.height || NON_ROOT_DEFAULT_OPTIONS.height;
+    node.layoutOptions = {
+      ...NON_ROOT_DEFAULT_OPTIONS.layoutOptions,
+      ...(node.layoutOptions || {})
+    };
+  }
+
+  if (!node.id) {
+    node.id = `${parentId}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+  
+  // Update children recursively
+  if (Array.isArray(node.children)) {
+    node.children.forEach(child => applyDefaults(child, node.id));
+  }
+
+  return node;
+}
+
+type PreviewMode = 'elk' | 'excalidraw' | 'reactflow';
+
+// Extend ElkNode with layout properties
+interface LayoutElkNode extends HelperElkNode {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  children?: LayoutElkNode[];
+}
 
 export default function ElkTestPage() {
   const [jsonInput, setJsonInput] = useState('');
-  const [graphData, setGraphData] = useState<ElkNode | null>(null);
+  const [graphData, setGraphData] = useState<LayoutElkNode | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [previewMode, setPreviewMode] = useState('elk');
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('elk');
 
   // Add new state for operation inputs
   const [nodeOperation, setNodeOperation] = useState({
@@ -48,6 +119,40 @@ export default function ElkTestPage() {
   useEffect(() => {
     console.log('Graph data updated:', graphData);
   }, [graphData]);
+
+  // Add effect to handle graph data changes
+  useEffect(() => {
+    if (!graphData) return;
+    
+    console.log("ElkTestPage: Preparing graph for layout:", graphData);
+    
+    // Create a deep copy and apply defaults
+    const graphCopy = JSON.parse(JSON.stringify(graphData));
+    
+    // Apply defaults
+    try {
+      const graphWithDefaults = applyDefaults(graphCopy);
+      console.log("ElkTestPage: Graph with defaults applied:", graphWithDefaults);
+      
+      const elk = new ELK();
+      // Layout the graph with ELK
+      elk.layout(graphWithDefaults).then(layoutedGraph => {
+        if (!layoutedGraph) {
+          console.log("ElkTestPage: No layout result returned from ELK");
+          return;
+        }
+        
+        console.log("ElkTestPage: Layout complete, setting graph data:", layoutedGraph);
+        
+        // Store the layouted graph
+        setGraphData(layoutedGraph as unknown as LayoutElkNode);
+      }).catch(err => {
+        console.error("ElkTestPage: Error during ELK layout:", err);
+      });
+    } catch (err) {
+      console.error("ElkTestPage: Error applying defaults:", err);
+    }
+  }, [jsonInput]); // Only run when JSON input changes
 
   const stripComments = (jsonString: string) => {
     // console.log('Stripping comments from input:', jsonString);
@@ -87,7 +192,7 @@ export default function ElkTestPage() {
   const handleNodeOperation = (operation: string) => {
     try {
       const currentGraph = JSON.parse(stripComments(jsonInput));
-      let updatedGraph: ElkNode;
+      let updatedGraph: LayoutElkNode;
 
       switch (operation) {
         case 'add':
@@ -99,7 +204,6 @@ export default function ElkTestPage() {
         case 'move':
           updatedGraph = moveNode(
             nodeOperation.nodeName,
-            nodeOperation.parentId,
             nodeOperation.newParentId,
             currentGraph
           );
@@ -120,7 +224,7 @@ export default function ElkTestPage() {
   const handleEdgeOperation = (operation: string) => {
     try {
       const currentGraph = JSON.parse(stripComments(jsonInput));
-      let updatedGraph: ElkNode;
+      let updatedGraph: LayoutElkNode;
 
       switch (operation) {
         case 'add':
@@ -151,7 +255,7 @@ export default function ElkTestPage() {
   const handleGroupOperation = (operation: string) => {
     try {
       const currentGraph = JSON.parse(stripComments(jsonInput));
-      let updatedGraph: ElkNode;
+      let updatedGraph: LayoutElkNode;
 
       switch (operation) {
         case 'group':
@@ -323,14 +427,31 @@ export default function ElkTestPage() {
             >
               Excalidraw View
             </button>
+            <button
+              onClick={() => {
+                console.log('Switching to ReactFlow view');
+                setPreviewMode('reactflow');
+              }}
+              className={`px-4 py-2 rounded ${
+                previewMode === 'reactflow'
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-200 text-gray-700'
+              }`}
+            >
+              ReactFlow View
+            </button>
           </div>
           <div className="border rounded p-4 bg-white h-[calc(100vh-12rem)] overflow-auto">
             {graphData ? (
               <div className="min-w-full min-h-full">
                 {previewMode === 'elk' ? (
                   <ElkRender initialGraph={graphData} />
-                ) : (
+                ) : previewMode === 'excalidraw' ? (
                   <ElkExcalidrawRender graphData={graphData} />
+                ) : (
+                  <div style={{ height: '600px', width: '100%' }}>
+                    <ReactFlowGraph graphData={graphData} />
+                  </div>
                 )}
               </div>
             ) : (

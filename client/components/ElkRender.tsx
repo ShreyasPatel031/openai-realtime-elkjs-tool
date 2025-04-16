@@ -8,12 +8,23 @@ const ROOT_DEFAULT_OPTIONS = {
     "algorithm": "layered",
     "elk.direction": "RIGHT",
     "hierarchyHandling": "INCLUDE_CHILDREN",
-    "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
+    // "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
     "elk.layered.considerModelOrder": true,
+    "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
     "elk.layered.nodePlacement.favorStraightEdges": true,
     "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
+    "elk.interactive": true,
+    "elk.interactiveLayout": true,
     "elk.layered.priority.direction": 0,
     "org.eclipse.elk.debugMode": true,
+    "elk.layered.crossingMinimization.forceNodeModelOrder": true,
+    "elk.layered.priority.shortness": 100,  
+    "spacing.edgeNode": 50,
+    "spacing.nodeNode": 50,
+    "spacing.edgeEdge": 50,
+    "spacing.nodeNodeBetweenLayers": 50,
+    "spacing.edgeNodeBetweenLayers": 50,
+    "spacing.edgeEdgeBetweenLayers": 50,
     
   
   }
@@ -25,12 +36,15 @@ const NON_ROOT_DEFAULT_OPTIONS = {
   layoutOptions: {
     "nodeLabels.placement": "INSIDE V_TOP H_LEFT",
     "elk.padding": "[top=50.0,left=50.0,bottom=50.0,right=50.0]",
+    "elk.layered.nodePlacement.favorStraightEdges": true,
+    "elk.layered.priority.shortness": 100, 
     "spacing.edgeNode": 50,
     "spacing.nodeNode": 50,
     "spacing.edgeEdge": 50,
     "spacing.nodeNodeBetweenLayers": 50,
     "spacing.edgeNodeBetweenLayers": 50,
     "spacing.edgeEdgeBetweenLayers": 50,
+    
     
   }
 };

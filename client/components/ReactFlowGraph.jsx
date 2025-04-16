@@ -6,7 +6,8 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   Position,
-  Handle
+  Handle,
+  BaseEdge
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -21,8 +22,8 @@ const CustomNode = ({ data, id }) => {
     width: data.width || 80,
     height: data.height || 40,
     display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
     fontSize: '12px',
     boxShadow: data.isParent ? 'none' : '0 1px 4px rgba(0, 0, 0, 0.1)',
     position: 'relative'
@@ -104,14 +105,117 @@ const CustomNode = ({ data, id }) => {
         />
       )}
       
-      <div>{data.label}</div>
+      <div style={{ textAlign: 'left', padding: '2px' }}>{data.label}</div>
     </div>
   );
 };
 
-// Register the custom node type
+// Custom group node component
+const GroupNode = ({ data }) => {
+  const groupStyle = {
+    background: 'rgba(240, 240, 240, 0.8)',
+    border: '1px dashed #999',
+    borderRadius: '4px',
+    padding: '10px',
+    width: data.width || 200,
+    height: data.height || 200,
+    display: 'flex',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    fontSize: '12px',
+    position: 'relative'
+  };
+
+  return (
+    <div style={groupStyle}>
+      <div style={{ 
+        position: 'absolute',
+        top: '5px',
+        left: '5px',
+        fontWeight: 'bold',
+        fontSize: '14px'
+      }}>
+        {data.label}
+      </div>
+    </div>
+  );
+};
+
+// Replace the existing StepEdge component with this improved version
+function StepEdge({ id, sourceX, sourceY, targetX, targetY, data, style = {}, markerEnd }) {
+  let edgePath = '';
+  
+  // Check if we have bend points
+  if (data?.bendPoints && data.bendPoints.length > 0) {
+    const bendPoints = data.bendPoints;
+    
+    if (bendPoints.length === 2) {
+      // For 2 bend points, use the first bend point's x as the fixed x coordinate
+      const fixedX = bendPoints[0].x;
+      edgePath = `M ${sourceX} ${sourceY} L ${fixedX} ${sourceY} L ${fixedX} ${targetY} L ${targetX} ${targetY}`;
+    } 
+    else if (bendPoints.length > 2) {
+      // For more than 2 bend points, keep intermediate points fixed
+      // and only allow first and last segments to move
+      
+      // Add source point as the starting point and target as the ending point
+      const points = [{ x: sourceX, y: sourceY }, ...bendPoints, { x: targetX, y: targetY }];
+      
+      // Build path segments
+      let pathCommands = [`M ${sourceX} ${sourceY}`]; // Start at source
+      
+      for (let i = 1; i < points.length; i++) {
+        const prev = points[i-1];
+        const curr = points[i];
+        
+        if (i === 1) {
+          // First segment - horizontal from source to first bend point
+          pathCommands.push(`L ${curr.x} ${sourceY}`);
+        } else if (i === points.length - 1) {
+          // Last segment - horizontal to target
+          // Use the penultimate point's x for the vertical segment
+          const penultimate = points[points.length - 2];
+          pathCommands.push(`L ${penultimate.x} ${targetY}`);
+          pathCommands.push(`L ${targetX} ${targetY}`);
+        } else if (i !== points.length - 2) { // Skip the penultimate point
+          // Intermediate segments - keep fixed
+          pathCommands.push(`L ${curr.x} ${curr.y}`);
+        }
+      }
+      
+      // Join all path commands
+      edgePath = pathCommands.join(' ');
+    }
+    else {
+      // For any unexpected number of bend points, fall back to a simple step edge
+      const midX = sourceX + (targetX - sourceX) / 2;
+      edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
+    }
+  } 
+  else {
+    // No bend points, use default step edge
+    const midX = sourceX + (targetX - sourceX) / 2;
+    edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
+  }
+  
+  return (
+    <BaseEdge
+      id={id}
+      path={edgePath}
+      style={style || { strokeWidth: 2 }}
+      markerEnd={markerEnd}
+    />
+  );
+}
+
+// Register the custom node and edge types
 const nodeTypes = {
   custom: CustomNode,
+  group: GroupNode
+};
+
+const edgeTypes = {
+  step: StepEdge,
 };
 
 const ReactFlowGraph = ({ graphData }) => {
@@ -161,11 +265,6 @@ const ReactFlowGraph = ({ graphData }) => {
             height: node.height || 40
           };
           
-          console.log(`Storing absolute position for ${node.id}:`, {
-            relative: { x: node.x || 0, y: node.y || 0 },
-            parent: { x: parentX, y: parentY },
-            absolute: { x: nodeAbsX, y: nodeAbsY }
-          });
           
           // Recurse on children
           if (node.children && node.children.length > 0) {
@@ -177,7 +276,6 @@ const ReactFlowGraph = ({ graphData }) => {
         
         // Build absolute positions map
         computeNodeAbsPositions(layoutedGraph);
-        console.log('Node absolute positions:', absolutePositions);
         
         // Helper to store edge connection points for each node
         const nodeEdgePoints = {};
@@ -206,20 +304,23 @@ const ReactFlowGraph = ({ graphData }) => {
                     nodeEdgePoints[sourceId] = { right: [], left: [] };
                   }
                   
-                  // Apply container offset to get absolute Y
+                  // Apply container offset to get absolute coordinates
+                  const absStartX = containerOffset.x + section.startPoint.x;
                   const absStartY = containerOffset.y + section.startPoint.y;
                   
                   console.log(`Edge ${edge.id} source point:`, {
                     nodeId: sourceId,
                     rawPoint: section.startPoint,
-                    containerOffset: containerOffset.y,
-                    absoluteY: absStartY,
+                    containerOffset,
+                    absolutePos: { x: absStartX, y: absStartY },
                     edgeId: edge.id
                   });
                   
                   nodeEdgePoints[sourceId].right.push({
                     edgeId: edge.id,
+                    x: absStartX,
                     y: absStartY,
+                    originalX: section.startPoint.x,
                     originalY: section.startPoint.y
                   });
                 }
@@ -231,21 +332,50 @@ const ReactFlowGraph = ({ graphData }) => {
                     nodeEdgePoints[targetId] = { right: [], left: [] };
                   }
                   
-                  // Apply container offset to get absolute Y
+                  // Apply container offset to get absolute coordinates
+                  const absEndX = containerOffset.x + section.endPoint.x;
                   const absEndY = containerOffset.y + section.endPoint.y;
                   
                   console.log(`Edge ${edge.id} target point:`, {
                     nodeId: targetId,
                     rawPoint: section.endPoint,
-                    containerOffset: containerOffset.y,
-                    absoluteY: absEndY,
+                    containerOffset,
+                    absolutePos: { x: absEndX, y: absEndY },
                     edgeId: edge.id
                   });
                   
                   nodeEdgePoints[targetId].left.push({
                     edgeId: edge.id,
+                    x: absEndX,
                     y: absEndY,
+                    originalX: section.endPoint.x,
                     originalY: section.endPoint.y
+                  });
+                }
+                
+                // Store bend points with absolute positions
+                if (section.bendPoints && section.bendPoints.length > 0) {
+                  // Reset the array instead of checking if it exists
+                  edge.absoluteBendPoints = [];
+                  
+                  section.bendPoints.forEach((point, index) => {
+                    // Apply container offset to get absolute coordinates
+                    const absBendX = containerOffset.x + point.x;
+                    const absBendY = containerOffset.y + point.y;
+                    
+                    edge.absoluteBendPoints.push({
+                      index,
+                      x: absBendX,
+                      y: absBendY,
+                      originalX: point.x,
+                      originalY: point.y
+                    });
+                    
+                    console.log(`Edge ${edge.id} bend point ${index}:`, {
+                      rawPoint: point,
+                      containerOffset,
+                      absolutePos: { x: absBendX, y: absBendY }
+                    });
                   });
                 }
               }
@@ -283,20 +413,23 @@ const ReactFlowGraph = ({ graphData }) => {
                   nodeEdgePoints[sourceId] = { right: [], left: [] };
                 }
                 
-                // Apply container offset to get absolute Y
+                // Apply container offset to get absolute coordinates
+                const absStartX = containerOffset.x + section.startPoint.x;
                 const absStartY = containerOffset.y + section.startPoint.y;
                 
                 console.log(`Root edge ${edge.id} source point:`, {
                   nodeId: sourceId,
                   rawPoint: section.startPoint,
-                  containerOffset: containerOffset.y,
-                  absoluteY: absStartY,
+                  containerOffset,
+                  absolutePos: { x: absStartX, y: absStartY },
                   edgeId: edge.id
                 });
                 
                 nodeEdgePoints[sourceId].right.push({
                   edgeId: edge.id,
+                  x: absStartX,
                   y: absStartY,
+                  originalX: section.startPoint.x,
                   originalY: section.startPoint.y
                 });
               }
@@ -308,21 +441,50 @@ const ReactFlowGraph = ({ graphData }) => {
                   nodeEdgePoints[targetId] = { right: [], left: [] };
                 }
                 
-                // Apply container offset to get absolute Y
+                // Apply container offset to get absolute coordinates
+                const absEndX = containerOffset.x + section.endPoint.x;
                 const absEndY = containerOffset.y + section.endPoint.y;
                 
                 console.log(`Root edge ${edge.id} target point:`, {
                   nodeId: targetId,
                   rawPoint: section.endPoint,
-                  containerOffset: containerOffset.y,
-                  absoluteY: absEndY,
+                  containerOffset,
+                  absolutePos: { x: absEndX, y: absEndY },
                   edgeId: edge.id
                 });
                 
                 nodeEdgePoints[targetId].left.push({
                   edgeId: edge.id,
+                  x: absEndX,
                   y: absEndY,
+                  originalX: section.endPoint.x,
                   originalY: section.endPoint.y
+                });
+              }
+              
+              // Store bend points with absolute positions
+              if (section.bendPoints && section.bendPoints.length > 0) {
+                // Reset the array instead of checking if it exists
+                edge.absoluteBendPoints = [];
+                
+                section.bendPoints.forEach((point, index) => {
+                  // Apply container offset to get absolute coordinates
+                  const absBendX = containerOffset.x + point.x;
+                  const absBendY = containerOffset.y + point.y;
+                  
+                  edge.absoluteBendPoints.push({
+                    index,
+                    x: absBendX,
+                    y: absBendY,
+                    originalX: point.x,
+                    originalY: point.y
+                  });
+                  
+                  console.log(`Root edge ${edge.id} bend point ${index}:`, {
+                    rawPoint: point,
+                    containerOffset,
+                    absolutePos: { x: absBendX, y: absBendY }
+                  });
                 });
               }
             }
@@ -332,7 +494,7 @@ const ReactFlowGraph = ({ graphData }) => {
         console.log("ReactFlowGraph: Collected edge points:", nodeEdgePoints);
         
         // 4. Third pass: build ReactFlow nodes and edges using absolute positions
-        const buildReactFlowNodes = (node, parentX = 0, parentY = 0) => {
+        const buildReactFlowNodes = (node, parentX = 0, parentY = 0, parentId = null) => {
           if (!node || !node.id) {
             console.error('ReactFlowGraph: Invalid node found:', node);
             return;
@@ -348,12 +510,12 @@ const ReactFlowGraph = ({ graphData }) => {
             console.warn(`Position mismatch for ${node.id}: stored=${storedPos.x},${storedPos.y}, calculated=${absX},${absY}`);
           }
           
-          console.log(`Processing node ${node.id}:`, {
-            original: { x: node.x, y: node.y },
-            parent: { x: parentX, y: parentY },
-            absolute: { x: absX, y: absY },
-            dimensions: { width: node.width, height: node.height }
-          });
+          // console.log(`Processing node ${node.id}:`, {
+          //   original: { x: node.x, y: node.y },
+          //   parent: { x: parentX, y: parentY },
+          //   absolute: { x: absX, y: absY },
+          //   dimensions: { width: node.width, height: node.height }
+          // });
           
           // Determine if this is a parent node (has children)
           const isParent = Array.isArray(node.children) && node.children.length > 0;
@@ -363,39 +525,21 @@ const ReactFlowGraph = ({ graphData }) => {
           
           // Calculate relative y positions for handles
           const leftHandles = edgePoints.left.map((point, index) => {
-            // Use the pre-calculated absolute Y position
             const relativeY = ((point.y - absY) / (node.height || 40) * 100);
-            console.log(`Node ${node.id} left handle #${index}:`, {
-              originalY: point.originalY,
-              absoluteY: point.y,
-              nodeY: absY,
-              nodeHeight: node.height,
-              relativeY: `${relativeY}%`,
-              edgeId: point.edgeId
-            });
             return `${relativeY}%`;
           });
           
           const rightHandles = edgePoints.right.map((point, index) => {
-            // Use the pre-calculated absolute Y position
             const relativeY = ((point.y - absY) / (node.height || 40) * 100);
-            console.log(`Node ${node.id} right handle #${index}:`, {
-              originalY: point.originalY,
-              absoluteY: point.y,
-              nodeY: absY,
-              nodeHeight: node.height,
-              relativeY: `${relativeY}%`,
-              edgeId: point.edgeId
-            });
             return `${relativeY}%`;
           });
           
           // Add node to the nodes array
-          reactFlowNodes.push({
+          const newNode = {
             id: node.id,
             position: { x: absX, y: absY },
-            type: 'custom', // Use our custom node type
-            zIndex: isParent ? 0 : 100, // Set highest z-index for regular nodes, lowest for parents
+            type: isParent ? 'group' : 'custom',
+            zIndex: isParent ? 0 : 100,
             data: { 
               label: node.labels && node.labels[0] ? node.labels[0].text : node.id,
               width: node.width || 80,
@@ -403,9 +547,28 @@ const ReactFlowGraph = ({ graphData }) => {
               isParent: isParent,
               leftHandles,
               rightHandles,
-              position: { x: absX, y: absY } // Store position for debugging
-            }
-          });
+              position: { x: absX, y: absY }
+            },
+            style: isParent ? {
+              width: node.width || 200,
+              height: node.height || 200,
+              backgroundColor: 'rgba(240, 240, 240, 0.8)',
+              border: '1px dashed #999',
+              display: 'flex',
+              justifyContent: 'flex-start',
+              alignItems: 'flex-start',
+              padding: '10px'
+            } : undefined
+          };
+
+          // If this is a child node, add parentId
+          if (parentId) {
+            newNode.parentId = parentId;
+            // For child nodes, position is relative to parent
+            newNode.position = { x: node.x || 0, y: node.y || 0 };
+          }
+
+          reactFlowNodes.push(newNode);
           
           // Process node's edges
           if (node.edges && node.edges.length > 0) {
@@ -426,20 +589,13 @@ const ReactFlowGraph = ({ graphData }) => {
                         point => point.edgeId === edge.id
                       );
                       
-                      console.log(`Creating edge ${edgeId}:`, {
-                        source,
-                        target,
-                        sourceHandle: sourceHandleIndex >= 0 ? `right-${sourceHandleIndex}` : 'right',
-                        targetHandle: targetHandleIndex >= 0 ? `left-${targetHandleIndex}` : 'left',
-                        sourcePoint: edge.sections?.[0]?.startPoint,
-                        targetPoint: edge.sections?.[0]?.endPoint
-                      });
                       
                       reactFlowEdges.push({
                         id: edgeId,
                         source: source,
                         target: target,
-                        type: 'smoothstep',
+                        // Use step edge type for edges with 2 bendpoints
+                        type: edge.sections?.[0]?.bendPoints?.length >= 2 ? 'step' : 'smoothstep',
                         zIndex: 50,
                         sourceHandle: sourceHandleIndex >= 0 ? `right-${sourceHandleIndex}` : 'right',
                         targetHandle: targetHandleIndex >= 0 ? `left-${targetHandleIndex}` : 'left',
@@ -449,6 +605,13 @@ const ReactFlowGraph = ({ graphData }) => {
                           width: 20,
                           height: 20,
                           color: '#555'
+                        },
+                        // Add the bend points data
+                        data: {
+                          bendPoints: edge.absoluteBendPoints || edge.sections?.[0]?.bendPoints?.map(point => ({
+                            x: point.x,
+                            y: point.y
+                          })) || []
                         }
                       });
                     }
@@ -458,10 +621,10 @@ const ReactFlowGraph = ({ graphData }) => {
             });
           }
           
-          // Recursively process children
+          // Process children recursively
           if (node.children && node.children.length > 0) {
             node.children.forEach(child => {
-              buildReactFlowNodes(child, absX, absY);
+              buildReactFlowNodes(child, absX, absY, node.id);
             });
           }
         };
@@ -488,20 +651,13 @@ const ReactFlowGraph = ({ graphData }) => {
                       point => point.edgeId === edge.id
                     );
                     
-                    console.log(`Creating root edge ${edgeId}:`, {
-                      source,
-                      target,
-                      sourceHandle: sourceHandleIndex >= 0 ? `right-${sourceHandleIndex}` : 'right',
-                      targetHandle: targetHandleIndex >= 0 ? `left-${targetHandleIndex}` : 'left',
-                      sourcePoint: edge.sections?.[0]?.startPoint,
-                      targetPoint: edge.sections?.[0]?.endPoint
-                    });
                     
                     reactFlowEdges.push({
                       id: edgeId,
                       source: source,
                       target: target,
-                      type: 'smoothstep',
+                      // Use step edge type for edges with 2 bendpoints
+                      type: edge.sections?.[0]?.bendPoints?.length >= 2 ? 'step' : 'smoothstep',
                       zIndex: 50,
                       sourceHandle: sourceHandleIndex >= 0 ? `right-${sourceHandleIndex}` : 'right',
                       targetHandle: targetHandleIndex >= 0 ? `left-${targetHandleIndex}` : 'left',
@@ -511,6 +667,13 @@ const ReactFlowGraph = ({ graphData }) => {
                         width: 20,
                         height: 20,
                         color: '#555'
+                      },
+                      // Add the bend points data
+                      data: {
+                        bendPoints: edge.absoluteBendPoints || edge.sections?.[0]?.bendPoints?.map(point => ({
+                          x: point.x,
+                          y: point.y
+                        })) || []
                       }
                     });
                   }
@@ -562,6 +725,7 @@ const ReactFlowGraph = ({ graphData }) => {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             fitView
             elementsSelectable={true}
             nodesDraggable={true}

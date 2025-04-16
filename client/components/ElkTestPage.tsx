@@ -14,10 +14,6 @@ import {
 } from '../utils/graph_helper_functions';
 import type { ElkNode as HelperElkNode, ElkEdge } from '../utils/graph_helper_functions';
 
-
-
-type PreviewMode = 'elk' | 'excalidraw' | 'reactflow';
-
 // Extend ElkNode with layout properties
 interface LayoutElkNode extends HelperElkNode {
   x?: number;
@@ -26,6 +22,104 @@ interface LayoutElkNode extends HelperElkNode {
   height?: number;
   children?: LayoutElkNode[];
 }
+
+// Update the default graph data definition to match the LayoutElkNode type
+const DEFAULT_GRAPH_DATA: LayoutElkNode = {
+  "id": "root",
+  "labels": [{ "text": "Root" }], // Added the required labels property
+  "children": [
+    { 
+      "id": "ui",
+      "labels": [{ "text": "UI" }],
+      "children": [
+        { 
+          "id": "webapp",        
+          "labels": [{ "text": "Web App" }]
+        }
+      ]
+    },
+    { 
+      "id": "aws",
+      "labels": [{ "text": "AWS" }],
+      "children": [
+        { 
+          "id": "api",  
+          "labels": [{ "text": "API" }]
+        },
+        { 
+          "id": "lambda",
+          "labels": [{ "text": "Lambda" }],
+          "children": [
+            { 
+              "id": "query", 
+              "labels": [{ "text": "Query" }]
+            },
+            { 
+              "id": "pdf", 
+              "labels": [{ "text": "PDF" }]
+            },
+            { 
+              "id": "fetch", 
+              "labels": [{ "text": "Fetch" }]
+            },
+            { 
+              "id": "chat", 
+              "labels": [{ "text": "Chat" }]
+            }
+          ],
+          "edges": [
+            { "id": "e6", "sources": [ "chat" ], "targets": [ "fetch" ] }
+          ]
+        },
+        { 
+          "id": "vector", 
+          "labels": [{ "text": "Vector" }]
+        },
+        { 
+          "id": "storage", 
+          "labels": [{ "text": "Storage" }]
+        }
+      ],
+      "edges": [
+        { "id": "e1", "sources": [ "api" ], "targets": ["lambda" ] },
+        { "id": "e2", "sources": [ "query" ], "targets": ["vector" ] },
+        { "id": "e3", "sources": [ "pdf" ], "targets": ["vector" ] },
+        { "id": "e4", "sources": [ "pdf" ], "targets": ["storage" ] },
+        { "id": "e5", "sources": [ "fetch" ], "targets": ["storage" ] }
+      ]
+    },
+    { 
+      "id": "openai", 
+      "labels": [{ "text": "OpenAI" }],
+      "children": [
+        { 
+          "id": "embed", 
+          "labels": [{ "text": "Embed" }]
+        },
+        { 
+          "id": "chat_api", 
+          "labels": [{ "text": "Chat API" }]
+        }
+      ]
+    }
+  ],
+  "edges": [
+    { "id": "e0", "sources": [ "webapp" ], "targets": [ "api" ] },
+    { "id": "e7", "sources": [ "chat" ], "targets": ["chat_api" ] },
+    { 
+      "id": "e8", 
+      "sources": [ "embed" ], 
+      "targets": [ "query" ]
+    },
+    { 
+      "id": "e9", 
+      "sources": [ "embed" ], 
+      "targets": [ "pdf" ]
+    }
+  ]
+};
+
+type PreviewMode = 'elk' | 'excalidraw' | 'reactflow';
 
 export default function ElkTestPage() {
   const [jsonInput, setJsonInput] = useState('');
@@ -86,6 +180,14 @@ export default function ElkTestPage() {
     }
   }, [layoutedGraphData]);
 
+  // Update the useEffect to initialize with default data
+  // Add this useEffect to initialize with default data
+  useEffect(() => {
+    const defaultJsonString = JSON.stringify(DEFAULT_GRAPH_DATA, null, 2);
+    setJsonInput(defaultJsonString);
+    setGraphData(DEFAULT_GRAPH_DATA);
+  }, []);
+
   const stripComments = (jsonString: string) => {
     // console.log('Stripping comments from input:', jsonString);
     const cleaned = jsonString
@@ -97,9 +199,13 @@ export default function ElkTestPage() {
   };
 
   const handleJsonChange = (e: { target: { value: string } }) => {
-    // console.log('\n--- New JSON Input ---');
-    // console.log('Raw input:', e.target.value);
     setJsonInput(e.target.value);
+    
+    if (!e.target.value.trim()) {
+      setError("Please enter JSON data");
+      setGraphData(null);
+      return;
+    }
     
     try {
       const cleanedJson = stripComments(e.target.value);

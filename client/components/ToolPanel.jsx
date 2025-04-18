@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import ElkRender from "./ElkRender";
 import { elkGraphDescription } from "./elkGraphDescription";
 import ReactFlowGraph from "./ReactFlowGraph";
@@ -332,7 +332,108 @@ export default function ToolPanel({
   const [elkGraph, setElkGraph] = useState(getInitialElkGraph());
   const [activeTab, setActiveTab] = useState('elk');
   const [graphData, setGraphData] = useState(null);
+  const [layoutedElkGraph, setLayoutedElkGraph] = useState(null);
   const elk = new ELK();
+  const layoutProcessingRef = useRef(false);
+  const lastLayoutHashRef = useRef(null);
+  const layoutTimeoutRef = useRef(null);
+
+  // Helper function to get a stable hash of the graph layout (ignoring ELK internal props)
+  const getLayoutHash = (graph) => {
+    if (!graph) return '';
+    
+    // Get a stable representation by only including relevant properties
+    // Recursively process the graph to remove internal ELK properties like $H
+    const cleanGraph = (node) => {
+      if (!node) return null;
+      
+      const cleanNode = {
+        id: node.id,
+        x: node.x,
+        y: node.y,
+        width: node.width,
+        height: node.height,
+      };
+      
+      if (node.labels) {
+        cleanNode.labels = node.labels.map(label => ({
+          text: label.text,
+          x: label.x,
+          y: label.y
+        }));
+      }
+      
+      if (node.children && node.children.length > 0) {
+        cleanNode.children = node.children.map(child => cleanGraph(child));
+      }
+      
+      if (node.edges && node.edges.length > 0) {
+        cleanNode.edges = node.edges.map(edge => ({
+          id: edge.id,
+          sources: [...edge.sources],
+          targets: [...edge.targets],
+          sections: edge.sections ? edge.sections.map(section => ({
+            startPoint: section.startPoint ? { x: section.startPoint.x, y: section.startPoint.y } : null,
+            endPoint: section.endPoint ? { x: section.endPoint.x, y: section.endPoint.y } : null,
+            bendPoints: section.bendPoints ? section.bendPoints.map(point => ({ 
+              x: point.x, 
+              y: point.y 
+            })) : []
+          })) : []
+        }));
+      }
+      
+      return cleanNode;
+    };
+    
+    // Create a stable hash of the graph's layout-relevant properties
+    const cleanedGraph = cleanGraph(graph);
+    return JSON.stringify(cleanedGraph);
+  };
+
+  // Process the graph when it changes or when active tab changes
+  useEffect(() => {
+    // Reset the layout processing state when we switch to ReactFlow tab
+    if (activeTab === 'reactflow') {
+      console.log("Switching to ReactFlow tab, resetting layout state");
+      layoutProcessingRef.current = false;
+      
+      // Force a re-layout if needed
+      if (elkGraph && !layoutedElkGraph) {
+        setLayoutedElkGraph(null);
+      }
+      
+      // Set a safety timeout to reset the processing state if it gets stuck
+      if (layoutTimeoutRef.current) {
+        clearTimeout(layoutTimeoutRef.current);
+      }
+      
+      layoutTimeoutRef.current = setTimeout(() => {
+        if (layoutProcessingRef.current) {
+          console.log("Layout processing took too long, resetting state");
+          layoutProcessingRef.current = false;
+        }
+      }, 5000); // 5 second timeout
+    } else {
+      // If we switch to any other tab, we want to make sure the layout processing state is reset
+      // so when we come back to ReactFlow, it will process again if needed
+      layoutProcessingRef.current = false;
+      
+      // Clear any pending timeout
+      if (layoutTimeoutRef.current) {
+        clearTimeout(layoutTimeoutRef.current);
+        layoutTimeoutRef.current = null;
+      }
+    }
+    
+    // Cleanup the timeout when the component unmounts or the effect reruns
+    return () => {
+      if (layoutTimeoutRef.current) {
+        clearTimeout(layoutTimeoutRef.current);
+        layoutTimeoutRef.current = null;
+      }
+    };
+  }, [activeTab, elkGraph, layoutedElkGraph]);
 
   useEffect(() => {
     if (!events || events.length === 0) return;
@@ -998,9 +1099,68 @@ ${errorCount > 0 ? `\nErrors:\n${errorMessages}` : ''}
             ) : (
               <div>
                 <h3 className="text-lg font-medium mb-2">ReactFlow Visualization</h3>
-                <div className="border rounded p-4 bg-white h-[500px]">
-                  {graphData ? (
-                    <ReactFlowGraph graphData={graphData} />
+                <div className="border rounded p-4 bg-white h-[600px]">
+                  {elkGraph ? (
+                    <>
+                      {/* The hidden ElkRender component does all the layout work */}
+                      <div style={{ display: 'none' }}>
+                        <ElkRender 
+                          key={`elk-renderer-${activeTab === 'reactflow' ? 'active' : 'inactive'}-${elkGraph ? elkGraph.id : 'empty'}`}
+                          initialGraph={elkGraph} 
+                          onLayoutComplete={(layoutedGraph) => {
+                            // Only process if we're on the ReactFlow tab
+                            if (activeTab !== 'reactflow') {
+                              layoutProcessingRef.current = false;
+                              return;
+                            }
+                            
+                            console.log("ToolPanel: Received layouted graph from ElkRender");
+                            
+                            // Generate a stable layout hash
+                            const newLayoutHash = getLayoutHash(layoutedGraph);
+                            
+                            // Only update state if the layout actually changed
+                            if (newLayoutHash !== lastLayoutHashRef.current) {
+                              lastLayoutHashRef.current = newLayoutHash;
+                              setLayoutedElkGraph(layoutedGraph);
+                            }
+                            
+                            layoutProcessingRef.current = false;
+                          }}
+                        />
+                      </div>
+                      
+                      {/* We only show ReactFlow when we have a layouted graph */}
+                      {layoutedElkGraph ? (
+                        <ReactFlowGraph 
+                          graphData={layoutedElkGraph} 
+                          key="layouted-graph"
+                        />
+                      ) : elkGraph ? (
+                        <div className="flex items-center justify-center h-full">
+                          <div className="text-gray-500">
+                            {/* Set layout processing to true when showing this message */}
+                            {(() => { layoutProcessingRef.current = true; return null; })()}
+                            Processing layout...
+                            <button 
+                              className="ml-2 px-2 py-1 bg-blue-500 text-white rounded text-xs"
+                              onClick={() => {
+                                // Manual reset if processing gets stuck
+                                layoutProcessingRef.current = false;
+                                // Force a re-layout
+                                setLayoutedElkGraph(null);
+                              }}
+                            >
+                              Reset
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-gray-500">
+                          No graph data available
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <div className="flex items-center justify-center h-full text-gray-500">
                       No graph data available

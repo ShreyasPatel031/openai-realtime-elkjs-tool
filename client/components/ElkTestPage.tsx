@@ -157,6 +157,12 @@ export default function ElkTestPage() {
   // Log when graph data changes
   useEffect(() => {
     console.log('Graph data updated:', graphData);
+    
+    // Whenever graph data changes, we need to update the layout
+    if (graphData) {
+      // We don't need to wait for switching to ReactFlow - always keep the layout up to date
+      console.log("ElkTestPage: Requesting new layout for updated graph data");
+    }
   }, [graphData]);
 
   // Add effect to handle graph data changes
@@ -164,24 +170,12 @@ export default function ElkTestPage() {
     if (!graphData) return;
     
     console.log("ElkTestPage: Using original graph data", graphData);
-    // No need to apply defaults - let ElkRender handle that
     
     // Simple state update to trigger the child components
     setGraphData(graphData);
-    setLayoutedGraphData(null); // Reset layouted data so we get a fresh layout
   }, [jsonInput]); // Only run when JSON input changes
 
-  // Add effect to log when layoutedGraphData changes
-  useEffect(() => {
-    if (layoutedGraphData) {
-      console.log('ElkTestPage: Layouted graph data updated:', layoutedGraphData);
-      console.log('ElkTestPage: Graph has layout coordinates:', 
-        layoutedGraphData.x !== undefined && layoutedGraphData.y !== undefined);
-    }
-  }, [layoutedGraphData]);
-
   // Update the useEffect to initialize with default data
-  // Add this useEffect to initialize with default data
   useEffect(() => {
     const defaultJsonString = JSON.stringify(DEFAULT_GRAPH_DATA, null, 2);
     setJsonInput(defaultJsonString);
@@ -226,7 +220,7 @@ export default function ElkTestPage() {
     }
   };
 
-  // Operation handlers - Operate directly on JSON string
+  // Operation handlers
   const handleNodeOperation = (operation: string) => {
     try {
       const currentGraph = JSON.parse(stripComments(jsonInput));
@@ -494,11 +488,20 @@ export default function ElkTestPage() {
                   <ElkExcalidrawRender graphData={graphData} />
                 ) : (
                   <div style={{ height: '600px', width: '100%' }}>
-                    <ReactFlowGraph graphData={layoutedGraphData || graphData} />
-                    {layoutedGraphData ? 
-                      <div className="text-xs text-gray-500 mt-1">Using layouted graph from ELK</div> : 
-                      <div className="text-xs text-gray-500 mt-1">Waiting for layouted graph...</div>
-                    }
+                    {/* Always render both ElkRender (hidden) and ReactFlow */}
+                    <div style={{ display: 'none' }}>
+                      <ElkRender 
+                        initialGraph={graphData} 
+                        onLayoutComplete={(layoutedGraph) => {
+                          console.log("ElkTestPage: Received layouted graph from ElkRender:", layoutedGraph);
+                          setLayoutedGraphData(layoutedGraph);
+                        }}
+                      />
+                    </div>
+                    <ReactFlowGraph 
+                      graphData={layoutedGraphData || graphData} 
+                      key={layoutedGraphData ? 'layouted' : 'raw'}
+                    />
                   </div>
                 )}
               </div>

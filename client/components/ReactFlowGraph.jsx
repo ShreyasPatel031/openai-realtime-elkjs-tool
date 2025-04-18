@@ -231,12 +231,36 @@ const ReactFlowGraph = ({ graphData }) => {
       return;
     }
     
-    console.log('ReactFlowGraph: Received graph data:', graphData);
-    // Check if the graph has layout properties (x, y) which indicates it's already layouted
-    const isLayouted = graphData.x !== undefined && graphData.y !== undefined;
-    console.log('ReactFlowGraph: Graph is already layouted:', isLayouted);
+    // Handle different data formats that might be passed from ToolPanel or ElkTestPage
+    let processableGraph = graphData;
     
-    setDebug(`Received graph with ${graphData.children?.length || 0} root children. Has layout: ${isLayouted}`);
+    // If graphData has a 'graph' property (from ToolPanel), use that
+    if (graphData.graph) {
+      processableGraph = graphData.graph;
+      console.log('ReactFlowGraph: Using graph from object with title:', graphData.title || 'Untitled');
+    }
+    
+    
+    // Check if the graph has layout properties (x, y) which indicates it's already layouted
+    const isLayouted = processableGraph.x !== undefined && processableGraph.y !== undefined;
+    
+    setDebug(`Received graph with ${processableGraph.children?.length || 0} root children. Has layout: ${isLayouted}`);
+    
+    // Ensure we have a valid graph structure before proceeding
+    if (!processableGraph.children || processableGraph.children.length === 0) {
+      // If there are no children, but we have an ID, try treating the root as the graph itself
+      if (processableGraph.id) {
+        // Create a new graph with the current object as the single child
+        processableGraph = {
+          id: 'synthetic-root',
+          children: [processableGraph]
+        };
+      } else {
+        setError("Invalid graph structure: No children found and no graph ID");
+        setDebug("Invalid graph structure: No children found and no graph ID");
+        return;
+      }
+    }
     
     try {
       // Process the already layouted graph into ReactFlow format
@@ -292,10 +316,6 @@ const ReactFlowGraph = ({ graphData }) => {
                 const containerId = edge.container || node.id;
                 const containerOffset = absolutePositions[containerId] || { x: 0, y: 0 };
                 
-                console.log(`Edge ${edge.id} container:`, {
-                  containerId,
-                  containerOffset
-                });
                 
                 // Store source point (right side of source node)
                 if (edge.sources && edge.sources.length > 0 && section.startPoint) {
@@ -308,13 +328,6 @@ const ReactFlowGraph = ({ graphData }) => {
                   const absStartX = containerOffset.x + section.startPoint.x;
                   const absStartY = containerOffset.y + section.startPoint.y;
                   
-                  console.log(`Edge ${edge.id} source point:`, {
-                    nodeId: sourceId,
-                    rawPoint: section.startPoint,
-                    containerOffset,
-                    absolutePos: { x: absStartX, y: absStartY },
-                    edgeId: edge.id
-                  });
                   
                   nodeEdgePoints[sourceId].right.push({
                     edgeId: edge.id,
@@ -336,13 +349,6 @@ const ReactFlowGraph = ({ graphData }) => {
                   const absEndX = containerOffset.x + section.endPoint.x;
                   const absEndY = containerOffset.y + section.endPoint.y;
                   
-                  console.log(`Edge ${edge.id} target point:`, {
-                    nodeId: targetId,
-                    rawPoint: section.endPoint,
-                    containerOffset,
-                    absolutePos: { x: absEndX, y: absEndY },
-                    edgeId: edge.id
-                  });
                   
                   nodeEdgePoints[targetId].left.push({
                     edgeId: edge.id,
@@ -371,11 +377,7 @@ const ReactFlowGraph = ({ graphData }) => {
                       originalY: point.y
                     });
                     
-                    console.log(`Edge ${edge.id} bend point ${index}:`, {
-                      rawPoint: point,
-                      containerOffset,
-                      absolutePos: { x: absBendX, y: absBendY }
-                    });
+                    
                   });
                 }
               }
@@ -401,10 +403,6 @@ const ReactFlowGraph = ({ graphData }) => {
               const containerId = edge.container || layoutedGraph.id || 'root';
               const containerOffset = absolutePositions[containerId] || { x: 0, y: 0 };
               
-              console.log(`Root edge ${edge.id} container:`, {
-                containerId,
-                containerOffset
-              });
               
               // Store source point
               if (edge.sources && edge.sources.length > 0 && section.startPoint) {
@@ -416,14 +414,7 @@ const ReactFlowGraph = ({ graphData }) => {
                 // Apply container offset to get absolute coordinates
                 const absStartX = containerOffset.x + section.startPoint.x;
                 const absStartY = containerOffset.y + section.startPoint.y;
-                
-                console.log(`Root edge ${edge.id} source point:`, {
-                  nodeId: sourceId,
-                  rawPoint: section.startPoint,
-                  containerOffset,
-                  absolutePos: { x: absStartX, y: absStartY },
-                  edgeId: edge.id
-                });
+              
                 
                 nodeEdgePoints[sourceId].right.push({
                   edgeId: edge.id,
@@ -444,14 +435,6 @@ const ReactFlowGraph = ({ graphData }) => {
                 // Apply container offset to get absolute coordinates
                 const absEndX = containerOffset.x + section.endPoint.x;
                 const absEndY = containerOffset.y + section.endPoint.y;
-                
-                console.log(`Root edge ${edge.id} target point:`, {
-                  nodeId: targetId,
-                  rawPoint: section.endPoint,
-                  containerOffset,
-                  absolutePos: { x: absEndX, y: absEndY },
-                  edgeId: edge.id
-                });
                 
                 nodeEdgePoints[targetId].left.push({
                   edgeId: edge.id,
@@ -479,19 +462,13 @@ const ReactFlowGraph = ({ graphData }) => {
                     originalX: point.x,
                     originalY: point.y
                   });
-                  
-                  console.log(`Root edge ${edge.id} bend point ${index}:`, {
-                    rawPoint: point,
-                    containerOffset,
-                    absolutePos: { x: absBendX, y: absBendY }
-                  });
+
                 });
               }
             }
           });
         }
         
-        console.log("ReactFlowGraph: Collected edge points:", nodeEdgePoints);
         
         // 4. Third pass: build ReactFlow nodes and edges using absolute positions
         const buildReactFlowNodes = (node, parentX = 0, parentY = 0, parentId = null) => {
@@ -509,13 +486,6 @@ const ReactFlowGraph = ({ graphData }) => {
           if (Math.abs(storedPos.x - absX) > 0.1 || Math.abs(storedPos.y - absY) > 0.1) {
             console.warn(`Position mismatch for ${node.id}: stored=${storedPos.x},${storedPos.y}, calculated=${absX},${absY}`);
           }
-          
-          // console.log(`Processing node ${node.id}:`, {
-          //   original: { x: node.x, y: node.y },
-          //   parent: { x: parentX, y: parentY },
-          //   absolute: { x: absX, y: absY },
-          //   dimensions: { width: node.width, height: node.height }
-          // });
           
           // Determine if this is a parent node (has children)
           const isParent = Array.isArray(node.children) && node.children.length > 0;
@@ -683,16 +653,13 @@ const ReactFlowGraph = ({ graphData }) => {
           });
         }
         
-        console.log('ReactFlowGraph: Processed ReactFlow nodes and edges:', { 
-          nodes: reactFlowNodes.length, 
-          edges: reactFlowEdges.length 
-        });
+        
         
         return { nodes: reactFlowNodes, edges: reactFlowEdges };
       };
       
       // Process the layouted graph
-      const { nodes: newNodes, edges: newEdges } = processLayoutedGraph(graphData);
+      const { nodes: newNodes, edges: newEdges } = processLayoutedGraph(processableGraph);
       setNodes(newNodes);
       setEdges(newEdges);
       setError(null);
@@ -727,6 +694,12 @@ const ReactFlowGraph = ({ graphData }) => {
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             fitView
+            maxZoom={2}
+            minZoom={0.1}
+            fitViewOptions={{ 
+              padding: 0.2,
+              includeHiddenNodes: true 
+            }}
             elementsSelectable={true}
             nodesDraggable={true}
             edgesFocusable={true}
@@ -746,7 +719,7 @@ const ReactFlowGraph = ({ graphData }) => {
             }}
           >
             <Background />
-            <Controls />
+            <Controls showZoom={true} showFitView={true} showInteractive={true} />
             <MiniMap 
               nodeStrokeWidth={3}
               zoomable 

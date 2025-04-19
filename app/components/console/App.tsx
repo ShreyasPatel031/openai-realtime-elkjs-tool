@@ -1,13 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import logo from "/assets/openai-logomark.svg";
-import EventLog from "./console/EventLog";
-import SessionControls from "./console/SessionControls";
-import ToolPanel from "./ui/ToolPanel";
-import ElkTestPage from "./test/ElkTestPage";
-import ErrorBoundary from "./console/ErrorBoundary";
-import InteractiveCanvas from "./ui/InteractiveCanvas";
+import Image from 'next/image';
+import EventLog from "./EventLog";
+import SessionControls from "./SessionControls";
+import ToolPanel from "../ui/ToolPanel";
+import ElkTestPage from "../test/ElkTestPage";
+import ErrorBoundary from "../../utils/ErrorBoundary";
 
-function MainContent({ events, isSessionActive, startSession, stopSession, sendClientEvent, sendTextMessage }) {
+function MainContent({ events, isSessionActive, startSession, stopSession, sendClientEvent, sendTextMessage }: {
+  events: any[];
+  isSessionActive: boolean;
+  startSession: () => Promise<void>;
+  stopSession: () => void;
+  sendClientEvent: (message: any) => void;
+  sendTextMessage: (message: string) => void;
+}) {
   return (
     <>
       <section className="absolute top-0 left-0 w-[80%] bottom-0 flex flex-col">
@@ -43,14 +49,13 @@ function MainContent({ events, isSessionActive, startSession, stopSession, sendC
 
 export default function App() {
   const [isSessionActive, setIsSessionActive] = useState(false);
-  const [events, setEvents] = useState([]);
-  const [dataChannel, setDataChannel] = useState(null);
+  const [events, setEvents] = useState<any[]>([]);
+  const [dataChannel, setDataChannel] = useState<RTCDataChannel | null>(null);
   const [isDataChannelReady, setIsDataChannelReady] = useState(false);
   const [currentPage, setCurrentPage] = useState('main');
-  const [showNewUI, setShowNewUI] = useState(false);
-  const messageQueue = useRef([]);
-  const peerConnection = useRef(null);
-  const audioElement = useRef(null);
+  const messageQueue = useRef<any[]>([]);
+  const peerConnection = useRef<RTCPeerConnection | null>(null);
+  const audioElement = useRef<HTMLAudioElement | null>(null);
 
   async function startSession() {
     // Get a session token for OpenAI Realtime API
@@ -64,7 +69,11 @@ export default function App() {
     // Set up to play remote audio from the model
     audioElement.current = document.createElement("audio");
     audioElement.current.autoplay = true;
-    pc.ontrack = (e) => (audioElement.current.srcObject = e.streams[0]);
+    pc.ontrack = (e) => {
+      if (audioElement.current) {
+        audioElement.current.srcObject = e.streams[0];
+      }
+    };
 
     // Add local audio track for microphone input in the browser
     const ms = await navigator.mediaDevices.getUserMedia({
@@ -81,7 +90,6 @@ export default function App() {
     await pc.setLocalDescription(offer);
 
     const baseUrl = "https://api.openai.com/v1/realtime";
-    // const model = "gpt-4o-realtime-preview-2024-12-17";
     const model = "gpt-4o-mini-realtime-preview-2024-12-17";
     const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
       method: "POST",
@@ -107,13 +115,12 @@ export default function App() {
       dataChannel.close();
     }
 
-    peerConnection.current.getSenders().forEach((sender) => {
-      if (sender.track) {
-        sender.track.stop();
-      }
-    });
-
     if (peerConnection.current) {
+      peerConnection.current.getSenders().forEach((sender) => {
+        if (sender.track) {
+          sender.track.stop();
+        }
+      });
       peerConnection.current.close();
     }
 
@@ -123,7 +130,7 @@ export default function App() {
   }
 
   // Send a message to the model
-  function sendClientEvent(message) {
+  function sendClientEvent(message: any) {
     if (!isDataChannelReady) {
       console.log("Data channel not ready, queueing message");
       console.log("Message size:", JSON.stringify(message).length);
@@ -163,11 +170,13 @@ export default function App() {
         message.event_id = message.event_id || crypto.randomUUID();
         
         try {
-          dataChannel.send(JSON.stringify(message));
-          if (!message.timestamp) {
-            message.timestamp = timestamp;
+          if (dataChannel) {
+            dataChannel.send(JSON.stringify(message));
+            if (!message.timestamp) {
+              message.timestamp = timestamp;
+            }
+            setEvents((prev) => [message, ...prev]);
           }
-          setEvents((prev) => [message, ...prev]);
         } catch (error) {
           console.error("Failed to send queued message:", error);
           messageQueue.current.unshift(message); // Put it back at the front of the queue
@@ -178,7 +187,7 @@ export default function App() {
   }
 
   // Send a text message to the model
-  function sendTextMessage(message) {
+  function sendTextMessage(message: string) {
     // Split message into chunks of 4000 characters
     const chunkSize = 40000;
     const chunks = [];
@@ -252,47 +261,26 @@ export default function App() {
   }, [dataChannel]);
 
   return (
-    <div className="flex flex-col h-screen">
-      <header className="h-16 bg-gray-100 flex items-center justify-between px-4">
-        <div className="flex items-center gap-2">
-          <img src={logo} alt="OpenAI Logo" className="w-8 h-8" />
-          <h1 className="text-lg font-medium">OpenAI Real-time Console</h1>
+    <>
+      <nav className="absolute top-0 left-0 right-0 h-16 flex items-center">
+        <div className="flex items-center gap-4 w-full m-4 pb-2 border-0 border-b border-solid border-gray-200">
+          <Image width={24} height={24} src="/openai-logomark.svg" alt="OpenAI Logo" />
+          <h1>realtime console</h1>
+          <button 
+            onClick={() => setCurrentPage(currentPage === 'main' ? 'test' : 'main')}
+            className="ml-auto text-sm text-gray-600 hover:text-gray-900"
+          >
+            {currentPage === 'main' ? 'Test ELK' : 'Back to Main'}
+          </button>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center">
-            <span className="mr-2">UI Mode:</span>
-            <div className="flex items-center bg-gray-200 rounded-lg p-1">
-              <button 
-                onClick={() => setShowNewUI(false)}
-                className={`px-3 py-1 rounded-md ${!showNewUI ? 'bg-white shadow-sm' : 'text-gray-600'}`}
-              >
-                Classic
-              </button>
-              <button 
-                onClick={() => setShowNewUI(true)}
-                className={`px-3 py-1 rounded-md ${showNewUI ? 'bg-white shadow-sm' : 'text-gray-600'}`}
-              >
-                Modern
-              </button>
-            </div>
+      </nav>
+      <main className="absolute top-16 left-0 right-0 bottom-0">
+        {currentPage === 'test' ? (
+          <div className="p-4">
+            <ErrorBoundary>
+              <ElkTestPage />
+            </ErrorBoundary>
           </div>
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${isSessionActive ? "bg-green-500" : "bg-red-500"}`}></span>
-            <span className="text-sm">{isSessionActive ? "Connected" : "Disconnected"}</span>
-          </div>
-        </div>
-      </header>
-      <main className="flex-grow relative">
-        {showNewUI ? (
-          <ErrorBoundary>
-            <InteractiveCanvas 
-              isSessionActive={isSessionActive}
-              startSession={startSession}
-              stopSession={stopSession}
-              sendTextMessage={sendTextMessage}
-              events={events}
-            />
-          </ErrorBoundary>
         ) : (
           <MainContent
             events={events}
@@ -304,6 +292,6 @@ export default function App() {
           />
         )}
       </main>
-    </div>
+    </>
   );
-}
+} 

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
-import ElkRender from "./ElkRender";
-import { elkGraphDescription } from "./elkGraphDescription";
-import ReactFlowGraph from "./ReactFlowGraph";
+import ElkRender from "../test/ElkRender";
+import { createElkGraphFromFunctionCall } from "../test/elkGraphDescription";
+import ReactFlowGraph from "../test/ReactFlowGraph";
 import {
   addNode,
   deleteNode,
@@ -11,8 +11,35 @@ import {
   groupNodes,
   removeGroup,
   batchUpdate
-} from "../utils/graph_helper_functions";
+} from "../../utils/graph_helper_functions";
 import ELK from "elkjs/lib/elk.bundled.js";
+
+// Define the elk graph description as a constant string since it's not exported from the module
+const elkGraphDescription = `
+ELK Graph Layout is a hierarchical graph layout library using the Eclipse Layout Kernel.
+
+Here are some guidelines for working with ELK graphs:
+
+1. Nodes:
+   - Each node has a unique 'id'
+   - Nodes can have 'labels' with text
+   - Nodes can contain child nodes in a 'children' array
+   - Nodes can have 'edges' between child nodes
+
+2. Edges:
+   - Each edge has a unique 'id'
+   - Edges connect 'sources' to 'targets' (arrays of node IDs)
+   - Edges can have bendpoints and routing information
+
+3. Operations:
+   - add_node: Creates a new node with a given ID under a parent node
+   - delete_node: Removes a node and all its edges
+   - move_node: Relocates a node to a different parent
+   - add_edge: Creates a connection between two nodes
+   - delete_edge: Removes a connection
+   - group_nodes: Creates a container node for multiple nodes
+   - remove_group: Dissolves a container, moving children up to parent
+`;
 
 // Helper function to find a node by ID
 const findNodeById = (node, id) => {
@@ -303,6 +330,9 @@ const minimalSessionUpdate = {
   },
 };
 
+// Define the instruction to include with all function responses
+const agentInstruction = "Under no circumstances should you say anything to the user, do not acknowledge their requests, do not explain your actions, do not acknowledge your function call, do not ask if they have further modificaitons, don't ask what's the next action they want you to perform, do not say you are ready for the next instruction, do not say next instruction please, don't say you are listening for the next instruction, just listen quitely for the next instruction.";
+
 function FunctionCallOutput({ title, elkGraph }) {
   if (!elkGraph) return null;
 
@@ -495,15 +525,14 @@ export default function ToolPanel({
             switch(output.name) {
               case "display_elk_graph":
                 try {
+                  console.log("display_elk_graph called with args:", args);
+                  console.log("Current elkGraph:", elkGraph);
                   
-                  // Return the current graph layout JSON
                   updatedGraph = { ...elkGraph };
                   setElkGraph(updatedGraph);
                   
-                  // Add more debugging
                   console.log("Sending graph to agent:", JSON.stringify(updatedGraph).substring(0, 100) + "...");
                   
-                  // Send the current graph layout JSON back to the agent
                   sendClientEvent({
                     type: "conversation.item.create",
                     item: {
@@ -512,13 +541,12 @@ export default function ToolPanel({
                       content: [
                         {
                           type: "input_text",
-                          text: `Graph data: \n\`\`\`json\n${JSON.stringify(updatedGraph, null, 2)}\n\`\`\``
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
                         }
                       ]
                     }
                   });
                 } catch (displayError) {
-                  // Enhanced error logging with full details
                   console.error(`Error in display_elk_graph operation:`, displayError);
                   console.error(`Attempted to display graph layout`);
                   sendClientEvent({
@@ -529,7 +557,7 @@ export default function ToolPanel({
                       content: [
                         {
                           type: "input_text",
-                          text: `Error in display_elk_graph operation: ${displayError.message}.`
+                          text: `Error in display_elk_graph operation: ${displayError.message}.\n\n${agentInstruction}`
                         }
                       ]
                     }
@@ -540,21 +568,26 @@ export default function ToolPanel({
                 
               case "add_node":
                 try {
-                  // Check if parent exists
-                  const parent = findNodeById(elkGraph, args.parentId);
-                  if (!parent) {
-                    throw new Error(`Parent node '${args.parentId}' not found in the graph`);
-                  }
-                  
                   updatedGraph = addNode(args.nodename, args.parentId, elkGraph);
+                  console.log("Updated graph after add_node:", updatedGraph);
                   setElkGraph(updatedGraph);
-                } catch (addNodeError) {
-                  // Enhanced error logging with full details
-                  console.error(`Error in add_node operation:`, addNodeError);
-                  // console.error(`Error stack:`, addNodeError.stack);
-                  console.error(`Attempted to add node '${args.nodename}' to parent '${args.parentId}'`);
-                  // console.error(`Current graph:`, elkGraph);
                   
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                } catch (addError) {
+                  console.error(`Error in add_node operation:`, addError);
+                  console.error(`Attempted to add node '${args.nodename}' to parent '${args.parentId}'`);
                   sendClientEvent({
                     type: "conversation.item.create",
                     item: {
@@ -563,7 +596,7 @@ export default function ToolPanel({
                       content: [
                         {
                           type: "input_text",
-                          text: `Error in add_node operation: ${addNodeError.message}. Current graph remains unchanged. Check that the parent node exists.`
+                          text: `Error in add_node operation: ${addError.message}. Current graph remains unchanged.\n\n${agentInstruction}`
                         }
                       ]
                     }
@@ -574,21 +607,26 @@ export default function ToolPanel({
                 
               case "delete_node":
                 try {
-                  // Check if node exists before attempting to delete
-                  const node = findNodeById(elkGraph, args.nodeId);
-                  if (!node) {
-                    throw new Error(`Node '${args.nodeId}' not found in the graph`);
-                  }
-                  
                   updatedGraph = deleteNode(args.nodeId, elkGraph);
+                  console.log("Updated graph after delete_node:", updatedGraph);
                   setElkGraph(updatedGraph);
-                } catch (deleteError) {
-                  // Enhanced error logging with full details
-                  console.error(`Error in delete_node operation:`, deleteError);
-                  // console.error(`Error stack:`, deleteError.stack);
-                  console.error(`Attempted to delete node '${args.nodeId}'`);
-                  // console.error(`Current graph:`, elkGraph);
                   
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                } catch (deleteError) {
+                  console.error(`Error in delete_node operation:`, deleteError);
+                  console.error(`Attempted to delete node '${args.nodeId}'`);
                   sendClientEvent({
                     type: "conversation.item.create",
                     item: {
@@ -597,7 +635,7 @@ export default function ToolPanel({
                       content: [
                         {
                           type: "input_text",
-                          text: `Error in delete_node operation: ${deleteError.message}. Current graph remains unchanged. Check that the node exists.`
+                          text: `Error in delete_node operation: ${deleteError.message}. Current graph remains unchanged.\n\n${agentInstruction}`
                         }
                       ]
                     }
@@ -608,7 +646,6 @@ export default function ToolPanel({
                 
               case "move_node":
                 try {
-                  // Check if the node exists
                   const node = findNodeById(elkGraph, args.nodeId);
                   if (!node) {
                     throw new Error(`Node '${args.nodeId}' not found in the graph`);
@@ -616,8 +653,21 @@ export default function ToolPanel({
                   updatedGraph = moveNode(args.nodeId, args.newParentId, elkGraph);
                   console.log("Updated graph after move_node:", updatedGraph);
                   setElkGraph(updatedGraph);
+                  
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
                 } catch (moveError) {
-                  // Enhanced error logging with full details
                   console.error(`Error in move_node operation:`, moveError);
                   console.error(`Attempted to move node '${args.nodeId}' to '${args.newParentId}'`);
                   sendClientEvent({
@@ -628,7 +678,7 @@ export default function ToolPanel({
                       content: [
                         {
                           type: "input_text",
-                          text: `Error in move_node operation: ${moveError.message}. Current graph remains unchanged. Check that the node exists.`
+                          text: `Error in move_node operation: ${moveError.message}. Current graph remains unchanged.\n\n${agentInstruction}`
                         }
                       ]
                     }
@@ -639,26 +689,26 @@ export default function ToolPanel({
                 
               case "add_edge":
                 try {
-                  // Check if source and target nodes exist
-                  const sourceNode = findNodeById(elkGraph, args.sourceId);
-                  const targetNode = findNodeById(elkGraph, args.targetId);
-                  
-                  if (!sourceNode) {
-                    throw new Error(`Source node '${args.sourceId}' not found in the graph`);
-                  }
-                  if (!targetNode) {
-                    throw new Error(`Target node '${args.targetId}' not found in the graph`);
-                  }
-                  
                   updatedGraph = addEdge(args.edgeId, null, args.sourceId, args.targetId, elkGraph);
+                  console.log("Updated graph after add_edge:", updatedGraph);
                   setElkGraph(updatedGraph);
-                } catch (addEdgeError) {
-                  // Enhanced error logging with full details
-                  console.error(`Error in add_edge operation:`, addEdgeError);
-                  // console.error(`Error stack:`, addEdgeError.stack);
-                  console.error(`Attempted to add edge '${args.edgeId}' from '${args.sourceId}' to '${args.targetId}'`);
-                  // console.error(`Current graph:`, elkGraph);
                   
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                } catch (addEdgeError) {
+                  console.error(`Error in add_edge operation:`, addEdgeError);
+                  console.error(`Attempted to add edge '${args.edgeId}' from '${args.sourceId}' to '${args.targetId}'`);
                   sendClientEvent({
                     type: "conversation.item.create",
                     item: {
@@ -667,7 +717,7 @@ export default function ToolPanel({
                       content: [
                         {
                           type: "input_text",
-                          text: `Error in add_edge operation: ${addEdgeError.message}. Current graph remains unchanged. Check that source and target nodes exist.`
+                          text: `Error in add_edge operation: ${addEdgeError.message}. Current graph remains unchanged.\n\n${agentInstruction}`
                         }
                       ]
                     }
@@ -678,41 +728,26 @@ export default function ToolPanel({
                 
               case "delete_edge":
                 try {
-                  // Check if edge exists (need to find it in any node's edges array)
-                  let edgeExists = false;
-                  
-                  const checkEdgeExists = (node) => {
-                    if (node.edges) {
-                      for (const edge of node.edges) {
-                        if (edge.id === args.edgeId) {
-                          edgeExists = true;
-                          return;
-                        }
-                      }
-                    }
-                    if (node.children) {
-                      for (const child of node.children) {
-                        checkEdgeExists(child);
-                        if (edgeExists) return;
-                      }
-                    }
-                  };
-                  
-                  checkEdgeExists(elkGraph);
-                  
-                  if (!edgeExists) {
-                    throw new Error(`Edge '${args.edgeId}' not found in the graph`);
-                  }
-                  
                   updatedGraph = deleteEdge(args.edgeId, elkGraph);
+                  console.log("Updated graph after delete_edge:", updatedGraph);
                   setElkGraph(updatedGraph);
-                } catch (deleteEdgeError) {
-                  // Enhanced error logging with full details
-                  console.error(`Error in delete_edge operation:`, deleteEdgeError);
-                  // console.error(`Error stack:`, deleteEdgeError.stack);
-                  console.error(`Attempted to delete edge '${args.edgeId}'`);
-                  // console.error(`Current graph:`, elkGraph);
                   
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                } catch (deleteEdgeError) {
+                  console.error(`Error in delete_edge operation:`, deleteEdgeError);
+                  console.error(`Attempted to delete edge '${args.edgeId}'`);
                   sendClientEvent({
                     type: "conversation.item.create",
                     item: {
@@ -721,7 +756,7 @@ export default function ToolPanel({
                       content: [
                         {
                           type: "input_text",
-                          text: `Error in delete_edge operation: ${deleteEdgeError.message}. Current graph remains unchanged. Check that the edge exists.`
+                          text: `Error in delete_edge operation: ${deleteEdgeError.message}. Current graph remains unchanged.\n\n${agentInstruction}`
                         }
                       ]
                     }
@@ -732,28 +767,26 @@ export default function ToolPanel({
                 
               case "group_nodes":
                 try {
-                  // Check if parent and all nodes exist
-                  const parent = findNodeById(elkGraph, args.parentId);
-                  if (!parent) {
-                    throw new Error(`Parent node '${args.parentId}' not found in the graph`);
-                  }
-                  
-                  for (const nodeId of args.nodeIds) {
-                    const node = findNodeById(elkGraph, nodeId);
-                    if (!node) {
-                      throw new Error(`Node '${nodeId}' not found in the graph`);
-                    }
-                  }
-                  
                   updatedGraph = groupNodes(args.nodeIds, args.parentId, args.groupId, elkGraph);
+                  console.log("Updated graph after group_nodes:", updatedGraph);
                   setElkGraph(updatedGraph);
-                } catch (groupNodesError) {
-                  // Enhanced error logging with full details
-                  console.error(`Error in group_nodes operation:`, groupNodesError);
-                  // console.error(`Error stack:`, groupNodesError.stack);
-                  console.error(`Attempted to group nodes '${args.nodeIds}' under parent '${args.parentId}' into group '${args.groupId}'`);
-                  // console.error(`Current graph:`, elkGraph);
                   
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                } catch (groupError) {
+                  console.error(`Error in group_nodes operation:`, groupError);
+                  console.error(`Attempted to group nodes '${args.nodeIds.join(", ")}' under '${args.parentId}' with group ID '${args.groupId}'`);
                   sendClientEvent({
                     type: "conversation.item.create",
                     item: {
@@ -762,7 +795,7 @@ export default function ToolPanel({
                       content: [
                         {
                           type: "input_text",
-                          text: `Error in group_nodes operation: ${groupNodesError.message}. Current graph remains unchanged. Check that parent and all nodes exist.`
+                          text: `Error in group_nodes operation: ${groupError.message}. Current graph remains unchanged.\n\n${agentInstruction}`
                         }
                       ]
                     }
@@ -773,21 +806,26 @@ export default function ToolPanel({
                 
               case "remove_group":
                 try {
-                  // Check if group exists
-                  const group = findNodeById(elkGraph, args.groupId);
-                  if (!group) {
-                    throw new Error(`Group '${args.groupId}' not found in the graph`);
-                  }
-                  
                   updatedGraph = removeGroup(args.groupId, elkGraph);
+                  console.log("Updated graph after remove_group:", updatedGraph);
                   setElkGraph(updatedGraph);
-                } catch (removeGroupError) {
-                  // Enhanced error logging with full details
-                  console.error(`Error in remove_group operation:`, removeGroupError);
-                  // console.error(`Error stack:`, removeGroupError.stack);
-                  console.error(`Attempted to remove group '${args.groupId}'`);
-                  // console.error(`Current graph:`, elkGraph);
                   
+                  sendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                } catch (removeGroupError) {
+                  console.error(`Error in remove_group operation:`, removeGroupError);
+                  console.error(`Attempted to remove group '${args.groupId}'`);
                   sendClientEvent({
                     type: "conversation.item.create",
                     item: {
@@ -796,7 +834,7 @@ export default function ToolPanel({
                       content: [
                         {
                           type: "input_text",
-                          text: `Error in remove_group operation: ${removeGroupError.message}. Current graph remains unchanged. Check that the group exists.`
+                          text: `Error in remove_group operation: ${removeGroupError.message}. Current graph remains unchanged.\n\n${agentInstruction}`
                         }
                       ]
                     }
@@ -931,7 +969,6 @@ export default function ToolPanel({
                           throw new Error(`Unknown operation: ${name}`);
                       }
                     } catch (operationError) {
-                      // Log the error but continue with other operations
                       console.error(`Error in operation ${i} (${name}):`, operationError);
                       results.push({ 
                         operation: i, 
@@ -963,9 +1000,9 @@ export default function ToolPanel({
                       content: [
                         {
                           type: "input_text",
-                          text: `Batch update completed with ${successCount} successes and ${errorCount} errors.
+                          text: `Function call ${output.name} succeeded with ${successCount} successes and ${errorCount} errors.
 ${errorCount > 0 ? `\nErrors:\n${errorMessages}` : ''}
-\nUpdated graph structure: \n\`\`\`json\n${JSON.stringify(updatedGraph, null, 2)}\n\`\`\``
+\nUpdated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
                         }
                       ]
                     }

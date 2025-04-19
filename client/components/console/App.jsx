@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import logo from "/assets/openai-logomark.svg";
-import EventLog from "./console/EventLog";
-import SessionControls from "./console/SessionControls";
-import ToolPanel from "./ui/ToolPanel";
-import ElkTestPage from "./test/ElkTestPage";
-import ErrorBoundary from "./console/ErrorBoundary";
-import InteractiveCanvas from "./ui/InteractiveCanvas";
+import EventLog from "./EventLog";
+import SessionControls from "./SessionControls";
+import ToolPanel from "../ui/ToolPanel";
+import ElkTestPage from "../test/ElkTestPage";
+import ErrorBoundary from "../../utils/ErrorBoundary";
 
 function MainContent({ events, isSessionActive, startSession, stopSession, sendClientEvent, sendTextMessage }) {
   return (
@@ -47,7 +46,6 @@ export default function App() {
   const [dataChannel, setDataChannel] = useState(null);
   const [isDataChannelReady, setIsDataChannelReady] = useState(false);
   const [currentPage, setCurrentPage] = useState('main');
-  const [showNewUI, setShowNewUI] = useState(false);
   const messageQueue = useRef([]);
   const peerConnection = useRef(null);
   const audioElement = useRef(null);
@@ -252,47 +250,26 @@ export default function App() {
   }, [dataChannel]);
 
   return (
-    <div className="flex flex-col h-screen">
-      <header className="h-16 bg-gray-100 flex items-center justify-between px-4">
-        <div className="flex items-center gap-2">
-          <img src={logo} alt="OpenAI Logo" className="w-8 h-8" />
-          <h1 className="text-lg font-medium">OpenAI Real-time Console</h1>
+    <>
+      <nav className="absolute top-0 left-0 right-0 h-16 flex items-center">
+        <div className="flex items-center gap-4 w-full m-4 pb-2 border-0 border-b border-solid border-gray-200">
+          <img style={{ width: "24px" }} src={logo} />
+          <h1>realtime console</h1>
+          <button 
+            onClick={() => setCurrentPage(currentPage === 'main' ? 'test' : 'main')}
+            className="ml-auto text-sm text-gray-600 hover:text-gray-900"
+          >
+            {currentPage === 'main' ? 'Test ELK' : 'Back to Main'}
+          </button>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center">
-            <span className="mr-2">UI Mode:</span>
-            <div className="flex items-center bg-gray-200 rounded-lg p-1">
-              <button 
-                onClick={() => setShowNewUI(false)}
-                className={`px-3 py-1 rounded-md ${!showNewUI ? 'bg-white shadow-sm' : 'text-gray-600'}`}
-              >
-                Classic
-              </button>
-              <button 
-                onClick={() => setShowNewUI(true)}
-                className={`px-3 py-1 rounded-md ${showNewUI ? 'bg-white shadow-sm' : 'text-gray-600'}`}
-              >
-                Modern
-              </button>
-            </div>
+      </nav>
+      <main className="absolute top-16 left-0 right-0 bottom-0">
+        {currentPage === 'test' ? (
+          <div className="p-4">
+            <ErrorBoundary>
+              <ElkTestPage />
+            </ErrorBoundary>
           </div>
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${isSessionActive ? "bg-green-500" : "bg-red-500"}`}></span>
-            <span className="text-sm">{isSessionActive ? "Connected" : "Disconnected"}</span>
-          </div>
-        </div>
-      </header>
-      <main className="flex-grow relative">
-        {showNewUI ? (
-          <ErrorBoundary>
-            <InteractiveCanvas 
-              isSessionActive={isSessionActive}
-              startSession={startSession}
-              stopSession={stopSession}
-              sendTextMessage={sendTextMessage}
-              events={events}
-            />
-          </ErrorBoundary>
         ) : (
           <MainContent
             events={events}
@@ -304,6 +281,6 @@ export default function App() {
           />
         )}
       </main>
-    </div>
+    </>
   );
 }

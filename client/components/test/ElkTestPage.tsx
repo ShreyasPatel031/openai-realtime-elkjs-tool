@@ -11,8 +11,8 @@ import {
   deleteEdge,
   groupNodes,
   removeGroup
-} from '../utils/graph_helper_functions';
-import type { ElkNode as HelperElkNode, ElkEdge } from '../utils/graph_helper_functions';
+} from '../../utils/graph_helper_functions';
+import type { ElkNode as HelperElkNode, ElkEdge } from '../../utils/graph_helper_functions';
 
 // Extend ElkNode with layout properties
 interface LayoutElkNode extends HelperElkNode {
@@ -85,7 +85,7 @@ const DEFAULT_GRAPH_DATA: LayoutElkNode = {
         { "id": "e2", "sources": [ "query" ], "targets": ["vector" ] },
         { "id": "e3", "sources": [ "pdf" ], "targets": ["vector" ] },
         { "id": "e4", "sources": [ "pdf" ], "targets": ["storage" ] },
-        { "id": "e5", "sources": [ "fetch" ], "targets": ["storage" ] }
+        { "id": "e5", "sources": [ "fetch" ], "targets":["storage" ] }
       ]
     },
     { 
@@ -105,7 +105,7 @@ const DEFAULT_GRAPH_DATA: LayoutElkNode = {
   ],
   "edges": [
     { "id": "e0", "sources": [ "webapp" ], "targets": [ "api" ] },
-    { "id": "e7", "sources": [ "chat" ], "targets": ["chat_api" ] },
+    { "id": "e7", "sources": [ "chat" ], "targets":["chat_api" ] },
     { 
       "id": "e8", 
       "sources": [ "embed" ], 

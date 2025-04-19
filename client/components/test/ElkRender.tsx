@@ -285,5 +285,4 @@ export default function ElkRender({ initialGraph, onLayoutComplete }: ElkRenderP
   }
 
   return graphLayout ? renderGraphSvg() : <p>Laying out graph...</p>;
-}
-
+} 

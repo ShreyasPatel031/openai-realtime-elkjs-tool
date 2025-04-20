@@ -1,12 +1,15 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import ReactFlow, { Background, Controls, MiniMap } from "reactflow"
+import ReactFlow, { Background, Controls, MiniMap, BackgroundVariant } from "reactflow"
 import "reactflow/dist/style.css"
 
 // Import types from separate type definition files
 interface ChatBoxProps {
-  onSubmit: (message: string) => void
+  onSubmit: (message: string) => void;
+  isSessionActive?: boolean;
+  onStartSession?: () => void;
+  onStopSession?: () => void;
 }
 
 interface Message {
@@ -139,36 +142,71 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   }
 
   return (
-    <div className="w-screen h-screen relative">
-      <ChatWindow messages={messages} />
-      <ChatBox onSubmit={handleChatSubmit} />
-      <ReactFlow nodes={[]} edges={[]} className="absolute inset-0 z-0">
-        <Background />
-        <Controls position="bottom-left" />
-        <MiniMap position="bottom-right" />
-      </ReactFlow>
-      
-      {/* Connection control panel */}
-      {!isSessionActive ? (
-        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-lg p-4 z-10">
-          <button 
-            onClick={startSession}
-            className="px-4 py-2 bg-green-500 text-white rounded-md"
-          >
-            Start Session
-          </button>
+    <div className="w-full h-full flex flex-col overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100">
+      <div className="flex-1 relative min-h-0 overflow-hidden">
+        <div className="absolute top-10 left-4 right-4 z-10 max-h-[calc(100% - 100px)] overflow-visible">
+          <ChatWindow messages={messages} />
         </div>
-      ) : (
-        <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-2 z-10">
+        <div className="absolute inset-0 h-full w-full">
+          <ReactFlow 
+            nodes={[]} 
+            edges={[]} 
+            className="w-full h-full"
+            defaultEdgeOptions={{
+              style: { stroke: '#64748b' },
+              animated: true,
+            }}
+          >
+            <Background 
+              color="#94a3b8" 
+              gap={16} 
+              size={1}
+              variant={BackgroundVariant.Dots}
+            />
+            <Controls 
+              position="bottom-left" 
+              showInteractive={true}
+              showZoom={true}
+              showFitView={true}
+              style={{ 
+                backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                borderRadius: '8px',
+                padding: '8px',
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+              }}
+            />
+            <MiniMap 
+              position="bottom-right"
+              nodeStrokeWidth={3}
+              nodeColor="#64748b"
+              maskColor="rgba(255, 255, 255, 0.1)"
+              style={{
+                backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                borderRadius: '8px',
+                padding: '8px',
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+              }}
+            />
+          </ReactFlow>
+        </div>
+      </div>
+      
+      {/* ChatBox at the bottom */}
+      <div className="flex-none min-h-0 bg-white border-t border-gray-200 shadow-lg">
+        <ChatBox 
+          onSubmit={handleChatSubmit} 
+          isSessionActive={isSessionActive}
+          onStartSession={startSession}
+          onStopSession={stopSession}
+        />
+      </div>
+      
+      {/* Session status indicator */}
+      {isSessionActive && (
+        <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-3 z-20 backdrop-blur-sm bg-opacity-80">
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-green-500"></span>
-            <span className="text-sm font-medium">Connected</span>
-            <button 
-              onClick={stopSession}
-              className="ml-4 px-3 py-1 bg-red-500 text-white text-sm rounded-md"
-            >
-              Disconnect
-            </button>
+            <span className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></span>
+            <span className="text-sm font-medium text-gray-700">Connected</span>
           </div>
         </div>
       )}

@@ -7,10 +7,18 @@ import { Send, Mic, X } from "lucide-react"
 import { cn } from "../../lib/utils"
 
 interface ChatBoxProps {
-  onSubmit: (message: string) => void
+  onSubmit: (message: string) => void;
+  isSessionActive?: boolean;
+  onStartSession?: () => void;
+  onStopSession?: () => void;
 }
 
-const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
+const ChatBox: React.FC<ChatBoxProps> = ({ 
+  onSubmit, 
+  isSessionActive = false, 
+  onStartSession, 
+  onStopSession 
+}) => {
   const [message, setMessage] = useState("")
   const [isExpanded, setIsExpanded] = useState(false)
   const [isTransitioning, setIsTransitioning] = useState(false)
@@ -53,8 +61,26 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
     }
   }
 
+  const handleMicClick = () => {
+    // Start session when mic is clicked if not active
+    if (!isSessionActive && onStartSession) {
+      onStartSession();
+    }
+    // Then expand the chat input
+    toggleExpand();
+  }
+
+  const handleCancelClick = () => {
+    // Stop session when cancel is clicked if active
+    if (isSessionActive && onStopSession) {
+      onStopSession();
+    }
+    // Then collapse the chat input
+    toggleExpand();
+  }
+
   return (
-    <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 pointer-events-auto">
+    <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-50 pointer-events-auto">
       <form
         onSubmit={handleSubmit}
         style={{
@@ -69,16 +95,16 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
           <>
             <Button
               type="button"
-              size="icon"
-              variant="ghost"
               style={{
                 transition: "opacity 300ms cubic-bezier(0, 0, 0.2, 1)",
+                background: "transparent",
               }}
               className={cn(
-                "h-14 w-14 rounded-full border-2 border-red-500 flex-shrink-0",
+                "h-14 w-14 rounded-full border-2 border-red-500 flex-shrink-0 flex items-center justify-center p-0",
                 showControls ? "opacity-100" : "opacity-0",
+                "hover:bg-gray-100"
               )}
-              onClick={toggleExpand}
+              onClick={handleCancelClick}
             >
               <X className="h-6 w-6 text-red-500 hover:text-red-300" />
             </Button>
@@ -97,13 +123,12 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
             />
             <Button
               type="submit"
-              size="icon"
-              variant="ghost"
               style={{
                 transition: "opacity 300ms cubic-bezier(0, 0, 0.2, 1)",
+                background: "#000",
               }}
               className={cn(
-                "h-14 w-14 rounded-full border-2 border-black bg-black text-white hover:bg-gray-800 flex-shrink-0",
+                "h-14 w-14 rounded-full border-2 border-black text-white hover:bg-gray-800 flex-shrink-0 flex items-center justify-center p-0",
                 showControls ? "opacity-100" : "opacity-0",
               )}
             >
@@ -112,18 +137,21 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
           </>
         ) : (
           <Button
-            onClick={toggleExpand}
+            onClick={handleMicClick}
             type="button"
-            size="icon"
             style={{
               transition: "all 300ms cubic-bezier(0, 0, 0.2, 1)",
+              background: isSessionActive ? "#22c55e" : "#ef4444",
             }}
             className={cn(
-              "h-14 w-14 rounded-full border-2 border-red-500 flex-grow",
-              showMic ? "bg-red-500 hover:bg-red-600 opacity-100" : "bg-white opacity-0",
+              "h-14 w-14 rounded-full border-2 flex-grow flex items-center justify-center p-0",
+              isSessionActive 
+                ? "border-green-500 hover:bg-green-600" 
+                : "border-red-500 hover:bg-red-600",
+              showMic ? "opacity-100" : "opacity-0",
             )}
           >
-            <Mic className="h-6 w-6" />
+            <Mic className="h-6 w-6 text-white" />
           </Button>
         )}
       </form>

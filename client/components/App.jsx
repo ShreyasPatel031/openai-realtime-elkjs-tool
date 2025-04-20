@@ -47,7 +47,7 @@ export default function App() {
   const [dataChannel, setDataChannel] = useState(null);
   const [isDataChannelReady, setIsDataChannelReady] = useState(false);
   const [currentPage, setCurrentPage] = useState('main');
-  const [showNewUI, setShowNewUI] = useState(false);
+  const [showNewUI, setShowNewUI] = useState(true);
   const messageQueue = useRef([]);
   const peerConnection = useRef(null);
   const audioElement = useRef(null);

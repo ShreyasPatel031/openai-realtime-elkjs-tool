@@ -114,7 +114,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages }) => {
   }
 
   return (
-    <div className="fixed left-8 top-8 z-50 pointer-events-auto">
+    <div className="pointer-events-auto">
       {/* Chat Header - Always visible */}
       <div
         className={cn(
@@ -139,7 +139,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages }) => {
 
       {/* Chat Content - Visible only when not minimized */}
       {!isMinimized && (
-        <Card className="w-96 h-[calc(100vh-8rem-4rem-40px)] rounded-t-none shadow-md flex flex-col">
+        <Card className="w-96 max-h-[calc(100vh-200px)] rounded-t-none shadow-md flex flex-col">
           <CardContent className="p-0 flex-grow overflow-hidden">
             <ScrollArea className="h-full px-6">
               <div className="flex flex-col gap-4 py-4">

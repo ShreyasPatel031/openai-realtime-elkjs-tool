@@ -52,6 +52,7 @@ interface InteractiveCanvasProps {
   startSession?: () => void
   stopSession?: () => void
   sendTextMessage?: (message: string) => void
+  sendClientEvent?: (message: any) => void
   events?: any[] // Add events from the server
 }
 
@@ -171,7 +172,7 @@ const GroupNode = ({ data, id, selected }: any) => {
     color: '#333',
     pointerEvents: 'all' as const,
     // Critical: Keep z-index lower than edges to prevent occlusion
-    zIndex: selected ? 200 : 50,
+    zIndex: 1, // Keep very low to ensure edges are always on top
   };
 
   // For invisible handles that still support connections
@@ -183,46 +184,55 @@ const GroupNode = ({ data, id, selected }: any) => {
       <Handle
         type="target"
         position={Position.Left}
-        id="left"
+        id="left-0"
         style={{ 
           background: '#555',
           opacity: handleOpacity,
-          zIndex: 2000
+          zIndex: 5000 // Make sure handles are above everything
         }}
       />
       
       <Handle
         type="source"
         position={Position.Right}
-        id="right"
+        id="right-0"
         style={{ 
           background: '#555',
           opacity: handleOpacity,
-          zIndex: 2000
+          zIndex: 5000
         }}
       />
       
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="top"
-        style={{ 
-          background: '#555',
-          opacity: handleOpacity,
-          zIndex: 2000
-        }}
-      />
+      {/* Add dynamic handles based on the data */}
+      {data.leftHandles && data.leftHandles.map((yPos: string, index: number) => (
+        <Handle
+          key={`left-${index}`}
+          type="target"
+          position={Position.Left}
+          id={`left-${index}`}
+          style={{ 
+            top: yPos, 
+            background: '#555',
+            opacity: handleOpacity,
+            zIndex: 5000
+          }}
+        />
+      ))}
       
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="bottom"
-        style={{ 
-          background: '#555',
-          opacity: handleOpacity,
-          zIndex: 2000
-        }}
-      />
+      {data.rightHandles && data.rightHandles.map((yPos: string, index: number) => (
+        <Handle
+          key={`right-${index}`}
+          type="source"
+          position={Position.Right}
+          id={`right-${index}`}
+          style={{ 
+            top: yPos, 
+            background: '#555',
+            opacity: handleOpacity,
+            zIndex: 5000
+          }}
+        />
+      ))}
       
       {/* Node label */}
       <div style={{ 
@@ -822,6 +832,22 @@ const processLayoutedGraph = (layoutedGraph: any) => {
                   (point: any) => point.edgeId === edge.id
                 );
                 
+                // Determine source/target node types to set appropriate handles
+                const sourceNode = reactFlowNodes.find(n => n.id === source);
+                const targetNode = reactFlowNodes.find(n => n.id === target);
+                
+                const isSourceGroupNode = sourceNode?.type === 'group';
+                const isTargetGroupNode = targetNode?.type === 'group';
+                
+                // Use appropriate handles based on node type
+                const sourceHandle = isSourceGroupNode 
+                  ? (sourceHandleIndex >= 0 ? `right-${sourceHandleIndex}` : 'right-0')
+                  : (sourceHandleIndex >= 0 ? `right-${sourceHandleIndex}` : 'right');
+                  
+                const targetHandle = isTargetGroupNode
+                  ? (targetHandleIndex >= 0 ? `left-${targetHandleIndex}` : 'left-0') 
+                  : (targetHandleIndex >= 0 ? `left-${targetHandleIndex}` : 'left');
+                
                 reactFlowEdges.push({
                   id: edgeId,
                   source: source,
@@ -829,8 +855,8 @@ const processLayoutedGraph = (layoutedGraph: any) => {
                   // Use step edge type for edges with 2 bendpoints
                   type: edge.sections?.[0]?.bendPoints?.length >= 2 ? 'step' : 'smoothstep',
                   zIndex: 1000,
-                  sourceHandle: sourceHandleIndex >= 0 ? `right-${sourceHandleIndex}` : 'right',
-                  targetHandle: targetHandleIndex >= 0 ? `left-${targetHandleIndex}` : 'left',
+                  sourceHandle: sourceHandle,
+                  targetHandle: targetHandle,
                   style: { 
                     strokeWidth: 2,
                     stroke: '#000',
@@ -890,6 +916,22 @@ const processLayoutedGraph = (layoutedGraph: any) => {
                 (point: any) => point.edgeId === edge.id
               );
               
+              // Determine source/target node types to set appropriate handles
+              const sourceNode = reactFlowNodes.find(n => n.id === source);
+              const targetNode = reactFlowNodes.find(n => n.id === target);
+              
+              const isSourceGroupNode = sourceNode?.type === 'group';
+              const isTargetGroupNode = targetNode?.type === 'group';
+              
+              // Use appropriate handles based on node type
+              const sourceHandle = isSourceGroupNode 
+                ? (sourceHandleIndex >= 0 ? `right-${sourceHandleIndex}` : 'right-0')
+                : (sourceHandleIndex >= 0 ? `right-${sourceHandleIndex}` : 'right');
+                
+              const targetHandle = isTargetGroupNode
+                ? (targetHandleIndex >= 0 ? `left-${targetHandleIndex}` : 'left-0') 
+                : (targetHandleIndex >= 0 ? `left-${targetHandleIndex}` : 'left');
+              
               reactFlowEdges.push({
                 id: edgeId,
                 source: source,
@@ -897,8 +939,8 @@ const processLayoutedGraph = (layoutedGraph: any) => {
                 // Use step edge type for edges with 2 bendpoints
                 type: edge.sections?.[0]?.bendPoints?.length >= 2 ? 'step' : 'smoothstep',
                 zIndex: 1000,
-                sourceHandle: sourceHandleIndex >= 0 ? `right-${sourceHandleIndex}` : 'right',
-                targetHandle: targetHandleIndex >= 0 ? `left-${targetHandleIndex}` : 'left',
+                sourceHandle: sourceHandle,
+                targetHandle: targetHandle,
                 style: { 
                   strokeWidth: 2,
                   stroke: '#000',
@@ -1255,11 +1297,41 @@ const removeGroup = (groupId: string, graph: any) => {
   return JSON.parse(JSON.stringify(graph)); // Return a deep copy
 };
 
+const elkGraphDescription = `
+The graph structure follows these rules:
+1. Each node has a unique ID and can have children
+2. Edges connect nodes using source and target IDs
+3. Nodes can be grouped using the "children" property
+4. The layout is handled by ELK.js with these settings:
+   - algorithm: "layered"
+   - direction: "RIGHT"
+   - spacing: { nodeNode: 50, nodeEdge: 50 }
+   - padding: { top: 20, left: 20, right: 20, bottom: 20 }
+`;
+
+const minimalSessionUpdate = {
+  type: "conversation.item.create",
+  item: {
+    type: "message",
+    role: "user",
+    content: [
+      {
+        type: "input_text",
+        text: "You have access to the following tools:\n- display_elk_graph\n- add_node\n- delete_node\n- move_node\n- add_edge\n- delete_edge\n- group_nodes\n- remove_group"
+      }
+    ]
+  }
+};
+
+// Define the instruction to include with all function responses
+const agentInstruction = "Under no circumstances should you say anything to the user, do not acknowledge their requests, do not explain your actions, do not acknowledge your function call, do not ask if they have further modificaitons, don't ask what's the next action they want you to perform, do not say you are ready for the next instruction, do not say next instruction please, don't say you are listening for the next instruction, just listen quitely for the next instruction.";
+
 const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   isSessionActive = false,
   startSession = () => {},
   stopSession = () => {},
   sendTextMessage = () => {},
+  sendClientEvent = () => {},
   events = [],
 }) => {
   const [messages, setMessages] = useState<Message[]>(initialMessages)
@@ -1315,6 +1387,14 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   
   // State to track edge visibility (keeping minimal state for the fix)
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  
+  // Add state to track message sending status
+  const [messageSendStatus, setMessageSendStatus] = useState({
+    sending: false,
+    retrying: false,
+    retryCount: 0,
+    lastError: null
+  });
   
   // Helper function to generate a more robust hash for graph comparison
   const getGraphHash = (graph: any) => {
@@ -1381,6 +1461,19 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     return result;
   };
 
+  // Add a queue for pending messages
+  const pendingMessagesRef = useRef<any[]>([]);
+
+  // Update the helper function to track retry status and check connection state
+  const safeSendClientEvent = useCallback((message: any) => {
+    // Enqueue the message instead of trying to send directly
+    console.log("Queueing message for sending");
+    pendingMessagesRef.current.push(message);
+  }, []);
+
+  // Add initialization flag
+  const initSentRef = useRef(false);
+
   // Connect with the WebRTC session
   useEffect(() => {
     if (!isSessionActive) {
@@ -1391,14 +1484,62 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           content: "Welcome to the interactive console. Start a session to begin chatting with the AI.", 
           sender: "assistant" 
         }
-      ])
+      ]);
+      
+      // Clear any pending messages when session is inactive
+      pendingMessagesRef.current = [];
+      // Reset the initialization flag when session becomes inactive
+      initSentRef.current = false;
+      console.log("Session inactive, cleared pending messages queue and reset init flag");
+    } else if (events && events.length > 0) {
+      // Look for the session.created event AND make sure we haven't sent init messages yet
+      if (!initSentRef.current && events.some(event => event.type === 'session.created')) {
+        console.log('Sending initial tool-definition messages');
+        
+        // Queue messages instead of trying to send them directly
+        pendingMessagesRef.current.push(minimalSessionUpdate);
+        
+        // Queue the full description message directly (no setTimeout)
+        pendingMessagesRef.current.push({
+          type: "conversation.item.create",
+          item: {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: `
+                Under no circumstances should you say anything to the user, do not acknowledge their requests, do not explain your actions, just perform the actions they tell you to do.
+
+                Here are the detailed instructions for creating and editing ELK.js graphs:\n\n${elkGraphDescription}\n\nYou can use the following tools to manipulate the graph:
+                - display_elk_graph: Show the current graph
+                - add_node: Add a new node to the graph
+                - delete_node: Remove a node from the graph
+                - move_node: Move a node to a different parent
+                - add_edge: Create a connection between nodes
+                - delete_edge: Remove a connection
+                - group_nodes: Group multiple nodes together
+                - remove_group: Ungroup nodes
+                `
+              }
+            ]
+          }
+        });
+        
+        // Queue the response.create message
+        pendingMessagesRef.current.push({ type: "response.create" });
+        
+        // Mark as initialized to prevent sending these messages again
+        initSentRef.current = true;
+      }
     }
-  }, [isSessionActive])
+  }, [isSessionActive, events]);
 
   // Process the graph manipulation messages
   useEffect(() => {
     if (!isSessionActive || !events || events.length === 0) return;
 
+    // Handle text messages from the assistant
     const latestServerEvent = events
       .filter(event => 
         event.type === 'response.delta' && 
@@ -1437,119 +1578,356 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           }
         ]);
       }
-
-      // Check for graph manipulation commands
-      try {
-        // Look for commands like "add node X to Y" in the message
-        const addNodeMatch = text.match(/add node\s+(\w+)\s+to\s+(\w+)/i);
-        if (addNodeMatch) {
-          const [_, nodeName, parentId] = addNodeMatch;
-          try {
-            setElkGraph(currentGraph => {
-              const updatedGraph = addNode(nodeName, parentId, currentGraph);
-              console.log(`Added node ${nodeName} to ${parentId}`);
-              return updatedGraph;
-            });
-          } catch (error) {
-            console.error("Error adding node:", error);
-          }
-        }
-
-        // Look for commands like "delete node X" in the message
-        const deleteNodeMatch = text.match(/delete node\s+(\w+)/i);
-        if (deleteNodeMatch) {
-          const [_, nodeId] = deleteNodeMatch;
-          try {
-            setElkGraph(currentGraph => {
-              const updatedGraph = deleteNode(nodeId, currentGraph);
-              console.log(`Deleted node ${nodeId}`);
-              return updatedGraph;
-            });
-          } catch (error) {
-            console.error("Error deleting node:", error);
-          }
-        }
-
-        // Look for commands like "move node X to Y" in the message
-        const moveNodeMatch = text.match(/move node\s+(\w+)\s+to\s+(\w+)/i);
-        if (moveNodeMatch) {
-          const [_, nodeId, newParentId] = moveNodeMatch;
-          try {
-            setElkGraph(currentGraph => {
-              const updatedGraph = moveNode(nodeId, newParentId, currentGraph);
-              console.log(`Moved node ${nodeId} to ${newParentId}`);
-              return updatedGraph;
-            });
-          } catch (error) {
-            console.error("Error moving node:", error);
-          }
-        }
-
-        // Look for commands like "add edge X from Y to Z" in the message
-        const addEdgeMatch = text.match(/add edge\s+(\w+)\s+from\s+(\w+)\s+to\s+(\w+)/i);
-        if (addEdgeMatch) {
-          const [_, edgeId, sourceId, targetId] = addEdgeMatch;
-          try {
-            setElkGraph(currentGraph => {
-              const updatedGraph = addEdge(edgeId, null, sourceId, targetId, currentGraph);
-              console.log(`Added edge ${edgeId} from ${sourceId} to ${targetId}`);
-              return updatedGraph;
-            });
-          } catch (error) {
-            console.error("Error adding edge:", error);
-          }
-        }
-
-        // Look for commands like "delete edge X" in the message
-        const deleteEdgeMatch = text.match(/delete edge\s+(\w+)/i);
-        if (deleteEdgeMatch) {
-          const [_, edgeId] = deleteEdgeMatch;
-          try {
-            setElkGraph(currentGraph => {
-              const updatedGraph = deleteEdge(edgeId, currentGraph);
-              console.log(`Deleted edge ${edgeId}`);
-              return updatedGraph;
-            });
-          } catch (error) {
-            console.error("Error deleting edge:", error);
-          }
-        }
-
-        // Look for commands like "group nodes X,Y,Z under P as G" in the message
-        const groupNodesMatch = text.match(/group nodes\s+([,\w]+)\s+under\s+(\w+)\s+as\s+(\w+)/i);
-        if (groupNodesMatch) {
-          const [_, nodeIdsStr, parentId, groupId] = groupNodesMatch;
-          const nodeIds = nodeIdsStr.split(',').map(id => id.trim());
-          try {
-            setElkGraph(currentGraph => {
-              const updatedGraph = groupNodes(nodeIds, parentId, groupId, currentGraph);
-              console.log(`Grouped nodes ${nodeIds.join(',')} under ${parentId} as ${groupId}`);
-              return updatedGraph;
-            });
-          } catch (error) {
-            console.error("Error grouping nodes:", error);
-          }
-        }
-
-        // Look for commands like "remove group X" in the message
-        const removeGroupMatch = text.match(/remove group\s+(\w+)/i);
-        if (removeGroupMatch) {
-          const [_, groupId] = removeGroupMatch;
-          try {
-            setElkGraph(currentGraph => {
-              const updatedGraph = removeGroup(groupId, currentGraph);
-              console.log(`Removed group ${groupId}`);
-              return updatedGraph;
-            });
-          } catch (error) {
-            console.error("Error removing group:", error);
-          }
-        }
-      } catch (error) {
-        console.error("Error processing graph commands:", error);
-      }
     }
-  }, [events, messages]); // Remove elkGraph dependency
+
+    // Handle function calls
+    const mostRecentEvent = events.find(event => 
+      event.type === "response.done" && event.response?.output
+    );
+
+    if (mostRecentEvent && mostRecentEvent.type === "response.done" && mostRecentEvent.response.output) {
+      mostRecentEvent.response.output.forEach((output) => {
+        if (output.type === "function_call") {
+          console.log("Agent output:", output);
+          
+          try {
+            const args = JSON.parse(output.arguments);
+            console.log("Function call:", output.name, args);
+            let updatedGraph: any = null;
+            
+            // Process each function based on its name
+            switch(output.name) {
+              case "display_elk_graph":
+                try {
+                  console.log("display_elk_graph called with args:", args);
+                  console.log("Current elkGraph:", elkGraph);
+                  
+                  updatedGraph = { ...elkGraph };
+                  setElkGraph(updatedGraph);
+                  
+                  console.log("Sending graph to agent:", JSON.stringify(updatedGraph).substring(0, 100) + "...");
+                  
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  
+                  setTimeout(() => {
+                    safeSendClientEvent({ type: "response.create" });
+                  }, 200);
+                } catch (displayError) {
+                  console.error(`Error in display_elk_graph operation:`, displayError);
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in display_elk_graph operation: ${displayError.message}.\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  safeSendClientEvent({ type: "response.create" });
+                }
+                break;
+                
+              case "add_node":
+                try {
+                  updatedGraph = addNode(args.nodename, args.parentId, elkGraph);
+                  console.log("Updated graph after add_node:", updatedGraph);
+                  setElkGraph(updatedGraph);
+                  
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  safeSendClientEvent({ type: "response.create" });
+                } catch (addError) {
+                  console.error(`Error in add_node operation:`, addError);
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in add_node operation: ${addError.message}. Current graph remains unchanged.\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  safeSendClientEvent({ type: "response.create" });
+                }
+                break;
+                
+              case "delete_node":
+                try {
+                  updatedGraph = deleteNode(args.nodeId, elkGraph);
+                  console.log("Updated graph after delete_node:", updatedGraph);
+                  setElkGraph(updatedGraph);
+                  
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  safeSendClientEvent({ type: "response.create" });
+                } catch (deleteError) {
+                  console.error(`Error in delete_node operation:`, deleteError);
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in delete_node operation: ${deleteError.message}. Current graph remains unchanged.\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  safeSendClientEvent({ type: "response.create" });
+                }
+                break;
+                
+              case "move_node":
+                try {
+                  updatedGraph = moveNode(args.nodeId, args.newParentId, elkGraph);
+                  console.log("Updated graph after move_node:", updatedGraph);
+                  setElkGraph(updatedGraph);
+                  
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  safeSendClientEvent({ type: "response.create" });
+                } catch (moveError) {
+                  console.error(`Error in move_node operation:`, moveError);
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in move_node operation: ${moveError.message}. Current graph remains unchanged.\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  safeSendClientEvent({ type: "response.create" });
+                }
+                break;
+                
+              case "add_edge":
+                try {
+                  updatedGraph = addEdge(args.edgeId, null, args.sourceId, args.targetId, elkGraph);
+                  console.log("Updated graph after add_edge:", updatedGraph);
+                  setElkGraph(updatedGraph);
+                  
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  safeSendClientEvent({ type: "response.create" });
+                } catch (addEdgeError) {
+                  console.error(`Error in add_edge operation:`, addEdgeError);
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in add_edge operation: ${addEdgeError.message}. Current graph remains unchanged.\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  safeSendClientEvent({ type: "response.create" });
+                }
+                break;
+                
+              case "delete_edge":
+                try {
+                  updatedGraph = deleteEdge(args.edgeId, elkGraph);
+                  console.log("Updated graph after delete_edge:", updatedGraph);
+                  setElkGraph(updatedGraph);
+                  
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  safeSendClientEvent({ type: "response.create" });
+                } catch (deleteEdgeError) {
+                  console.error(`Error in delete_edge operation:`, deleteEdgeError);
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in delete_edge operation: ${deleteEdgeError.message}. Current graph remains unchanged.\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  safeSendClientEvent({ type: "response.create" });
+                }
+                break;
+                
+              case "group_nodes":
+                try {
+                  updatedGraph = groupNodes(args.nodeIds, args.parentId, args.groupId, elkGraph);
+                  console.log("Updated graph after group_nodes:", updatedGraph);
+                  setElkGraph(updatedGraph);
+                  
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  safeSendClientEvent({ type: "response.create" });
+                } catch (groupError) {
+                  console.error(`Error in group_nodes operation:`, groupError);
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in group_nodes operation: ${groupError.message}. Current graph remains unchanged.\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  safeSendClientEvent({ type: "response.create" });
+                }
+                break;
+                
+              case "remove_group":
+                try {
+                  updatedGraph = removeGroup(args.groupId, elkGraph);
+                  console.log("Updated graph after remove_group:", updatedGraph);
+                  setElkGraph(updatedGraph);
+                  
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message",
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Function call ${output.name} succeeded. Updated graph structure: ${JSON.stringify(updatedGraph)}\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  safeSendClientEvent({ type: "response.create" });
+                } catch (removeGroupError) {
+                  console.error(`Error in remove_group operation:`, removeGroupError);
+                  safeSendClientEvent({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "message", 
+                      role: "user",
+                      content: [
+                        {
+                          type: "input_text",
+                          text: `Error in remove_group operation: ${removeGroupError.message}. Current graph remains unchanged.\n\n${agentInstruction}`
+                        }
+                      ]
+                    }
+                  });
+                  safeSendClientEvent({ type: "response.create" });
+                }
+                break;
+                
+              default:
+                console.error(`Unknown function call: ${output.name}`);
+                // Don't expose internal errors to the user
+                break;
+            }
+          } catch (error) {
+            console.error("Failed to process function call:", error);
+          }
+        }
+      });
+    }
+  }, [events, elkGraph, safeSendClientEvent]); // add dependencies
 
   // Process ELK graph layout with optimization to prevent unnecessary re-layouts
   useEffect(() => {
@@ -1718,6 +2096,20 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     const newEdgeId = `edge-${Math.random().toString(36).substr(2, 9)}`;
     
     try {
+      // Before adding the edge, determine if we're dealing with a group node
+      // In that case, ensure we're using the right handle ID format
+      const sourceNode = nodes.find(n => n.id === params.source);
+      const targetNode = nodes.find(n => n.id === params.target);
+      
+      // Apply special handling for group nodes
+      if (sourceNode?.type === 'group' && !params.sourceHandle) {
+        params.sourceHandle = 'right-0';
+      }
+      
+      if (targetNode?.type === 'group' && !params.targetHandle) {
+        params.targetHandle = 'left-0';
+      }
+      
       // Use functional update pattern to avoid dependency on current elkGraph state
       setElkGraph(currentGraph => {
         const updatedGraph = addEdge(
@@ -1735,7 +2127,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     } catch (error) {
       console.error("Error adding edge:", error);
     }
-  }, []); // No dependencies since we use functional updates
+  }, [nodes]); // Add nodes as dependency
 
   const handleChatSubmit = (message: string) => {
     // Add the user message to the UI immediately
@@ -1765,6 +2157,87 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     }
   }
 
+  // Add UI component to show the status
+  const ConnectionStatus = () => (
+    <div className={`absolute top-4 right-4 bg-white dark:bg-gray-900 rounded-lg shadow-lg p-3 z-20 backdrop-blur-sm border border-gray-200 dark:border-gray-800 pointer-events-auto ${messageSendStatus.retrying ? 'animate-pulse' : ''}`}>
+      <div className="flex items-center gap-2">
+        <span className={`w-3 h-3 rounded-full ${isSessionActive 
+          ? messageSendStatus.retrying 
+            ? 'bg-yellow-500 dark:bg-yellow-400' 
+            : 'bg-green-500 dark:bg-green-400'
+          : 'bg-red-500 dark:bg-red-400'} ${messageSendStatus.sending ? 'animate-pulse' : ''}`}></span>
+        <span className="text-sm font-medium text-black dark:text-white">
+          {!isSessionActive 
+            ? 'Disconnected' 
+            : messageSendStatus.retrying
+              ? `Retrying (${messageSendStatus.retryCount}/3)...`
+              : messageSendStatus.sending
+                ? 'Sending...'
+                : 'Connected'}
+        </span>
+      </div>
+      {messageSendStatus.lastError && messageSendStatus.retrying && (
+        <div className="text-xs text-red-600 dark:text-red-400 mt-1">
+          Connection issue, retrying...
+        </div>
+      )}
+    </div>
+  );
+
+  // Process pending messages when connection becomes ready
+  useEffect(() => {
+    // Don't process messages if session is not active
+    if (!isSessionActive) return;
+    
+    // Processor function that sends a single message and schedules the next one
+    const processNextMessage = () => {
+      if (pendingMessagesRef.current.length === 0) return;
+      
+      const message = pendingMessagesRef.current.shift();
+      
+      // Set sending status
+      setMessageSendStatus(prev => ({ ...prev, sending: true, retrying: false, retryCount: 0 }));
+      
+      try {
+        sendClientEvent(message);
+        console.log("Successfully sent message");
+        setMessageSendStatus(prev => ({ ...prev, sending: false, retrying: false }));
+        
+        // Schedule the next message with a delay to avoid flooding
+        if (pendingMessagesRef.current.length > 0) {
+          setTimeout(processNextMessage, 300);
+        }
+      } catch (error) {
+        console.error("Error sending message:", error);
+        setMessageSendStatus(prev => ({ 
+          ...prev, 
+          sending: false, 
+          retrying: false,
+          lastError: error 
+        }));
+        
+        // Put the message back at front of queue for later retry
+        if (message) {
+          pendingMessagesRef.current.unshift(message);
+        }
+      }
+    };
+    
+    // Start processing when we have messages to send
+    if (pendingMessagesRef.current.length > 0) {
+      processNextMessage();
+    }
+    
+    // Debounced queue processor with delay
+    const queueProcessorTimer = setInterval(() => {
+      if (pendingMessagesRef.current.length > 0 && !messageSendStatus.sending) {
+        processNextMessage();
+      }
+    }, 500);
+    
+    return () => clearInterval(queueProcessorTimer);
+  }, [isSessionActive, sendClientEvent, messageSendStatus.sending]);
+
   return (
     <div className="w-full h-full flex flex-col overflow-hidden bg-white dark:bg-black">
       <div className="flex-1 relative min-h-0 overflow-hidden">
@@ -1781,9 +2254,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             edgeTypes={edgeTypes}
             className="w-full h-full bg-gray-50 dark:bg-gray-950"
             defaultEdgeOptions={{
-              style: { stroke: '#000' },
-              animated: true,
-              zIndex: 1000,
+              style: { stroke: '#000', strokeWidth: 2 },
+              animated: false,
+              zIndex: 5000,
             }}
             fitView
             minZoom={0.2}
@@ -1804,6 +2277,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             edgesUpdatable={true}
             deleteKeyCode="Delete"
             connectOnClick={false}
+            elevateNodesOnSelect={false} // Don't elevate nodes to keep edges visible
           >
             <Background 
               color="#333" 
@@ -1842,7 +2316,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         {/* Chat overlay */}
         <div className="absolute top-10 left-4 z-10 max-w-md pointer-events-none">
           <div className="pointer-events-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg overflow-auto max-h-[calc(100vh - 200px)]">
-            <ChatWindow messages={messages} />
+            <ChatWindow messages={messages} isMinimized={true} />
           </div>
         </div>
       </div>
@@ -1857,15 +2331,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         />
       </div>
       
-      {/* Session status indicator */}
-      {isSessionActive && (
-        <div className="absolute top-4 right-4 bg-white dark:bg-gray-900 rounded-lg shadow-lg p-3 z-20 backdrop-blur-sm border border-gray-200 dark:border-gray-800 pointer-events-auto">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-black dark:bg-white animate-pulse"></span>
-            <span className="text-sm font-medium text-black dark:text-white">Connected</span>
-          </div>
-        </div>
-      )}
+      {/* Connection status indicator */}
+      <ConnectionStatus />
     </div>
   )
 }

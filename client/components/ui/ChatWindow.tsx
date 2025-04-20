@@ -22,6 +22,7 @@ interface Message {
 
 interface ChatWindowProps {
   messages: Message[]
+  isMinimized?: boolean
 }
 
 // Sample questions with options
@@ -74,10 +75,10 @@ const sampleMessages: Message[] = [
   },
 ]
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages }) => {
+const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinimized: propIsMinimized = false }) => {
   const [messages] = useState<Message[]>(sampleMessages)
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string | string[]>>({})
-  const [isMinimized, setIsMinimized] = useState(false)
+  const [isMinimized, setIsMinimized] = useState(propIsMinimized)
   const [showInfo, setShowInfo] = useState(false)
 
   const handleRadioChange = (questionId: string, value: string) => {

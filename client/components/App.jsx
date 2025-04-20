@@ -124,57 +124,100 @@ export default function App() {
 
   // Send a message to the model
   function sendClientEvent(message) {
-    if (!isDataChannelReady) {
-      console.log("Data channel not ready, queueing message");
+    if (!dataChannel || dataChannel.readyState !== "open") {
+      console.log("Data channel not ready (state: " + (dataChannel ? dataChannel.readyState : "null") + "), queueing message");
       console.log("Message size:", JSON.stringify(message).length);
-      messageQueue.current.push(message);
-      return;
+      
+      // Limit queue size to prevent memory issues
+      if (messageQueue.current.length < 100) {
+        messageQueue.current.push(message);
+      } else {
+        console.warn("Message queue full, dropping message");
+      }
+      
+      // If session is active but channel is closed, try to reprocess the queue after a short delay
+      // This can help with temporary disconnections
+      if (isSessionActive && dataChannel && dataChannel.readyState === "closed") {
+        setTimeout(() => {
+          if (isDataChannelReady) {
+            processMessageQueue();
+          }
+        }, 500);
+      }
+      
+      return false; // Return false to indicate message was not sent immediately
     }
 
-    if (dataChannel) {
+    // At this point we know the data channel is open
+    try {
       const timestamp = new Date().toLocaleTimeString();
       message.event_id = message.event_id || crypto.randomUUID();
 
-      try {
-        console.log("Sending message, size:", JSON.stringify(message).length);
-        console.log("Data channel state:", dataChannel.readyState);
-        dataChannel.send(JSON.stringify(message));
-        if (!message.timestamp) {
-          message.timestamp = timestamp;
-        }
-        setEvents((prev) => [message, ...prev]);
-      } catch (error) {
-        console.error("Failed to send message:", error);
-        console.log("Message size that failed:", JSON.stringify(message).length);
-        messageQueue.current.push(message);
+      console.log("Sending message, size:", JSON.stringify(message).length);
+      dataChannel.send(JSON.stringify(message));
+      
+      if (!message.timestamp) {
+        message.timestamp = timestamp;
       }
-    } else {
-      console.error("Failed to send message - no data channel available", message);
-      messageQueue.current.push(message);
+      setEvents((prev) => [message, ...prev]);
+      return true; // Return true to indicate message was sent successfully
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      console.log("Message size that failed:", JSON.stringify(message).length);
+      
+      // Only queue the message if it's not too large to send
+      const messageSize = JSON.stringify(message).length;
+      if (messageSize < 65536) { // WebRTC has a practical limit of ~64KB
+        messageQueue.current.push(message);
+      } else {
+        console.error("Message too large to queue:", messageSize);
+      }
+      
+      return false; // Return false to indicate message was not sent
     }
   }
 
   // Process queued messages
   function processMessageQueue() {
-    while (messageQueue.current.length > 0 && isDataChannelReady) {
+    if (!dataChannel || dataChannel.readyState !== "open") {
+      console.log("Data channel not ready for processing queue, state:", 
+                  dataChannel ? dataChannel.readyState : "null");
+      return false;
+    }
+    
+    let processedCount = 0;
+    const maxProcessPerBatch = 10; // Process at most 10 messages at once
+    
+    while (messageQueue.current.length > 0 && 
+           processedCount < maxProcessPerBatch && 
+           dataChannel.readyState === "open") {
+      
       const message = messageQueue.current.shift();
-      if (message) {
-        const timestamp = new Date().toLocaleTimeString();
-        message.event_id = message.event_id || crypto.randomUUID();
-        
-        try {
-          dataChannel.send(JSON.stringify(message));
-          if (!message.timestamp) {
-            message.timestamp = timestamp;
-          }
-          setEvents((prev) => [message, ...prev]);
-        } catch (error) {
-          console.error("Failed to send queued message:", error);
-          messageQueue.current.unshift(message); // Put it back at the front of the queue
-          break;
+      if (!message) continue;
+      
+      const timestamp = new Date().toLocaleTimeString();
+      message.event_id = message.event_id || crypto.randomUUID();
+      
+      try {
+        dataChannel.send(JSON.stringify(message));
+        if (!message.timestamp) {
+          message.timestamp = timestamp;
         }
+        setEvents((prev) => [message, ...prev]);
+        processedCount++;
+      } catch (error) {
+        console.error("Failed to send queued message:", error);
+        messageQueue.current.unshift(message); // Put it back at the front of the queue
+        break;
       }
     }
+    
+    // If there are more messages and the channel is still open, schedule the next batch
+    if (messageQueue.current.length > 0 && dataChannel.readyState === "open") {
+      setTimeout(processMessageQueue, 50);
+    }
+    
+    return processedCount > 0;
   }
 
   // Send a text message to the model
@@ -211,10 +254,42 @@ export default function App() {
     });
   }
 
-  // Attach event listeners to the data channel when a new one is created
+  // Add an effect to monitor data channel status
   useEffect(() => {
     if (dataChannel) {
-      console.log("Data channel created, state:", dataChannel.readyState);
+      // Set up an interval to check the data channel state
+      const intervalId = setInterval(() => {
+        if (dataChannel.readyState === "closed" && isSessionActive) {
+          console.log("Data channel closed but session marked as active - updating status");
+          setIsDataChannelReady(false);
+          
+          // If closed for too long, mark session as inactive
+          if (Date.now() - lastDataChannelActivityRef.current > 10000) {
+            console.log("Data channel closed for too long, marking session as inactive");
+            setIsSessionActive(false);
+          }
+        } 
+        else if (dataChannel.readyState === "open" && !isDataChannelReady) {
+          console.log("Data channel open but marked as not ready - updating status");
+          setIsDataChannelReady(true);
+          lastDataChannelActivityRef.current = Date.now();
+          
+          // Process any queued messages
+          processMessageQueue();
+        }
+      }, 1000);
+      
+      return () => clearInterval(intervalId);
+    }
+  }, [dataChannel, isSessionActive, isDataChannelReady]);
+
+  // Use a ref to track last data channel activity time
+  const lastDataChannelActivityRef = useRef(Date.now());
+
+  // Update state when the data channel changes
+  useEffect(() => {
+    if (dataChannel) {
+      setIsDataChannelReady(dataChannel.readyState === "open");
       
       dataChannel.addEventListener("message", (e) => {
         try {
@@ -223,6 +298,7 @@ export default function App() {
             event.timestamp = new Date().toLocaleTimeString();
           }
           setEvents((prev) => [event, ...prev]);
+          lastDataChannelActivityRef.current = Date.now();
         } catch (error) {
           console.error("Error parsing message data:", error);
           console.error("Raw data:", e.data);
@@ -239,6 +315,7 @@ export default function App() {
         console.log("Data channel opened");
         setIsSessionActive(true);
         setIsDataChannelReady(true);
+        lastDataChannelActivityRef.current = Date.now();
         setEvents([]);
         processMessageQueue();
       });
@@ -246,7 +323,8 @@ export default function App() {
       dataChannel.addEventListener("close", () => {
         console.log("Data channel closed");
         setIsDataChannelReady(false);
-        setIsSessionActive(false);
+        // Don't immediately set session inactive - allow for reconnection
+        // setIsSessionActive(false); 
       });
     }
   }, [dataChannel]);
@@ -290,6 +368,7 @@ export default function App() {
               startSession={startSession}
               stopSession={stopSession}
               sendTextMessage={sendTextMessage}
+              sendClientEvent={sendClientEvent}
               events={events}
             />
           </ErrorBoundary>

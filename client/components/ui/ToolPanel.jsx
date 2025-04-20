@@ -2,17 +2,9 @@ import { useEffect, useState, useRef } from "react";
 import ElkRender from "../test/ElkRender";
 import { createElkGraphFromFunctionCall } from "../test/elkGraphDescription";
 import ReactFlowGraph from "../test/ReactFlowGraph";
-import {
-  addNode,
-  deleteNode,
-  moveNode,
-  addEdge,
-  deleteEdge,
-  groupNodes,
-  removeGroup,
-  batchUpdate
-} from "../../utils/graph_helper_functions";
 import ELK from "elkjs/lib/elk.bundled.js";
+// Import the hook instead of direct helper functions
+import useGraphManager from "../../hooks/useGraphManager";
 
 // Define the elk graph description as a constant string since it's not exported from the module
 const elkGraphDescription = `
@@ -51,104 +43,6 @@ const findNodeById = (node, id) => {
     }
   }
   return null;
-};
-
-// Create an initial ELK graph layout based on the description
-const getInitialElkGraph = () => {
-  // Directly return the simple graph
-  return {
-    "id": "root",
-    "children": [
-      { 
-        "id": "ui",
-        "labels": [{ "text": "UI" }],
-        "children": [
-          { 
-            "id": "webapp",        
-            "labels": [{ "text": "Web App" }]
-          }
-        ]
-      },
-      { 
-        "id": "aws",
-        "labels": [{ "text": "AWS" }],
-        "children": [
-          { 
-            "id": "api",  
-            "labels": [{ "text": "API" }]
-          },
-          { 
-            "id": "lambda",
-            "labels": [{ "text": "Lambda" }],
-            "children": [
-              { 
-                "id": "query", 
-                "labels": [{ "text": "Query" }]
-              },
-              { 
-                "id": "pdf", 
-                "labels": [{ "text": "PDF" }]
-              },
-              { 
-                "id": "fetch", 
-                "labels": [{ "text": "Fetch" }]
-              },
-              { 
-                "id": "chat", 
-                "labels": [{ "text": "Chat" }]
-              }
-            ],
-            "edges": [
-              { "id": "e6", "sources": [ "chat" ], "targets": [ "fetch" ] }
-            ]
-          },
-          { 
-            "id": "vector", 
-            "labels": [{ "text": "Vector" }]
-          },
-          { 
-            "id": "storage", 
-            "labels": [{ "text": "Storage" }]
-          }
-        ],
-        "edges": [
-          { "id": "e1", "sources": [ "api" ], "targets": ["lambda" ] },
-          { "id": "e2", "sources": [ "query" ], "targets": ["vector" ] },
-          { "id": "e3", "sources": [ "pdf" ], "targets": ["vector" ] },
-          { "id": "e4", "sources": [ "pdf" ], "targets": ["storage" ] },
-          { "id": "e5", "sources": [ "fetch" ], "targets": ["storage" ] }
-        ]
-      },
-      { 
-        "id": "openai", 
-        "labels": [{ "text": "OpenAI" }],
-        "children": [
-          { 
-            "id": "embed", 
-            "labels": [{ "text": "Embed" }]
-          },
-          { 
-            "id": "chat_api", 
-            "labels": [{ "text": "Chat API" }]
-          }
-        ]
-      }
-    ],
-    "edges": [
-      { "id": "e0", "sources": [ "webapp" ], "targets": [ "api" ] },
-      { "id": "e7", "sources": [ "chat" ], "targets": ["chat_api" ] },
-      { 
-        "id": "e8", 
-        "sources": [ "embed" ], 
-        "targets": [ "query" ],
-      },
-      { 
-        "id": "e9", 
-        "sources": [ "embed" ], 
-        "targets": [ "pdf" ],
-      }
-    ]
-  };
 };
 
 const minimalSessionUpdate = {
@@ -357,9 +251,24 @@ export default function ToolPanel({
   sendClientEvent,
   events,
 }) {
+  // Use the graph manager hook
+  const {
+    elkGraph,
+    setElkGraph,
+    layoutedElk,
+    addNode,
+    deleteNode,
+    moveNode,
+    addEdge,
+    deleteEdge, 
+    groupNodes,
+    removeGroup,
+    batchUpdate,
+    resetGraph
+  } = useGraphManager();
+
   const [functionAdded, setFunctionAdded] = useState(false);
   const [graphTitle, setGraphTitle] = useState("ELK Graph Visualization");
-  const [elkGraph, setElkGraph] = useState(getInitialElkGraph());
   const [activeTab, setActiveTab] = useState('elk');
   const [graphData, setGraphData] = useState(null);
   const [layoutedElkGraph, setLayoutedElkGraph] = useState(null);
@@ -568,7 +477,7 @@ export default function ToolPanel({
                 
               case "add_node":
                 try {
-                  updatedGraph = addNode(args.nodename, args.parentId, elkGraph);
+                  updatedGraph = addNode(args.nodename, args.parentId);
                   console.log("Updated graph after add_node:", updatedGraph);
                   setElkGraph(updatedGraph);
                   
@@ -607,7 +516,7 @@ export default function ToolPanel({
                 
               case "delete_node":
                 try {
-                  updatedGraph = deleteNode(args.nodeId, elkGraph);
+                  updatedGraph = deleteNode(args.nodeId);
                   console.log("Updated graph after delete_node:", updatedGraph);
                   setElkGraph(updatedGraph);
                   
@@ -650,7 +559,7 @@ export default function ToolPanel({
                   if (!node) {
                     throw new Error(`Node '${args.nodeId}' not found in the graph`);
                   }
-                  updatedGraph = moveNode(args.nodeId, args.newParentId, elkGraph);
+                  updatedGraph = moveNode(args.nodeId, args.newParentId);
                   console.log("Updated graph after move_node:", updatedGraph);
                   setElkGraph(updatedGraph);
                   
@@ -689,7 +598,7 @@ export default function ToolPanel({
                 
               case "add_edge":
                 try {
-                  updatedGraph = addEdge(args.edgeId, null, args.sourceId, args.targetId, elkGraph);
+                  updatedGraph = addEdge(args.edgeId, null, args.sourceId, args.targetId);
                   console.log("Updated graph after add_edge:", updatedGraph);
                   setElkGraph(updatedGraph);
                   
@@ -728,7 +637,7 @@ export default function ToolPanel({
                 
               case "delete_edge":
                 try {
-                  updatedGraph = deleteEdge(args.edgeId, elkGraph);
+                  updatedGraph = deleteEdge(args.edgeId);
                   console.log("Updated graph after delete_edge:", updatedGraph);
                   setElkGraph(updatedGraph);
                   
@@ -767,7 +676,7 @@ export default function ToolPanel({
                 
               case "group_nodes":
                 try {
-                  updatedGraph = groupNodes(args.nodeIds, args.parentId, args.groupId, elkGraph);
+                  updatedGraph = groupNodes(args.nodeIds, args.parentId, args.groupId);
                   console.log("Updated graph after group_nodes:", updatedGraph);
                   setElkGraph(updatedGraph);
                   
@@ -806,7 +715,7 @@ export default function ToolPanel({
                 
               case "remove_group":
                 try {
-                  updatedGraph = removeGroup(args.groupId, elkGraph);
+                  updatedGraph = removeGroup(args.groupId);
                   console.log("Updated graph after remove_group:", updatedGraph);
                   setElkGraph(updatedGraph);
                   
@@ -882,7 +791,7 @@ export default function ToolPanel({
                           if (!findNodeById(updatedGraph, opArgs.parentId)) {
                             throw new Error(`Parent node '${opArgs.parentId}' not found for add_node operation`);
                           }
-                          updatedGraph = addNode(opArgs.nodename, opArgs.parentId, updatedGraph);
+                          updatedGraph = addNode(opArgs.nodename, opArgs.parentId);
                           results.push({ operation: i, name, status: "success" });
                           break;
                           
@@ -890,7 +799,7 @@ export default function ToolPanel({
                           if (!findNodeById(updatedGraph, opArgs.nodeId)) {
                             throw new Error(`Node '${opArgs.nodeId}' not found for delete_node operation`);
                           }
-                          updatedGraph = deleteNode(opArgs.nodeId, updatedGraph);
+                          updatedGraph = deleteNode(opArgs.nodeId);
                           results.push({ operation: i, name, status: "success" });
                           break;
                           
@@ -903,7 +812,7 @@ export default function ToolPanel({
                           if (!newParent) {
                             throw new Error(`New parent node '${opArgs.newParentId}' not found for move_node operation`);
                           }
-                          updatedGraph = moveNode(opArgs.nodeId, opArgs.newParentId, updatedGraph);
+                          updatedGraph = moveNode(opArgs.nodeId, opArgs.newParentId);
                           results.push({ operation: i, name, status: "success" });
                           break;
                           
@@ -914,7 +823,7 @@ export default function ToolPanel({
                           if (!findNodeById(updatedGraph, opArgs.targetId)) {
                             throw new Error(`Target node '${opArgs.targetId}' not found for add_edge operation`);
                           }
-                          updatedGraph = addEdge(opArgs.edgeId, null, opArgs.sourceId, opArgs.targetId, updatedGraph);
+                          updatedGraph = addEdge(opArgs.edgeId, null, opArgs.sourceId, opArgs.targetId);
                           results.push({ operation: i, name, status: "success" });
                           break;
                           
@@ -940,7 +849,7 @@ export default function ToolPanel({
                           if (!edgeExists) {
                             throw new Error(`Edge '${opArgs.edgeId}' not found for delete_edge operation`);
                           }
-                          updatedGraph = deleteEdge(opArgs.edgeId, updatedGraph);
+                          updatedGraph = deleteEdge(opArgs.edgeId);
                           results.push({ operation: i, name, status: "success" });
                           break;
                           
@@ -953,7 +862,7 @@ export default function ToolPanel({
                               throw new Error(`Node '${nodeId}' not found for group_nodes operation`);
                             }
                           }
-                          updatedGraph = groupNodes(opArgs.nodeIds, opArgs.parentId, opArgs.groupId, updatedGraph);
+                          updatedGraph = groupNodes(opArgs.nodeIds, opArgs.parentId, opArgs.groupId);
                           results.push({ operation: i, name, status: "success" });
                           break;
                           
@@ -961,7 +870,7 @@ export default function ToolPanel({
                           if (!findNodeById(updatedGraph, opArgs.groupId)) {
                             throw new Error(`Group '${opArgs.groupId}' not found for remove_group operation`);
                           }
-                          updatedGraph = removeGroup(opArgs.groupId, updatedGraph);
+                          updatedGraph = removeGroup(opArgs.groupId);
                           results.push({ operation: i, name, status: "success" });
                           break;
                           
@@ -1094,10 +1003,10 @@ ${errorCount > 0 ? `\nErrors:\n${errorMessages}` : ''}
   useEffect(() => {
     if (!isSessionActive) {
       setFunctionAdded(false);
-      setElkGraph(getInitialElkGraph());
+      resetGraph();
       setGraphData(null);
     }
-  }, [isSessionActive]);
+  }, [isSessionActive, resetGraph]);
 
   return (
     <section className="h-full w-full flex flex-col gap-4">

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import ReactFlow, { 
   Background, 
   Controls, 
@@ -13,7 +13,14 @@ import ReactFlow, {
   BaseEdge,
   Node,
   Edge,
-  MarkerType
+  MarkerType,
+  NodeProps,
+  useReactFlow,
+  NodeMouseHandler,
+  applyNodeChanges,
+  applyEdgeChanges,
+  NodeChange,
+  EdgeChange
 } from "reactflow"
 import "reactflow/dist/style.css"
 import ELK from "elkjs/lib/elk.bundled.js"
@@ -48,10 +55,7 @@ interface InteractiveCanvasProps {
   events?: any[] // Add events from the server
 }
 
-// Use require for imports to bypass TypeScript path checking
-// @ts-ignore
 import Chatbox from "./Chatbox"
-// @ts-ignore
 import ChatWindow from "./ChatWindow"
 
 const ChatBox = Chatbox as React.ComponentType<ChatBoxProps>
@@ -66,11 +70,13 @@ interface CustomNode extends Node {
   parentId?: string;
 }
 
-// Custom node component with handles
-const CustomNode = ({ data, id }: any) => {
+// Custom node with connection handles
+const CustomNode = ({ data, id, selected }: any) => {
+  const { leftHandles = [], rightHandles = [] } = data;
+  
   const nodeStyle = {
-    background: data.isParent ? 'rgba(20, 20, 20, 0.6)' : '#ffffff',
-    border: data.isParent ? '1px dashed #555' : '1px solid #000',
+    background: selected ? '#f8f9fa' : 'white',
+    border: selected ? '2px solid #6c757d' : '1px solid #ccc',
     borderRadius: '4px',
     padding: '10px',
     width: data.width || 80,
@@ -79,14 +85,37 @@ const CustomNode = ({ data, id }: any) => {
     justifyContent: 'flex-start',
     alignItems: 'flex-start',
     fontSize: '12px',
-    boxShadow: data.isParent ? 'none' : '0 1px 4px rgba(0, 0, 0, 0.2)',
-    position: 'relative' as const // Type assertion for position
+    boxShadow: selected ? '0 0 5px rgba(0, 0, 0, 0.3)' : '0 1px 4px rgba(0, 0, 0, 0.1)',
+    position: 'relative' as const,
+    zIndex: selected ? 100 : 50, // Keep regular nodes above groups but below edges
+    pointerEvents: 'all' as const
   };
 
   return (
     <div style={nodeStyle}>
-      {/* Input handles on left side */}
-      {data.leftHandles && data.leftHandles.map((yPos: any, index: number) => (
+      {/* Standard handles */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="left"
+        style={{ 
+          background: '#555',
+          opacity: 0.8
+        }}
+      />
+      
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="right"
+        style={{ 
+          background: '#555',
+          opacity: 0.8
+        }}
+      />
+      
+      {/* Custom handle positions if needed */}
+      {leftHandles.map((yPos: string, index: number) => (
         <Handle
           key={`left-${index}`}
           type="target"
@@ -94,15 +123,13 @@ const CustomNode = ({ data, id }: any) => {
           id={`left-${index}`}
           style={{ 
             top: yPos, 
-            background: '#000',
-            width: 6,
-            height: 6
+            background: '#555',
+            opacity: 0.8
           }}
         />
       ))}
       
-      {/* Output handles on right side */}
-      {data.rightHandles && data.rightHandles.map((yPos: any, index: number) => (
+      {rightHandles.map((yPos: string, index: number) => (
         <Handle
           key={`right-${index}`}
           type="source"
@@ -110,54 +137,94 @@ const CustomNode = ({ data, id }: any) => {
           id={`right-${index}`}
           style={{ 
             top: yPos, 
-            background: '#000',
-            width: 6,
-            height: 6
+            background: '#555',
+            opacity: 0.8
           }}
         />
       ))}
       
-      {/* Default handles if no custom handles exist */}
-      {(!data.leftHandles || data.leftHandles.length === 0) && (
-        <Handle
-          type="target"
-          position={Position.Left}
-          id="left"
-          style={{ background: '#000' }}
-        />
-      )}
-      {(!data.rightHandles || data.rightHandles.length === 0) && (
-        <Handle
-          type="source"
-          position={Position.Right}
-          id="right"
-          style={{ background: '#000' }}
-        />
-      )}
-      
-      <div style={{ textAlign: 'left', padding: '2px', color: data.isParent ? '#fff' : '#000' }}>{data.label}</div>
+      {/* Node label */}
+      <div style={{ 
+        textAlign: 'left', 
+        padding: '2px', 
+        color: '#333'
+      }}>
+        {data.label}
+      </div>
     </div>
   );
 };
 
-// Custom group node component
-const GroupNode = ({ data }: any) => {
+// Group node component with special handling to avoid hiding edges
+const GroupNode = ({ data, id, selected }: any) => {
+  // IMPORTANT: Keep z-index lower than edges (which are at 3000)
+  // This ensures that even when a group node is selected, edges remain visible
   const groupStyle = {
-    background: 'rgba(240, 240, 240, 0.8)',
-    border: '1px dashed #999',
-    borderRadius: '4px',
+    background: 'rgba(240, 240, 240, 0.6)',
+    border: selected ? '2px solid #6c757d' : '1px solid #ccc',
+    borderRadius: '8px',
     padding: '10px',
     width: data.width || 200,
     height: data.height || 200,
-    display: 'flex',
-    justifyContent: 'flex-start',
-    alignItems: 'flex-start',
     fontSize: '12px',
-    position: 'relative' as const // Type assertion for position
+    position: 'relative' as const,
+    color: '#333',
+    pointerEvents: 'all' as const,
+    // Critical: Keep z-index lower than edges to prevent occlusion
+    zIndex: selected ? 200 : 50,
   };
+
+  // For invisible handles that still support connections
+  const handleOpacity = 0.01;
 
   return (
     <div style={groupStyle}>
+      {/* Add standard connection handles (invisible but functional) */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="left"
+        style={{ 
+          background: '#555',
+          opacity: handleOpacity,
+          zIndex: 2000
+        }}
+      />
+      
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="right"
+        style={{ 
+          background: '#555',
+          opacity: handleOpacity,
+          zIndex: 2000
+        }}
+      />
+      
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="top"
+        style={{ 
+          background: '#555',
+          opacity: handleOpacity,
+          zIndex: 2000
+        }}
+      />
+      
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="bottom"
+        style={{ 
+          background: '#555',
+          opacity: handleOpacity,
+          zIndex: 2000
+        }}
+      />
+      
+      {/* Node label */}
       <div style={{ 
         position: 'absolute',
         top: '5px',
@@ -176,38 +243,55 @@ const GroupNode = ({ data }: any) => {
 function StepEdge({ id, sourceX, sourceY, targetX, targetY, data, style = {}, markerEnd }: any) {
   let edgePath = '';
   
+  // Check if we have bend points
   if (data?.bendPoints && data.bendPoints.length > 0) {
     const bendPoints = data.bendPoints;
     
     if (bendPoints.length === 2) {
+      // For 2 bend points, use the first bend point's x as the fixed x coordinate
       const fixedX = bendPoints[0].x;
       edgePath = `M ${sourceX} ${sourceY} L ${fixedX} ${sourceY} L ${fixedX} ${targetY} L ${targetX} ${targetY}`;
     } 
     else if (bendPoints.length > 2) {
+      // For more than 2 bend points, keep intermediate points fixed
+      // and only allow first and last segments to move
+      
+      // Add source point as the starting point and target as the ending point
       const points = [{ x: sourceX, y: sourceY }, ...bendPoints, { x: targetX, y: targetY }];
-      let pathCommands = [`M ${sourceX} ${sourceY}`];
+      
+      // Build path segments
+      let pathCommands = [`M ${sourceX} ${sourceY}`]; // Start at source
       
       for (let i = 1; i < points.length; i++) {
+        const prev = points[i-1];
         const curr = points[i];
         
         if (i === 1) {
+          // First segment - horizontal from source to first bend point
           pathCommands.push(`L ${curr.x} ${sourceY}`);
         } else if (i === points.length - 1) {
+          // Last segment - horizontal to target
+          // Use the penultimate point's x for the vertical segment
           const penultimate = points[points.length - 2];
           pathCommands.push(`L ${penultimate.x} ${targetY}`);
           pathCommands.push(`L ${targetX} ${targetY}`);
-        } else if (i !== points.length - 2) {
+        } else if (i !== points.length - 2) { // Skip the penultimate point
+          // Intermediate segments - keep fixed
           pathCommands.push(`L ${curr.x} ${curr.y}`);
         }
       }
+      
+      // Join all path commands
       edgePath = pathCommands.join(' ');
     }
     else {
+      // For any unexpected number of bend points, fall back to a simple step edge
       const midX = sourceX + (targetX - sourceX) / 2;
       edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
     }
   } 
   else {
+    // No bend points, use default step edge
     const midX = sourceX + (targetX - sourceX) / 2;
     edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
   }
@@ -216,7 +300,11 @@ function StepEdge({ id, sourceX, sourceY, targetX, targetY, data, style = {}, ma
     <BaseEdge
       id={id}
       path={edgePath}
-      style={style || { strokeWidth: 2 }}
+      style={{
+        ...style,
+        stroke: '#999',
+        strokeWidth: 1.5
+      }}
       markerEnd={markerEnd}
     />
   );
@@ -678,7 +766,10 @@ const processLayoutedGraph = (layoutedGraph: any) => {
       id: node.id,
       position: { x: absX, y: absY },
       type: isParent ? 'group' : 'custom',
-      zIndex: isParent ? 0 : 100,
+      zIndex: isParent ? 5 : 50,
+      selectable: true,
+      selected: false,
+      draggable: true,
       data: { 
         label: node.labels && node.labels[0] ? node.labels[0].text : node.id,
         width: node.width || 80,
@@ -696,8 +787,11 @@ const processLayoutedGraph = (layoutedGraph: any) => {
         display: 'flex',
         justifyContent: 'flex-start',
         alignItems: 'flex-start',
-        padding: '10px'
-      } : undefined
+        padding: '10px',
+        pointerEvents: 'all'
+      } : {
+        pointerEvents: 'all'
+      }
     };
 
     // If this is a child node, add parentId
@@ -734,10 +828,14 @@ const processLayoutedGraph = (layoutedGraph: any) => {
                   target: target,
                   // Use step edge type for edges with 2 bendpoints
                   type: edge.sections?.[0]?.bendPoints?.length >= 2 ? 'step' : 'smoothstep',
-                  zIndex: 50,
+                  zIndex: 1000,
                   sourceHandle: sourceHandleIndex >= 0 ? `right-${sourceHandleIndex}` : 'right',
                   targetHandle: targetHandleIndex >= 0 ? `left-${targetHandleIndex}` : 'left',
-                  style: { strokeWidth: 2 },
+                  style: { 
+                    strokeWidth: 2,
+                    stroke: '#000',
+                    opacity: 1,
+                  },
                   markerEnd: {
                     type: MarkerType.ArrowClosed,
                     width: 20,
@@ -750,7 +848,10 @@ const processLayoutedGraph = (layoutedGraph: any) => {
                       x: point.x,
                       y: point.y
                     })) || []
-                  }
+                  },
+                  selected: false,
+                  hidden: false,
+                  focusable: true,
                 });
               }
             });
@@ -795,10 +896,14 @@ const processLayoutedGraph = (layoutedGraph: any) => {
                 target: target,
                 // Use step edge type for edges with 2 bendpoints
                 type: edge.sections?.[0]?.bendPoints?.length >= 2 ? 'step' : 'smoothstep',
-                zIndex: 50,
+                zIndex: 1000,
                 sourceHandle: sourceHandleIndex >= 0 ? `right-${sourceHandleIndex}` : 'right',
                 targetHandle: targetHandleIndex >= 0 ? `left-${targetHandleIndex}` : 'left',
-                style: { strokeWidth: 2 },
+                style: { 
+                  strokeWidth: 2,
+                  stroke: '#000',
+                  opacity: 1,
+                },
                 markerEnd: {
                   type: MarkerType.ArrowClosed,
                   width: 20,
@@ -811,7 +916,10 @@ const processLayoutedGraph = (layoutedGraph: any) => {
                     x: point.x,
                     y: point.y
                   })) || []
-                }
+                },
+                selected: false,
+                hidden: false,
+                focusable: true,
               });
             }
           });
@@ -1157,9 +1265,121 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [elkGraph, setElkGraph] = useState(getInitialElkGraph());
   const [layoutedElkGraph, setLayoutedElkGraph] = useState<any>(null);
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const elk = new ELK();
+  const [nodes, setNodes] = useState<Node[]>([]);
+  const [edges, setEdges] = useState<Edge[]>([]);
+  const onNodesChange = useCallback((changes: NodeChange[]) => {
+    setNodes((nds) => applyNodeChanges(changes, nds));
+    
+    // Ensure edges remain visible after any node changes (selection, position, etc.)
+    setTimeout(() => {
+      setEdges(currentEdges => 
+        currentEdges.map(edge => ({
+          ...edge,
+          hidden: false,
+          style: {
+            ...edge.style,
+            opacity: 1,
+            zIndex: 3000,
+          },
+          zIndex: 3000
+        }))
+      );
+    }, 0);
+  }, []);
+  
+  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
+    setEdges(eds => {
+      // Apply the changes
+      const updatedEdges = applyEdgeChanges(changes, eds);
+      
+      // Then ensure edges are always visible
+      return updatedEdges.map(edge => ({
+        ...edge,
+        hidden: false,
+        style: {
+          ...edge.style,
+          opacity: 1,
+          zIndex: 3000,
+        },
+        zIndex: 3000
+      }));
+    });
+  }, []);
+  // Use useMemo to persist the ELK instance across renders
+  const elk = useMemo(() => new ELK(), []);
+  // Add a layoutVersion state to track when layouts actually change
+  const [layoutVersion, setLayoutVersion] = useState(0);
+  // Use refs to compare previous graph and layout results
+  const prevElkGraphRef = useRef<string>('');
+  const prevLayoutResultRef = useRef<any>(null);
+  
+  // State to track edge visibility (keeping minimal state for the fix)
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+  
+  // Helper function to generate a more robust hash for graph comparison
+  const getGraphHash = (graph: any) => {
+    try {
+      // Extract the structure that matters for layout
+      const simplifiedGraph = {
+        id: graph.id,
+        nodeCount: countNodes(graph),
+        edgeCount: countEdges(graph),
+        structure: extractStructure(graph)
+      };
+      return JSON.stringify(simplifiedGraph);
+    } catch (e) {
+      console.error("Error generating graph hash:", e);
+      return Math.random().toString(); // Force update if hash generation fails
+    }
+  };
+  
+  // Helper to count total nodes in the graph
+  const countNodes = (node: any): number => {
+    if (!node) return 0;
+    let count = 1; // Count this node
+    if (Array.isArray(node.children)) {
+      node.children.forEach((child: any) => {
+        count += countNodes(child);
+      });
+    }
+    return count;
+  };
+  
+  // Helper to count total edges in the graph
+  const countEdges = (node: any): number => {
+    if (!node) return 0;
+    let count = node.edges ? node.edges.length : 0;
+    if (Array.isArray(node.children)) {
+      node.children.forEach((child: any) => {
+        count += countEdges(child);
+      });
+    }
+    return count;
+  };
+  
+  // Extract essential structure for comparison
+  const extractStructure = (node: any): any => {
+    if (!node) return null;
+    const result: any = {
+      id: node.id,
+    };
+    
+    if (node.edges && node.edges.length > 0) {
+      result.edges = node.edges.map((edge: any) => ({
+        id: edge.id,
+        sources: edge.sources,
+        targets: edge.targets
+      }));
+    }
+    
+    if (node.children && node.children.length > 0) {
+      result.children = node.children.map((child: any) => 
+        extractStructure(child)
+      );
+    }
+    
+    return result;
+  };
 
   // Connect with the WebRTC session
   useEffect(() => {
@@ -1225,9 +1445,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         if (addNodeMatch) {
           const [_, nodeName, parentId] = addNodeMatch;
           try {
-            const updatedGraph = addNode(nodeName, parentId, elkGraph);
-            setElkGraph(updatedGraph);
-            console.log(`Added node ${nodeName} to ${parentId}`);
+            setElkGraph(currentGraph => {
+              const updatedGraph = addNode(nodeName, parentId, currentGraph);
+              console.log(`Added node ${nodeName} to ${parentId}`);
+              return updatedGraph;
+            });
           } catch (error) {
             console.error("Error adding node:", error);
           }
@@ -1238,9 +1460,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         if (deleteNodeMatch) {
           const [_, nodeId] = deleteNodeMatch;
           try {
-            const updatedGraph = deleteNode(nodeId, elkGraph);
-            setElkGraph(updatedGraph);
-            console.log(`Deleted node ${nodeId}`);
+            setElkGraph(currentGraph => {
+              const updatedGraph = deleteNode(nodeId, currentGraph);
+              console.log(`Deleted node ${nodeId}`);
+              return updatedGraph;
+            });
           } catch (error) {
             console.error("Error deleting node:", error);
           }
@@ -1251,9 +1475,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         if (moveNodeMatch) {
           const [_, nodeId, newParentId] = moveNodeMatch;
           try {
-            const updatedGraph = moveNode(nodeId, newParentId, elkGraph);
-            setElkGraph(updatedGraph);
-            console.log(`Moved node ${nodeId} to ${newParentId}`);
+            setElkGraph(currentGraph => {
+              const updatedGraph = moveNode(nodeId, newParentId, currentGraph);
+              console.log(`Moved node ${nodeId} to ${newParentId}`);
+              return updatedGraph;
+            });
           } catch (error) {
             console.error("Error moving node:", error);
           }
@@ -1264,9 +1490,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         if (addEdgeMatch) {
           const [_, edgeId, sourceId, targetId] = addEdgeMatch;
           try {
-            const updatedGraph = addEdge(edgeId, null, sourceId, targetId, elkGraph);
-            setElkGraph(updatedGraph);
-            console.log(`Added edge ${edgeId} from ${sourceId} to ${targetId}`);
+            setElkGraph(currentGraph => {
+              const updatedGraph = addEdge(edgeId, null, sourceId, targetId, currentGraph);
+              console.log(`Added edge ${edgeId} from ${sourceId} to ${targetId}`);
+              return updatedGraph;
+            });
           } catch (error) {
             console.error("Error adding edge:", error);
           }
@@ -1277,9 +1505,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         if (deleteEdgeMatch) {
           const [_, edgeId] = deleteEdgeMatch;
           try {
-            const updatedGraph = deleteEdge(edgeId, elkGraph);
-            setElkGraph(updatedGraph);
-            console.log(`Deleted edge ${edgeId}`);
+            setElkGraph(currentGraph => {
+              const updatedGraph = deleteEdge(edgeId, currentGraph);
+              console.log(`Deleted edge ${edgeId}`);
+              return updatedGraph;
+            });
           } catch (error) {
             console.error("Error deleting edge:", error);
           }
@@ -1291,9 +1521,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           const [_, nodeIdsStr, parentId, groupId] = groupNodesMatch;
           const nodeIds = nodeIdsStr.split(',').map(id => id.trim());
           try {
-            const updatedGraph = groupNodes(nodeIds, parentId, groupId, elkGraph);
-            setElkGraph(updatedGraph);
-            console.log(`Grouped nodes ${nodeIds.join(',')} under ${parentId} as ${groupId}`);
+            setElkGraph(currentGraph => {
+              const updatedGraph = groupNodes(nodeIds, parentId, groupId, currentGraph);
+              console.log(`Grouped nodes ${nodeIds.join(',')} under ${parentId} as ${groupId}`);
+              return updatedGraph;
+            });
           } catch (error) {
             console.error("Error grouping nodes:", error);
           }
@@ -1304,9 +1536,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         if (removeGroupMatch) {
           const [_, groupId] = removeGroupMatch;
           try {
-            const updatedGraph = removeGroup(groupId, elkGraph);
-            setElkGraph(updatedGraph);
-            console.log(`Removed group ${groupId}`);
+            setElkGraph(currentGraph => {
+              const updatedGraph = removeGroup(groupId, currentGraph);
+              console.log(`Removed group ${groupId}`);
+              return updatedGraph;
+            });
           } catch (error) {
             console.error("Error removing group:", error);
           }
@@ -1315,9 +1549,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         console.error("Error processing graph commands:", error);
       }
     }
-  }, [events, messages, elkGraph]);
+  }, [events, messages]); // Remove elkGraph dependency
 
-  // Process ELK graph layout
+  // Process ELK graph layout with optimization to prevent unnecessary re-layouts
   useEffect(() => {
     async function layoutGraph() {
       try {
@@ -1327,11 +1561,40 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         // Apply defaults through ensureIds
         const graphWithOptions = ensureIds(graphCopy);
         
+        // Create a more robust hash of the graph structure for comparison
+        const graphHash = getGraphHash(graphWithOptions);
+        
+        // Skip layout if the graph hasn't meaningfully changed
+        if (graphHash === prevElkGraphRef.current) {
+          console.log('Graph structure unchanged, skipping layout');
+          return;
+        }
+        
+        // Store current hash for future comparison
+        prevElkGraphRef.current = graphHash;
+        
         console.log('Laying out graph with options:', graphWithOptions);
         
         const layoutResult = await elk.layout(graphWithOptions);
         console.log('Layout result:', layoutResult);
+        
+        // Compare layout results to see if anything meaningful changed
+        if (prevLayoutResultRef.current) {
+          const prevPositionsHash = JSON.stringify(extractPositions(prevLayoutResultRef.current));
+          const newPositionsHash = JSON.stringify(extractPositions(layoutResult));
+          
+          if (prevPositionsHash === newPositionsHash) {
+            console.log('Layout positions unchanged, skipping update');
+            return;
+          }
+        }
+        
+        // Store current layout result for future comparison
+        prevLayoutResultRef.current = layoutResult;
+        
+        // Update state with new layout
         setLayoutedElkGraph(layoutResult);
+        setLayoutVersion(prev => prev + 1);
         
         // Process the layouted graph for ReactFlow
         const { nodes: reactFlowNodes, edges: reactFlowEdges } = processLayoutedGraph(layoutResult);
@@ -1342,10 +1605,137 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       }
     }
     
+    // Extract node and edge positions for layout comparison
+    const extractPositions = (graph: any) => {
+      const positions: any = {};
+      
+      const extractNodePositions = (node: any, parentX = 0, parentY = 0) => {
+        if (!node || !node.id) return;
+        
+        const absX = (node.x || 0) + parentX;
+        const absY = (node.y || 0) + parentY;
+        
+        positions[node.id] = { x: absX, y: absY };
+        
+        if (node.children && node.children.length > 0) {
+          node.children.forEach((child: any) => {
+            extractNodePositions(child, absX, absY);
+          });
+        }
+      };
+      
+      extractNodePositions(graph);
+      return positions;
+    };
+    
     if (elkGraph) {
       layoutGraph();
     }
-  }, [elkGraph, elk]);
+  }, [elkGraph]); // Remove elk from dependencies since it's now stable
+
+  // Handle selection changes to ensure edges remain visible
+  const onSelectionChange = useCallback(({ nodes: selectedNodes, edges: selectedEdges }: { nodes: Node[]; edges: Edge[] }) => {
+    if (selectedNodes.length > 0) {
+      const selectedIds = selectedNodes.map(node => node.id);
+      
+      // Is a group node selected?
+      const hasGroupNode = selectedNodes.some(node => node.type === 'group');
+      
+      // Force edge visibility regardless of node type, but especially for group nodes
+      setEdges(currentEdges => 
+        currentEdges.map(edge => {
+          const isConnectedToSelected = selectedIds.includes(edge.source) || selectedIds.includes(edge.target);
+          
+          return {
+            ...edge,
+            hidden: false, // Always force visibility
+            style: {
+              ...edge.style,
+              opacity: 1,
+              strokeWidth: isConnectedToSelected ? 2 : 1.5,
+              stroke: isConnectedToSelected ? '#0066cc' : '#000',
+              zIndex: 3000, // Super high z-index to ensure visibility
+            },
+            zIndex: 3000,
+            animated: isConnectedToSelected,
+          };
+        })
+      );
+      
+      // Update selected nodes tracking
+      setSelectedNodeIds(selectedIds);
+    } else {
+      // Nothing selected - still ensure edges are visible
+      setEdges(currentEdges => 
+        currentEdges.map(edge => ({
+          ...edge,
+          hidden: false,
+          style: {
+            ...edge.style,
+            opacity: 1,
+            zIndex: 3000,
+          },
+          zIndex: 3000
+        }))
+      );
+      
+      setSelectedNodeIds([]);
+    }
+  }, []);
+
+  // Critical fix to ensure edges remain visible at all times
+  useEffect(() => {
+    // Function to ensure all edges are visible always
+    const ensureEdgesVisible = () => {
+      setEdges(currentEdges => {
+        // Always force all edges to be visible, regardless of current hidden state
+        return currentEdges.map(edge => ({
+          ...edge,
+          hidden: false,
+          style: {
+            ...edge.style,
+            opacity: 1,
+            zIndex: 3000, // Very high z-index to ensure visibility
+          },
+          zIndex: 3000
+        }));
+      });
+    };
+    
+    // Run the fix immediately
+    ensureEdgesVisible();
+    
+    // Set up a more frequent periodic check to ensure edges remain visible
+    const intervalId = setInterval(ensureEdgesVisible, 150);
+    
+    // Clear the interval on cleanup
+    return () => clearInterval(intervalId);
+  }, [setEdges, selectedNodeIds]); // Important: Add selectedNodeIds as dependency
+
+  // Handle new edge connections - use functional update to avoid dependency on current elkGraph
+  const onConnect = useCallback((params: any) => {
+    // Create a unique edge ID
+    const newEdgeId = `edge-${Math.random().toString(36).substr(2, 9)}`;
+    
+    try {
+      // Use functional update pattern to avoid dependency on current elkGraph state
+      setElkGraph(currentGraph => {
+        const updatedGraph = addEdge(
+          newEdgeId,
+          null, // container ID, use null to auto-determine
+          params.source,
+          params.target,
+          currentGraph
+        );
+        
+        return updatedGraph;
+      });
+      
+      // No need to manually add to edges state - the layout effect will handle this
+    } catch (error) {
+      console.error("Error adding edge:", error);
+    }
+  }, []); // No dependencies since we use functional updates
 
   const handleChatSubmit = (message: string) => {
     // Add the user message to the UI immediately
@@ -1385,12 +1775,15 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onSelectionChange={onSelectionChange}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             className="w-full h-full bg-gray-50 dark:bg-gray-950"
             defaultEdgeOptions={{
               style: { stroke: '#000' },
               animated: true,
+              zIndex: 1000,
             }}
             fitView
             minZoom={0.2}
@@ -1405,6 +1798,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             nodesConnectable={true}
             selectNodesOnDrag={true}
             style={{ cursor: 'grab' }}
+            elevateEdgesOnSelect={true}
+            disableKeyboardA11y={false}
+            edgesFocusable={true}
+            edgesUpdatable={true}
+            deleteKeyCode="Delete"
+            connectOnClick={false}
           >
             <Background 
               color="#333" 

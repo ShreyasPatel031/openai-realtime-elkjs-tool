@@ -80,7 +80,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   }
 
   return (
-    <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-50 pointer-events-auto">
+    <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 pointer-events-auto">
       <form
         onSubmit={handleSubmit}
         style={{

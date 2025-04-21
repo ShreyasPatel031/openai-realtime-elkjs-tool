@@ -590,6 +590,10 @@ const processLayoutedGraph = (layoutedGraph: any) => {
   const collectEdgePoints = (node: any) => {
     // Process node edges
     if (node.edges && node.edges.length > 0) {
+      // Create sets to track unique edge points for deduplication
+      const uniqueLeftPoints = new Set();
+      const uniqueRightPoints = new Set();
+      
       node.edges.forEach((edge: any) => {
         if (edge.sections && edge.sections.length > 0) {
           const section = edge.sections[0];
@@ -609,13 +613,19 @@ const processLayoutedGraph = (layoutedGraph: any) => {
             const absStartX = containerOffset.x + section.startPoint.x;
             const absStartY = containerOffset.y + section.startPoint.y;
             
-            nodeEdgePoints[sourceId].right.push({
-              edgeId: edge.id,
-              x: absStartX,
-              y: absStartY,
-              originalX: section.startPoint.x,
-              originalY: section.startPoint.y
-            });
+            // Add point only if it's unique (based on Y coordinate to limit handles)
+            const roundedY = Math.round(absStartY);
+            if (!uniqueRightPoints.has(roundedY)) {
+              uniqueRightPoints.add(roundedY);
+              
+              nodeEdgePoints[sourceId].right.push({
+                edgeId: edge.id,
+                x: absStartX,
+                y: absStartY,
+                originalX: section.startPoint.x,
+                originalY: section.startPoint.y
+              });
+            }
           }
           
           // Store target point (left side of target node)
@@ -629,13 +639,19 @@ const processLayoutedGraph = (layoutedGraph: any) => {
             const absEndX = containerOffset.x + section.endPoint.x;
             const absEndY = containerOffset.y + section.endPoint.y;
             
-            nodeEdgePoints[targetId].left.push({
-              edgeId: edge.id,
-              x: absEndX,
-              y: absEndY,
-              originalX: section.endPoint.x,
-              originalY: section.endPoint.y
-            });
+            // Add point only if it's unique (based on Y coordinate to limit handles)
+            const roundedY = Math.round(absEndY);
+            if (!uniqueLeftPoints.has(roundedY)) {
+              uniqueLeftPoints.add(roundedY);
+              
+              nodeEdgePoints[targetId].left.push({
+                edgeId: edge.id,
+                x: absEndX,
+                y: absEndY,
+                originalX: section.endPoint.x,
+                originalY: section.endPoint.y
+              });
+            }
           }
           
           // Store bend points with absolute positions
@@ -670,75 +686,57 @@ const processLayoutedGraph = (layoutedGraph: any) => {
   // Collect edge points for all nodes in the graph
   collectEdgePoints(layoutedGraph);
   
-  // Also handle root-level edges
-  if (layoutedGraph.edges && layoutedGraph.edges.length > 0) {
+  /* ---------- root-level edges (dedup by rounded Y) ---------- */
+  if (layoutedGraph.edges?.length) {
+    const uniqL = new Set<number>(), uniqR = new Set<number>();
+    
     layoutedGraph.edges.forEach((edge: any) => {
-      if (edge.sections && edge.sections.length > 0) {
-        const section = edge.sections[0];
+      const section = edge.sections?.[0];
+      if (!section) return;
+      
+      const src = edge.sources[0], trg = edge.targets[0];
+      const { x: offX, y: offY } = absolutePositions[layoutedGraph.id] || { x: 0, y: 0 };
+      
+      const add = (bag: any, set: Set<number>, id: string, pt: any, side: string) => {
+        const yRound = Math.round(pt.y + offY);
+        if (set.has(yRound)) return;
+        set.add(yRound);
+        if (!bag[id]) bag[id] = { left: [], right: [] };
+        bag[id][side].push({ 
+          edgeId: edge.id, 
+          x: pt.x + offX, 
+          y: pt.y + offY,
+          originalX: pt.x,
+          originalY: pt.y
+        });
+      };
+      
+      if (section.startPoint && src) {
+        add(nodeEdgePoints, uniqR, src, section.startPoint, 'right');
+      }
+      
+      if (section.endPoint && trg) {
+        add(nodeEdgePoints, uniqL, trg, section.endPoint, 'left');
+      }
+      
+      // Store bend points with absolute positions
+      if (section.bendPoints && section.bendPoints.length > 0) {
+        // Reset the array instead of checking if it exists
+        edge.absoluteBendPoints = [];
         
-        // Get container's absolute position
-        const containerId = edge.container || layoutedGraph.id || 'root';
-        const containerOffset = absolutePositions[containerId] || { x: 0, y: 0 };
-        
-        // Store source point
-        if (edge.sources && edge.sources.length > 0 && section.startPoint) {
-          const sourceId = edge.sources[0];
-          if (!nodeEdgePoints[sourceId]) {
-            nodeEdgePoints[sourceId] = { right: [], left: [] };
-          }
-          
+        section.bendPoints.forEach((point: any, index: number) => {
           // Apply container offset to get absolute coordinates
-          const absStartX = containerOffset.x + section.startPoint.x;
-          const absStartY = containerOffset.y + section.startPoint.y;
-        
-          nodeEdgePoints[sourceId].right.push({
-            edgeId: edge.id,
-            x: absStartX,
-            y: absStartY,
-            originalX: section.startPoint.x,
-            originalY: section.startPoint.y
-          });
-        }
-        
-        // Store target point
-        if (edge.targets && edge.targets.length > 0 && section.endPoint) {
-          const targetId = edge.targets[0];
-          if (!nodeEdgePoints[targetId]) {
-            nodeEdgePoints[targetId] = { right: [], left: [] };
-          }
+          const absBendX = offX + point.x;
+          const absBendY = offY + point.y;
           
-          // Apply container offset to get absolute coordinates
-          const absEndX = containerOffset.x + section.endPoint.x;
-          const absEndY = containerOffset.y + section.endPoint.y;
-          
-          nodeEdgePoints[targetId].left.push({
-            edgeId: edge.id,
-            x: absEndX,
-            y: absEndY,
-            originalX: section.endPoint.x,
-            originalY: section.endPoint.y
+          edge.absoluteBendPoints.push({
+            index,
+            x: absBendX,
+            y: absBendY,
+            originalX: point.x,
+            originalY: point.y
           });
-        }
-        
-        // Store bend points with absolute positions
-        if (section.bendPoints && section.bendPoints.length > 0) {
-          // Reset the array instead of checking if it exists
-          edge.absoluteBendPoints = [];
-          
-          section.bendPoints.forEach((point: any, index: number) => {
-            // Apply container offset to get absolute coordinates
-            const absBendX = containerOffset.x + point.x;
-            const absBendY = containerOffset.y + point.y;
-            
-            edge.absoluteBendPoints.push({
-              index,
-              x: absBendX,
-              y: absBendY,
-              originalX: point.x,
-              originalY: point.y
-            });
-          });
-        }
+        });
       }
     });
   }
@@ -1296,31 +1294,211 @@ const removeGroup = (groupId: string, graph: any) => {
   
   return JSON.parse(JSON.stringify(graph)); // Return a deep copy
 };
+export const elkGraphDescription = `You are a technical architecture diagram assistant. You can only interact with the system by calling the following functions:
 
-const elkGraphDescription = `
-The graph structure follows these rules:
-1. Each node has a unique ID and can have children
-2. Edges connect nodes using source and target IDs
-3. Nodes can be grouped using the "children" property
-4. The layout is handled by ELK.js with these settings:
-   - algorithm: "layered"
-   - direction: "RIGHT"
-   - spacing: { nodeNode: 50, nodeEdge: 50 }
-   - padding: { top: 20, left: 20, right: 20, bottom: 20 }
-`;
+- display_elk_graph(title): Call this first to retrieve and visualize the current graph layout.
+- add_node(nodename, parentId): Add a component under a parent container. You cannot add a node if parentId doesnt exist.
+- delete_node(nodeId): Remove an existing node.
+- move_node(nodeId, newParentId): Move a node from one group/container to another.
+- add_edge(edgeId, sourceId, targetId): Connect two nodes with a directional link. You must place this edge inside the nearest common ancestor container.
+- delete_edge(edgeId): Remove an existing edge.
+- group_nodes(nodeIds, parentId, groupId): Create a new container and move specified nodes into it.
+- remove_group(groupId): Disband a group and promote its children to the parent.
+- batch_update(operations): Apply a list of operations to the graph. If applying bath operations make sure that nodes to which you are applying exist.
+
+## Important:
+1. If you have errors rectify them by calling the functions again and again till the reuqired objective is completed.
+
+## Required Behavior:
+1. Always call display_elk_graph first before any other action to understand the current structure.
+2. You must never assume the layout or state—always infer structure from the latest graph after calling display_elk_graph.
+3. Build clean architecture diagrams by calling only the provided functions. Avoid reasoning outside this structure.
+
+## Best Practices:
+- Use short, lowercase or snake_case nodename/nodeId identifiers.
+- Parent-child structure should reflect logical grouping (e.g., "api" inside "aws").
+- When adding edges, place them in the correct container—if both nodes are inside "aws", place the edge in aws.edges. If they are from different top-level containers, place the edge in root.edges.
+- Prefer calling group_nodes when grouping related services (e.g., "auth" and "user" into "identity_group").
+
+You are not allowed to write explanations, instructions, or visual output. You must interact purely by calling functions to update the architecture diagram.`;
 
 const minimalSessionUpdate = {
-  type: "conversation.item.create",
-  item: {
-    type: "message",
-    role: "user",
-    content: [
+  type: "session.update",
+  session: {
+    tools: [
       {
-        type: "input_text",
-        text: "You have access to the following tools:\n- display_elk_graph\n- add_node\n- delete_node\n- move_node\n- add_edge\n- delete_edge\n- group_nodes\n- remove_group"
+        type: "function",
+        name: "display_elk_graph",
+        description: "Function to display and return the current ELK graph layout",
+        parameters: {
+          type: "object",
+          properties: {
+          },
+          required: []
+        }
+      },
+      {
+        type: "function",
+        name: "add_node",
+        description: "Creates a new node and adds it under the given parent",
+        parameters: {
+          type: "object",
+          properties: {
+            nodename: {
+              type: "string",
+              description: "Name/ID of the new node to add"
+            },
+            parentId: {
+              type: "string",
+              description: "ID of the parent node where this node will be added"
+            }
+          },
+          required: ["nodename", "parentId"]
+        }
+      },
+      {
+        type: "function",
+        name: "delete_node",
+        description: "Deletes a node from the layout and removes related edge references",
+        parameters: {
+          type: "object",
+          properties: {
+            nodeId: {
+              type: "string",
+              description: "ID of the node to delete"
+            }
+          },
+          required: ["nodeId"]
+        }
+      },
+      {
+        type: "function",
+        name: "move_node",
+        description: "Moves a node from one parent to another and updates edge attachments",
+        parameters: {
+          type: "object",
+          properties: {
+            nodeId: {
+              type: "string",
+              description: "ID of the node to move"
+            },
+            newParentId: {
+              type: "string",
+              description: "ID of the new parent node"
+            }
+          },
+          required: ["nodeId", "newParentId"]
+        }
+      },
+      {
+        type: "function",
+        name: "add_edge",
+        description: "Adds a new edge between two nodes at their common ancestor",
+        parameters: {
+          type: "object",
+          properties: {
+            edgeId: {
+              type: "string",
+              description: "Unique ID for the new edge"
+            },
+            sourceId: {
+              type: "string",
+              description: "ID of the source node"
+            },
+            targetId: {
+              type: "string", 
+              description: "ID of the target node"
+            }
+          },
+          required: ["edgeId", "sourceId", "targetId"]
+        }
+      },
+      {
+        type: "function",
+        name: "delete_edge",
+        description: "Deletes an edge from the layout",
+        parameters: {
+          type: "object",
+          properties: {
+            edgeId: {
+              type: "string",
+              description: "ID of the edge to delete"
+            }
+          },
+          required: ["edgeId"]
+        }
+      },
+      {
+        type: "function",
+        name: "group_nodes",
+        description: "Creates a new group node and moves specified nodes into it",
+        parameters: {
+          type: "object",
+          properties: {
+            nodeIds: {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of node IDs to group together"
+            },
+            parentId: {
+              type: "string",
+              description: "ID of the parent node that contains the nodes"
+            },
+            groupId: {
+              type: "string",
+              description: "ID/name for the new group node"
+            }
+          },
+          required: ["nodeIds", "parentId", "groupId"]
+        }
+      },
+      {
+        type: "function",
+        name: "remove_group",
+        description: "Removes a group node by moving its children up to the parent",
+        parameters: {
+          type: "object",
+          properties: {
+            groupId: {
+              type: "string",
+              description: "ID of the group to remove"
+            }
+          },
+          required: ["groupId"]
+        }
+      },
+      {
+        type: "function",
+        name: "batch_update",
+        description: "Executes a series of graph operations in order",
+        parameters: {
+          type: "object",
+          properties: {
+            operations: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  name: {
+                    type: "string",
+                    description: "Name of the operation to perform"
+                  },
+                  args: {
+                    type: "object",
+                    description: "Arguments for the operation"
+                  }
+                },
+                required: ["name", "args"]
+              },
+              description: "List of operations to execute"
+            }
+          },
+          required: ["operations"]
+        }
       }
-    ]
-  }
+    ],
+    tool_choice: "auto",
+  },
 };
 
 // Define the instruction to include with all function responses
@@ -1337,48 +1515,16 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [elkGraph, setElkGraph] = useState(getInitialElkGraph());
   const [layoutedElkGraph, setLayoutedElkGraph] = useState<any>(null);
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
-  const onNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodes((nds) => applyNodeChanges(changes, nds));
-    
-    // Ensure edges remain visible after any node changes (selection, position, etc.)
-    setTimeout(() => {
-      setEdges(currentEdges => 
-        currentEdges.map(edge => ({
-          ...edge,
-          hidden: false,
-          style: {
-            ...edge.style,
-            opacity: 1,
-            zIndex: 3000,
-          },
-          zIndex: 3000
-        }))
-      );
-    }, 0);
-  }, []);
   
-  const onEdgesChange = useCallback((changes: EdgeChange[]) => {
-    setEdges(eds => {
-      // Apply the changes
-      const updatedEdges = applyEdgeChanges(changes, eds);
-      
-      // Then ensure edges are always visible
-      return updatedEdges.map(edge => ({
-        ...edge,
-        hidden: false,
-        style: {
-          ...edge.style,
-          opacity: 1,
-          zIndex: 3000,
-        },
-        zIndex: 3000
-      }));
-    });
-  }, []);
+  // Replace custom nodes/edges state with ReactFlow's built-in hooks
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([]);
+  
+  // Remove the custom onNodesChange and onEdgesChange handlers
+  
   // Use useMemo to persist the ELK instance across renders
   const elk = useMemo(() => new ELK(), []);
+  
   // Add a layoutVersion state to track when layouts actually change
   const [layoutVersion, setLayoutVersion] = useState(0);
   // Use refs to compare previous graph and layout results
@@ -1467,7 +1613,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Update the helper function to track retry status and check connection state
   const safeSendClientEvent = useCallback((message: any) => {
     // Enqueue the message instead of trying to send directly
-    console.log("Queueing message for sending");
+    // console.log("Queueing message for sending");
     pendingMessagesRef.current.push(message);
   }, []);
 
@@ -1933,14 +2079,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   useEffect(() => {
     async function layoutGraph() {
       try {
-        // Create a deep copy of the graph to avoid modifying the original
-        const graphCopy = JSON.parse(JSON.stringify(elkGraph));
+        // Skip processing if no graph
+        if (!elkGraph) return;
         
-        // Apply defaults through ensureIds
-        const graphWithOptions = ensureIds(graphCopy);
-        
-        // Create a more robust hash of the graph structure for comparison
-        const graphHash = getGraphHash(graphWithOptions);
+        // Create a fast hash of the graph structure for comparison
+        const graphHash = getGraphHash(elkGraph);
         
         // Skip layout if the graph hasn't meaningfully changed
         if (graphHash === prevElkGraphRef.current) {
@@ -1951,10 +2094,17 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         // Store current hash for future comparison
         prevElkGraphRef.current = graphHash;
         
-        console.log('Laying out graph with options:', graphWithOptions);
+        console.log('Laying out graph with options');
+        
+        // Use a memoized clone to avoid repeated deep copies
+        // Create a deep copy of the graph to avoid modifying the original
+        const graphCopy = JSON.parse(JSON.stringify(elkGraph));
+        
+        // Apply defaults through ensureIds
+        const graphWithOptions = ensureIds(graphCopy);
         
         const layoutResult = await elk.layout(graphWithOptions);
-        console.log('Layout result:', layoutResult);
+        console.log('Layout result received');
         
         // Compare layout results to see if anything meaningful changed
         if (prevLayoutResultRef.current) {
@@ -1970,12 +2120,13 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         // Store current layout result for future comparison
         prevLayoutResultRef.current = layoutResult;
         
-        // Update state with new layout
-        setLayoutedElkGraph(layoutResult);
-        setLayoutVersion(prev => prev + 1);
-        
+        // Batch state updates to reduce render cycles
         // Process the layouted graph for ReactFlow
         const { nodes: reactFlowNodes, edges: reactFlowEdges } = processLayoutedGraph(layoutResult);
+        
+        // Use a single update to set all state at once
+        setLayoutedElkGraph(layoutResult);
+        setLayoutVersion(prev => prev + 1);
         setNodes(reactFlowNodes);
         setEdges(reactFlowEdges);
       } catch (err) {
@@ -2010,6 +2161,47 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       layoutGraph();
     }
   }, [elkGraph]); // Remove elk from dependencies since it's now stable
+
+  // Critical fix to ensure edges remain visible at all times
+  // But with much reduced frequency to prevent performance issues
+  useEffect(() => {
+    // Function to ensure all edges are visible always - optimized version
+    const ensureEdgesVisible = () => {
+      // Only update if there are edges that need visibility fixes
+      setEdges(currentEdges => {
+        // Check if any edges are hidden before doing work
+        const hasHiddenEdges = currentEdges.some(edge => 
+          edge.hidden || 
+          (edge.style && edge.style.opacity !== 1) || 
+          edge.zIndex !== 3000
+        );
+        
+        // Skip update if no edges need fixing
+        if (!hasHiddenEdges) return currentEdges;
+        
+        // Otherwise apply the fixes
+        return currentEdges.map(edge => ({
+          ...edge,
+          hidden: false,
+          style: {
+            ...edge.style,
+            opacity: 1,
+            zIndex: 3000,
+          },
+          zIndex: 3000
+        }));
+      });
+    };
+    
+    // Run the fix immediately
+    ensureEdgesVisible();
+    
+    // Set up a LESS frequent periodic check (1 second instead of 150ms)
+    const intervalId = setInterval(ensureEdgesVisible, 1000);
+    
+    // Clear the interval on cleanup
+    return () => clearInterval(intervalId);
+  }, [setEdges]); // Remove selectedNodeIds dependency to reduce cascading updates
 
   // Handle selection changes to ensure edges remain visible
   const onSelectionChange = useCallback(({ nodes: selectedNodes, edges: selectedEdges }: { nodes: Node[]; edges: Edge[] }) => {
@@ -2060,35 +2252,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       setSelectedNodeIds([]);
     }
   }, []);
-
-  // Critical fix to ensure edges remain visible at all times
-  useEffect(() => {
-    // Function to ensure all edges are visible always
-    const ensureEdgesVisible = () => {
-      setEdges(currentEdges => {
-        // Always force all edges to be visible, regardless of current hidden state
-        return currentEdges.map(edge => ({
-          ...edge,
-          hidden: false,
-          style: {
-            ...edge.style,
-            opacity: 1,
-            zIndex: 3000, // Very high z-index to ensure visibility
-          },
-          zIndex: 3000
-        }));
-      });
-    };
-    
-    // Run the fix immediately
-    ensureEdgesVisible();
-    
-    // Set up a more frequent periodic check to ensure edges remain visible
-    const intervalId = setInterval(ensureEdgesVisible, 150);
-    
-    // Clear the interval on cleanup
-    return () => clearInterval(intervalId);
-  }, [setEdges, selectedNodeIds]); // Important: Add selectedNodeIds as dependency
 
   // Handle new edge connections - use functional update to avoid dependency on current elkGraph
   const onConnect = useCallback((params: any) => {
@@ -2200,7 +2363,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       
       try {
         sendClientEvent(message);
-        console.log("Successfully sent message");
+        // console.log("Successfully sent message");
         setMessageSendStatus(prev => ({ ...prev, sending: false, retrying: false }));
         
         // Schedule the next message with a delay to avoid flooding

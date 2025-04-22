@@ -1,0 +1,100 @@
+import React from 'react';
+import { Handle, Position } from 'reactflow';
+
+interface CustomNodeProps {
+  data: {
+    label: string;
+    width?: number;
+    height?: number;
+    leftHandles?: string[];
+    rightHandles?: string[];
+  };
+  id: string;
+  selected?: boolean;
+}
+
+const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
+  const { leftHandles = [], rightHandles = [] } = data;
+  
+  const nodeStyle = {
+    background: selected ? '#f8f9fa' : 'white',
+    border: selected ? '2px solid #6c757d' : '1px solid #ccc',
+    borderRadius: '4px',
+    padding: '10px',
+    width: data.width || 80,
+    height: data.height || 40,
+    display: 'flex',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    fontSize: '12px',
+    boxShadow: selected ? '0 0 5px rgba(0, 0, 0, 0.3)' : '0 1px 4px rgba(0, 0, 0, 0.1)',
+    position: 'relative' as const,
+    zIndex: selected ? 100 : 50,
+    pointerEvents: 'all' as const
+  };
+
+  return (
+    <div style={nodeStyle}>
+      {/* Standard handles */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="left"
+        style={{ 
+          background: '#555',
+          opacity: 0.8
+        }}
+      />
+      
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="right"
+        style={{ 
+          background: '#555',
+          opacity: 0.8
+        }}
+      />
+      
+      {/* Custom handle positions if needed */}
+      {leftHandles.map((yPos: string, index: number) => (
+        <Handle
+          key={`left-${index}`}
+          type="target"
+          position={Position.Left}
+          id={`left-${index}`}
+          style={{ 
+            top: yPos, 
+            background: '#555',
+            opacity: 0.8
+          }}
+        />
+      ))}
+      
+      {rightHandles.map((yPos: string, index: number) => (
+        <Handle
+          key={`right-${index}`}
+          type="source"
+          position={Position.Right}
+          id={`right-${index}`}
+          style={{ 
+            top: yPos, 
+            background: '#555',
+            opacity: 0.8
+          }}
+        />
+      ))}
+      
+      {/* Node label */}
+      <div style={{ 
+        textAlign: 'left', 
+        padding: '2px', 
+        color: '#333'
+      }}>
+        {data.label}
+      </div>
+    </div>
+  );
+};
+
+export default CustomNode; 

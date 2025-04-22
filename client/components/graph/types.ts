@@ -1,4 +1,4 @@
-import { Node } from "reactflow";
+import { Node } from 'reactflow';
 
 export interface CustomNode extends Node {
   parentId?: string;
@@ -27,6 +27,15 @@ export interface ElkGraphNode {
   labels?: { text: string }[];
   children?: ElkGraphNode[];
   edges?: ElkGraphEdge[];
+  layoutOptions?: Record<string, any>;
+  container?: string;
+  absoluteBendPoints?: Array<{
+    index: number;
+    x: number;
+    y: number;
+    originalX: number;
+    originalY: number;
+  }>;
 }
 
 export interface ElkGraphEdge {
@@ -38,10 +47,19 @@ export interface ElkGraphEdge {
     endPoint: { x: number; y: number };
     bendPoints?: { x: number; y: number }[];
   }[];
+  container?: string;
+  absoluteBendPoints?: Array<{
+    index: number;
+    x: number;
+    y: number;
+    originalX: number;
+    originalY: number;
+  }>;
 }
 
 export interface ElkGraph {
   id: string;
   children?: ElkGraphNode[];
   edges?: ElkGraphEdge[];
+  layoutOptions?: Record<string, any>;
 } 

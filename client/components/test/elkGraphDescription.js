@@ -1,27 +1,62 @@
-export const elkGraphDescription = `You are a technical architecture diagram assistant. You can only interact with the system by calling the following functions:
+/**
+ * Helper functions to convert OpenAI-style function trees to ELK-compatible graph format.
+ */
 
-- display_elk_graph(title): Call this first to retrieve and visualize the current graph layout.
-- add_node(nodename, parentId): Add a component under a parent container. You cannot add a node if parentId doesnt exist.
-- delete_node(nodeId): Remove an existing node.
-- move_node(nodeId, newParentId): Move a node from one group/container to another.
-- add_edge(edgeId, sourceId, targetId): Connect two nodes with a directional link. You must place this edge inside the nearest common ancestor container.
-- delete_edge(edgeId): Remove an existing edge.
-- group_nodes(nodeIds, parentId, groupId): Create a new container and move specified nodes into it.
-- remove_group(groupId): Disband a group and promote its children to the parent.
-- batch_update(operations): Apply a list of operations to the graph. If applying bath operations make sure that nodes to which you are applying exist.
+/**
+ * Takes a function call tree in OpenAI format and converts it to an ELK graph.
+ * 
+ * @param {Object} functionCall - An OpenAI function call object or tree of function calls
+ * @returns {Object} - An ELK-compatible graph object
+ */
+export function createElkGraphFromFunctionCall(functionCall) {
+  // Create the root node (main graph container)
+  const graph = {
+    id: "root",
+    layoutOptions: {
+      'algorithm': 'layered',
+      'elk.direction': 'RIGHT',
+      'hierarchyHandling': 'INCLUDE_CHILDREN',
+    },
+    children: [],
+    edges: []
+  };
 
-## Important:
-1. If you have errors rectify them by calling the functions again and again till the reuqired objective is completed.
+  // Process the function call tree
+  processNode(functionCall, graph, 'root');
+  
+  return graph;
+}
 
-## Required Behavior:
-1. Always call display_elk_graph first before any other action to understand the current structure.
-2. You must never assume the layout or state—always infer structure from the latest graph after calling display_elk_graph.
-3. Build clean architecture diagrams by calling only the provided functions. Avoid reasoning outside this structure.
-
-## Best Practices:
-- Use short, lowercase or snake_case nodename/nodeId identifiers.
-- Parent-child structure should reflect logical grouping (e.g., "api" inside "aws").
-- When adding edges, place them in the correct container—if both nodes are inside "aws", place the edge in aws.edges. If they are from different top-level containers, place the edge in root.edges.
-- Prefer calling group_nodes when grouping related services (e.g., "auth" and "user" into "identity_group").
-
-You are not allowed to write explanations, instructions, or visual output. You must interact purely by calling functions to update the architecture diagram.`;
+/**
+ * Helper to recursively process nodes in the function call tree
+ */
+function processNode(node, parentGraph, prefix) {
+  if (!node) return;
+  
+  // Create node ID
+  const nodeId = `${prefix}-${node.name || 'anonymous'}`;
+  
+  // Create and add the node to the parent graph
+  const elkNode = {
+    id: nodeId,
+    labels: [{ text: node.name || 'function' }],
+    children: [],
+    edges: []
+  };
+  
+  parentGraph.children.push(elkNode);
+  
+  // If there are nested function calls, process them recursively
+  if (node.function_call) {
+    const childId = `${nodeId}-child`;
+    
+    // Add an edge from parent to child
+    elkNode.edges.push({
+      id: `${nodeId}-to-${childId}`,
+      sources: [nodeId],
+      targets: [childId]
+    });
+    
+    processNode(node.function_call, elkNode, nodeId);
+  }
+} 

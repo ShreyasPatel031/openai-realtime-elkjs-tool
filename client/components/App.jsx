@@ -153,7 +153,7 @@ export default function App() {
       const timestamp = new Date().toLocaleTimeString();
       message.event_id = message.event_id || crypto.randomUUID();
 
-      // console.log("Sending message, size:", JSON.stringify(message).length);
+      console.log("Sending message, size:", JSON.stringify(message).length);
       dataChannel.send(JSON.stringify(message));
       
       if (!message.timestamp) {

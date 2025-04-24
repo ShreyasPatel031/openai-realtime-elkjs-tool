@@ -7,6 +7,11 @@ const app = express();
 const port = process.env.PORT || 3000;
 const apiKey = process.env.OPENAI_API_KEY;
 
+if (!apiKey) {
+  console.error("OPENAI_API_KEY is not set in .env file");
+  process.exit(1);
+}
+
 // Configure Vite middleware for React client
 const vite = await createViteServer({
   server: { middlewareMode: true },
@@ -26,13 +31,26 @@ app.get("/token", async (req, res) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-4o-realtime-preview-2024-12-17",
+          model: "gpt-4o-mini-realtime-preview",
           voice: "verse",
         }),
       },
     );
 
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("OpenAI API error:", errorData);
+      return res.status(response.status).json({ 
+        error: errorData.error?.message || "Failed to generate token" 
+      });
+    }
+
     const data = await response.json();
+    if (!data || !data.client_secret || !data.client_secret.value) {
+      console.error("Invalid response from OpenAI:", data);
+      return res.status(500).json({ error: "Invalid response from OpenAI" });
+    }
+
     res.json(data);
   } catch (error) {
     console.error("Token generation error:", error);

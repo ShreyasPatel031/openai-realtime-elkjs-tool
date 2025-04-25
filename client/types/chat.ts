@@ -8,7 +8,7 @@ export interface ChatBoxProps {
 export interface Message {
   id: string;
   content: string;
-  sender: "user" | "assistant";
+  sender: "user" | "assistant" | "system";
   type?: "text" | "radio-question" | "checkbox-question";
   options?: { id: string; text: string }[];
   question?: string;
@@ -16,6 +16,7 @@ export interface Message {
 
 export interface ChatWindowProps {
   messages: Message[];
+  isMinimized?: boolean;
 }
 
 export interface InteractiveCanvasProps {

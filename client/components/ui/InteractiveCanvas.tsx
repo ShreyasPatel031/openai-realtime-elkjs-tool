@@ -26,7 +26,7 @@ import "reactflow/dist/style.css"
 import { cn } from "../../lib/utils"
 
 // Import types from separate type definition files
-import { ChatBoxProps, Message, ChatWindowProps, InteractiveCanvasProps } from "../../types/chat"
+import { ChatBoxProps, Message as ChatMessage, ChatWindowProps, InteractiveCanvasProps } from "../../types/chat"
 import { CustomNode, NodeData, EdgeData, ElkGraph, ElkGraphNode, ElkGraphEdge } from "../../types/graph"
 import { ROOT_DEFAULT_OPTIONS, NON_ROOT_DEFAULT_OPTIONS } from "../graph/elk/elkOptions"
 import { getInitialElkGraph } from "../graph/initialGraph"
@@ -45,7 +45,7 @@ import ChatWindow from "./ChatWindow"
 
 const ChatBox = Chatbox as React.ComponentType<ChatBoxProps>
 
-const initialMessages: Message[] = [
+const initialMessages: ChatMessage[] = [
   { id: "1", content: "Hello! How can I help you with the migration?", sender: "assistant" },
   { id: "2", content: "I need to migrate my database schema.", sender: "user" },
 ]
@@ -120,6 +120,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     onConnect
   } = useElkFlow(getInitialElkGraph());
   
+  // Memoize node and edge types to prevent recreation on each render
+  const memoizedNodeTypes = useMemo(() => nodeTypes, []);
+  const memoizedEdgeTypes = useMemo(() => edgeTypes, []);
+  
   const {
     messages,
     isSending,
@@ -127,8 +131,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     initSentRef,
     handleChatSubmit,
     processEvents,
-    safeSendClientEvent,
-    minimalSessionUpdate
+    safeSendClientEvent
   } = useChatSession({
     isSessionActive,
     sendTextMessage,
@@ -146,6 +149,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     groupNodes,
     removeGroup
   });
+  
+  // Process events when they change
+  useEffect(() => {
+    processEvents();
+  }, [events, processEvents]);
   
   // State to track edge visibility (keeping minimal state for the fix)
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
@@ -265,8 +273,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onSelectionChange={onSelectionChange}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
+            nodeTypes={memoizedNodeTypes}
+            edgeTypes={memoizedEdgeTypes}
             className="w-full h-full bg-gray-50 dark:bg-gray-950"
             defaultEdgeOptions={{
               style: { stroke: '#000', strokeWidth: 2 },

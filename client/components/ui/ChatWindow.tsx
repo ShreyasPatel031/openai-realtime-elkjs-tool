@@ -14,7 +14,7 @@ import { cn } from "../../lib/utils"
 interface Message {
   id: string
   content: string
-  sender: "user" | "assistant"
+  sender: "user" | "assistant" | "system"
   type?: "text" | "radio-question" | "checkbox-question"
   options?: { id: string; text: string }[]
   question?: string
@@ -148,8 +148,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
                   <div key={message.id} className="flex items-start gap-3">
                     {message.sender === "user" ? (
                       <User className="w-6 h-6 mt-1 text-black" />
-                    ) : (
+                    ) : message.sender === "assistant" ? (
                       <Bot className="w-6 h-6 mt-1 text-black" />
+                    ) : (
+                      <Info className="w-6 h-6 mt-1 text-blue-500" />
                     )}
 
                     {message.type === "radio-question" ? (
@@ -193,8 +195,18 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
                         </div>
                       </div>
                     ) : (
-                      <div className="rounded-lg px-4 py-3 bg-white border border-gray-200 max-w-[80%]">
-                        <p className="text-sm">{message.content}</p>
+                      <div className={cn(
+                        "rounded-lg px-4 py-3 border max-w-[80%]",
+                        message.sender === "system" 
+                          ? "bg-blue-50 border-blue-200 text-xs font-mono" 
+                          : "bg-white border-gray-200"
+                      )}>
+                        <p className={cn(
+                          "text-sm", 
+                          message.sender === "system" && "whitespace-pre-wrap"
+                        )}>
+                          {message.content}
+                        </p>
                       </div>
                     )}
                   </div>

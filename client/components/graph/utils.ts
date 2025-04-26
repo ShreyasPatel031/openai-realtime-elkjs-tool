@@ -6,11 +6,13 @@ import {
   ensureIds,
   computeAbsolutePositions,
   buildNodeEdgePoints,
-  processLayoutedGraph
+  processLayoutedGraph,
+  structuralHash
 } from './utils/elk';
 
 export {
   findNodeById,
   ensureIds,
-  processLayoutedGraph
+  processLayoutedGraph,
+  structuralHash
 }; 

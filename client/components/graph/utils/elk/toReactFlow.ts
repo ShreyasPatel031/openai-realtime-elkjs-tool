@@ -55,6 +55,9 @@ export function processLayoutedGraph(elkGraph: any) {
   pushNode(elkGraph);
 
   /* ---------- helper to create RF edges -------------------------------- */
+  // Memoize node types for O(1) lookups
+  const nodeType = new Map(nodes.map(n => [n.id, n.type]));
+
   const pushEdge = (e: any) => {
     e.sources?.forEach((s: string) =>
       e.targets?.forEach((t: string) => {
@@ -65,8 +68,8 @@ export function processLayoutedGraph(elkGraph: any) {
         const sIdx = (ep[s]?.right ?? []).findIndex(p => p.edgeId === e.id);
         const tIdx = (ep[t]?.left ?? []).findIndex(p => p.edgeId === e.id);
 
-        const isSourceGroupNode = nodes.find(n => n.id === s)?.type === 'group';
-        const isTargetGroupNode = nodes.find(n => n.id === t)?.type === 'group';
+        const isSourceGroupNode = nodeType.get(s) === 'group';
+        const isTargetGroupNode = nodeType.get(t) === 'group';
         
         const sourceHandle = isSourceGroupNode 
           ? (sIdx >= 0 ? `right-${sIdx}` : 'right-0')

@@ -13,6 +13,12 @@ interface CustomNodeProps {
   selected?: boolean;
 }
 
+// Shared handle style to avoid per-render object creation
+const baseHandleStyle = {
+  background: '#555',
+  opacity: 0.8
+};
+
 const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
   const { leftHandles = [], rightHandles = [] } = data;
   
@@ -40,20 +46,14 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
         type="target"
         position={Position.Left}
         id="left"
-        style={{ 
-          background: '#555',
-          opacity: 0.8
-        }}
+        style={baseHandleStyle}
       />
       
       <Handle
         type="source"
         position={Position.Right}
         id="right"
-        style={{ 
-          background: '#555',
-          opacity: 0.8
-        }}
+        style={baseHandleStyle}
       />
       
       {/* Custom handle positions if needed */}
@@ -64,9 +64,8 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
           position={Position.Left}
           id={`left-${index}`}
           style={{ 
-            top: yPos, 
-            background: '#555',
-            opacity: 0.8
+            ...baseHandleStyle,
+            top: yPos
           }}
         />
       ))}
@@ -78,18 +77,19 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
           position={Position.Right}
           id={`right-${index}`}
           style={{ 
-            top: yPos, 
-            background: '#555',
-            opacity: 0.8
+            ...baseHandleStyle,
+            top: yPos
           }}
         />
       ))}
       
       {/* Node label */}
       <div style={{ 
-        textAlign: 'left', 
-        padding: '2px', 
-        color: '#333'
+        padding: '2px 4px',
+        fontSize: '12px',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap' as const
       }}>
         {data.label}
       </div>

@@ -12,7 +12,7 @@ import {
   OnConnect
 } from "reactflow";
 
-import { ensureIds, processLayoutedGraph } from "../components/graph/utils";
+import { ensureIds, processLayoutedGraph, structuralHash } from "../components/graph/utils";
 import {
   addNode,
   deleteNode,
@@ -47,96 +47,48 @@ export function useElkFlow(initialGraph: any) {
   /* ------------------------------------------------------------------
    * Graph Operation Handlers
    * ------------------------------------------------------------------ */
+  type MutFn = (...a: any[]) => any;
+
+  const mutate = useCallback(
+    (label: string, fn: MutFn, ...args: any[]) => {
+      try {
+        console.log(`🔧 ${label}`, ...args);
+        setElkGraph((g0: any) => {
+          const g1 = fn(...args, g0);      // call the real mutation
+          return structuredClone(g1);      // cheap deep-clone (browser native)
+        });
+      } catch (err) {
+        console.error(`❌ ${label}`, err);
+      }
+    }, []);
+
   const handleAddNode = useCallback((nodeName: string, parentId: string) => {
-    try {
-      console.log(`🔧 Adding node ${nodeName} under parent ${parentId}`);
-      const updatedGraph = addNode(nodeName, parentId, elkGraph);
-      setElkGraph(updatedGraph);
-      console.log(`✅ Node added successfully`);
-      return updatedGraph;
-    } catch (error) {
-      console.error(`❌ Error adding node:`, error);
-      throw error;
-    }
-  }, [elkGraph]);
+    return mutate("Adding node", addNode, nodeName, parentId);
+  }, [mutate]);
 
   const handleDeleteNode = useCallback((nodeId: string) => {
-    try {
-      console.log(`🔧 Deleting node ${nodeId}`);
-      const updatedGraph = deleteNode(nodeId, elkGraph);
-      setElkGraph(updatedGraph);
-      console.log(`✅ Node deleted successfully`);
-      return updatedGraph;
-    } catch (error) {
-      console.error(`❌ Error deleting node:`, error);
-      throw error;
-    }
-  }, [elkGraph]);
+    return mutate("Deleting node", deleteNode, nodeId);
+  }, [mutate]);
 
   const handleMoveNode = useCallback((nodeId: string, newParentId: string) => {
-    try {
-      console.log(`🔧 Moving node ${nodeId} to parent ${newParentId}`);
-      const updatedGraph = moveNode(nodeId, newParentId, elkGraph);
-      setElkGraph(updatedGraph);
-      console.log(`✅ Node moved successfully`);
-      return updatedGraph;
-    } catch (error) {
-      console.error(`❌ Error moving node:`, error);
-      throw error;
-    }
-  }, [elkGraph]);
+    return mutate("Moving node", moveNode, nodeId, newParentId);
+  }, [mutate]);
 
   const handleAddEdge = useCallback((edgeId: string, sourceId: string, targetId: string) => {
-    try {
-      console.log(`🔧 Adding edge ${edgeId} from ${sourceId} to ${targetId}`);
-      const updatedGraph = addEdge(edgeId, null, sourceId, targetId, elkGraph);
-      setElkGraph(updatedGraph);
-      console.log(`✅ Edge added successfully`);
-      return updatedGraph;
-    } catch (error) {
-      console.error(`❌ Error adding edge:`, error);
-      throw error;
-    }
-  }, [elkGraph]);
+    return mutate("Adding edge", addEdge, edgeId, null, sourceId, targetId);
+  }, [mutate]);
 
   const handleDeleteEdge = useCallback((edgeId: string) => {
-    try {
-      console.log(`🔧 Deleting edge ${edgeId}`);
-      const updatedGraph = deleteEdge(edgeId, elkGraph);
-      setElkGraph(updatedGraph);
-      console.log(`✅ Edge deleted successfully`);
-      return updatedGraph;
-    } catch (error) {
-      console.error(`❌ Error deleting edge:`, error);
-      throw error;
-    }
-  }, [elkGraph]);
+    return mutate("Deleting edge", deleteEdge, edgeId);
+  }, [mutate]);
 
   const handleGroupNodes = useCallback((nodeIds: string[], parentId: string, groupId: string) => {
-    try {
-      console.log(`🔧 Grouping nodes ${nodeIds.join(', ')} under ${parentId} as ${groupId}`);
-      const updatedGraph = groupNodes(nodeIds, parentId, groupId, elkGraph);
-      setElkGraph(updatedGraph);
-      console.log(`✅ Nodes grouped successfully`);
-      return updatedGraph;
-    } catch (error) {
-      console.error(`❌ Error grouping nodes:`, error);
-      throw error;
-    }
-  }, [elkGraph]);
+    return mutate("Grouping nodes", groupNodes, nodeIds, parentId, groupId);
+  }, [mutate]);
 
   const handleRemoveGroup = useCallback((groupId: string) => {
-    try {
-      console.log(`🔧 Removing group ${groupId}`);
-      const updatedGraph = removeGroup(groupId, elkGraph);
-      setElkGraph(updatedGraph);
-      console.log(`✅ Group removed successfully`);
-      return updatedGraph;
-    } catch (error) {
-      console.error(`❌ Error removing group:`, error);
-      throw error;
-    }
-  }, [elkGraph]);
+    return mutate("Removing group", removeGroup, groupId);
+  }, [mutate]);
 
   /* ------------------------------------------------------------------
    * Node / Edge change handlers for React‑Flow
@@ -180,15 +132,18 @@ export function useElkFlow(initialGraph: any) {
 
     const runLayout = async () => {
       try {
-        const graphCopy = JSON.parse(JSON.stringify(elkGraph));
+        const graphCopy = structuredClone(elkGraph);
+        
+        // 1. Apply ensureIds to guarantee all arrays exist for proper hash comparison
         const graphWithOptions = ensureIds(graphCopy);
-
-        // Skip layout if structural hash unchanged
-        const hash = JSON.stringify(graphWithOptions);
+        
+        // 2. Compute hash AFTER structure is guaranteed by ensureIds
+        const hash = structuralHash(graphWithOptions);
         if (hash === prevElkGraphRef.current) return;
         prevElkGraphRef.current = hash;
 
         const layoutResult = await elk.layout(graphWithOptions);
+        console.log('ELK Layout Result:', layoutResult);
         prevLayoutResultRef.current = layoutResult;
         setLayoutedElkGraph(layoutResult);
         setLayoutVersion((v) => v + 1);

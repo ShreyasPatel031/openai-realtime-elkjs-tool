@@ -22,7 +22,7 @@ export const addNode = (nodeName: string, parentId: string, graph: any) => {
   // Add the new node to the parent's children
   parentNode.children.push(newNode);
   
-  return JSON.parse(JSON.stringify(graph)); // Return a deep copy
+  return graph;
 };
 
 // Delete a node from the graph
@@ -76,7 +76,7 @@ export const deleteNode = (nodeId: string, graph: any) => {
     });
   }
   
-  return JSON.parse(JSON.stringify(graph)); // Return a deep copy
+  return graph;
 };
 
 // Move a node to a different parent
@@ -125,7 +125,7 @@ export const moveNode = (nodeId: string, newParentId: string, graph: any) => {
   }
   newParent.children.push(nodeToMove);
   
-  return JSON.parse(JSON.stringify(graph)); // Return a deep copy
+  return graph;
 };
 
 // Add an edge between nodes
@@ -193,7 +193,7 @@ export const addEdge = (edgeId: string, containerId: string | null, sourceId: st
   
   commonAncestor.edges.push(newEdge);
   
-  return JSON.parse(JSON.stringify(graph)); // Return a deep copy
+  return graph;
 };
 
 // Delete an edge
@@ -224,7 +224,7 @@ export const deleteEdge = (edgeId: string, graph: any) => {
     const initialLength = graph.edges.length;
     graph.edges = graph.edges.filter((edge: any) => edge.id !== edgeId);
     if (graph.edges.length < initialLength) {
-      return JSON.parse(JSON.stringify(graph)); // Edge found and removed
+      return graph;
     }
   }
   
@@ -234,7 +234,7 @@ export const deleteEdge = (edgeId: string, graph: any) => {
     throw new Error(`Edge '${edgeId}' not found`);
   }
   
-  return JSON.parse(JSON.stringify(graph)); // Return a deep copy
+  return graph;
 };
 
 // Group nodes together
@@ -279,7 +279,7 @@ export const groupNodes = (nodeIds: string[], parentId: string, groupId: string,
   // Add the group node to the parent
   parentNode.children.push(groupNode);
   
-  return JSON.parse(JSON.stringify(graph)); // Return a deep copy
+  return graph;
 };
 
 // Remove a group, moving its children to the parent
@@ -320,5 +320,5 @@ export const removeGroup = (groupId: string, graph: any) => {
   // Replace the group with its children
   parentNode.children.splice(groupIndex, 1, ...groupChildren);
   
-  return JSON.parse(JSON.stringify(graph)); // Return a deep copy
+  return graph;
 }; 

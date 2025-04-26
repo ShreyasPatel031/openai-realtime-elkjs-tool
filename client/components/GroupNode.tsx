@@ -13,6 +13,13 @@ interface GroupNodeProps {
   selected?: boolean;
 }
 
+// Shared handle style to avoid per-render object creation
+const baseHandleStyle = {
+  background: '#555',
+  opacity: 0.01,
+  zIndex: 5000
+};
+
 const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
   const groupStyle = {
     background: 'rgba(240, 240, 240, 0.6)',
@@ -28,9 +35,6 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
     zIndex: 1,
   };
 
-  // For invisible handles that still support connections
-  const handleOpacity = 0.01;
-
   return (
     <div style={groupStyle}>
       {/* Add standard connection handles (invisible but functional) */}
@@ -38,22 +42,14 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
         type="target"
         position={Position.Left}
         id="left-0"
-        style={{ 
-          background: '#555',
-          opacity: handleOpacity,
-          zIndex: 5000
-        }}
+        style={baseHandleStyle}
       />
       
       <Handle
         type="source"
         position={Position.Right}
         id="right-0"
-        style={{ 
-          background: '#555',
-          opacity: handleOpacity,
-          zIndex: 5000
-        }}
+        style={baseHandleStyle}
       />
       
       {/* Add dynamic handles based on the data */}
@@ -64,10 +60,8 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
           position={Position.Left}
           id={`left-${index}`}
           style={{ 
-            top: yPos, 
-            background: '#555',
-            opacity: handleOpacity,
-            zIndex: 5000
+            ...baseHandleStyle,
+            top: yPos
           }}
         />
       ))}
@@ -79,10 +73,8 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
           position={Position.Right}
           id={`right-${index}`}
           style={{ 
-            top: yPos, 
-            background: '#555',
-            opacity: handleOpacity,
-            zIndex: 5000
+            ...baseHandleStyle,
+            top: yPos
           }}
         />
       ))}

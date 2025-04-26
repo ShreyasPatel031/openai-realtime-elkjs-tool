@@ -148,7 +148,12 @@ export function useElkFlow(initialGraph: any) {
         setLayoutedElkGraph(layoutResult);
         setLayoutVersion((v) => v + 1);
 
-        const { nodes: rfNodes, edges: rfEdges } = processLayoutedGraph(layoutResult);
+        const { nodes: rfNodes, edges: rfEdges } = processLayoutedGraph(layoutResult, {
+          width: layoutResult.width,
+          height: layoutResult.height,
+          groupWidth: layoutResult.width,
+          groupHeight: layoutResult.height
+        });
         setNodes(rfNodes);
         setEdges(rfEdges);
       } catch (err) {

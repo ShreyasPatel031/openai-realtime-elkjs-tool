@@ -1,5 +1,6 @@
 import React from 'react';
 import { Handle, Position } from 'reactflow';
+import { groupHandleStyle } from './graph/styles/handles';
 
 interface GroupNodeProps {
   data: {
@@ -12,13 +13,6 @@ interface GroupNodeProps {
   id: string;
   selected?: boolean;
 }
-
-// Shared handle style to avoid per-render object creation
-const baseHandleStyle = {
-  background: '#555',
-  opacity: 0.01,
-  zIndex: 5000
-};
 
 const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
   const groupStyle = {
@@ -35,23 +29,14 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
     zIndex: 1,
   };
 
+  console.log('[🧩 GROUP-STYLE]', id, {
+    padding: groupStyle.padding,
+    border: groupStyle.border,
+    height: groupStyle.height,
+  });
+
   return (
     <div style={groupStyle}>
-      {/* Add standard connection handles (invisible but functional) */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="left-0"
-        style={baseHandleStyle}
-      />
-      
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="right-0"
-        style={baseHandleStyle}
-      />
-      
       {/* Add dynamic handles based on the data */}
       {data.leftHandles && data.leftHandles.map((yPos: string, index: number) => (
         <Handle
@@ -60,7 +45,7 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
           position={Position.Left}
           id={`left-${index}`}
           style={{ 
-            ...baseHandleStyle,
+            ...groupHandleStyle,
             top: yPos
           }}
         />
@@ -73,7 +58,8 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
           position={Position.Right}
           id={`right-${index}`}
           style={{ 
-            ...baseHandleStyle,
+            ...groupHandleStyle,
+            position: 'absolute',
             top: yPos
           }}
         />

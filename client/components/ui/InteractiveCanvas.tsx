@@ -42,6 +42,7 @@ import ConnectionStatus from "../ConnectionStatus"
 
 import Chatbox from "./Chatbox"
 import ChatWindow from "./ChatWindow"
+// import DebugGeometry from '../DebugGeometry'
 
 const ChatBox = Chatbox as React.ComponentType<ChatBoxProps>
 
@@ -332,6 +333,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
               }}
             />
+            {/* <DebugGeometry /> */}
           </ReactFlow>
         </div>
         

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Handle, Position } from 'reactflow';
+import { baseHandleStyle } from './graph/styles/handles';
 
 interface CustomNodeProps {
   data: {
@@ -12,12 +13,6 @@ interface CustomNodeProps {
   id: string;
   selected?: boolean;
 }
-
-// Shared handle style to avoid per-render object creation
-const baseHandleStyle = {
-  background: '#555',
-  opacity: 0.8
-};
 
 const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
   const { leftHandles = [], rightHandles = [] } = data;
@@ -41,22 +36,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
 
   return (
     <div style={nodeStyle}>
-      {/* Standard handles */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="left"
-        style={baseHandleStyle}
-      />
-      
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="right"
-        style={baseHandleStyle}
-      />
-      
-      {/* Custom handle positions if needed */}
+      {/* Custom handle positions */}
       {leftHandles.map((yPos: string, index: number) => (
         <Handle
           key={`left-${index}`}
@@ -65,6 +45,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
           id={`left-${index}`}
           style={{ 
             ...baseHandleStyle,
+            position: 'absolute',
             top: yPos
           }}
         />

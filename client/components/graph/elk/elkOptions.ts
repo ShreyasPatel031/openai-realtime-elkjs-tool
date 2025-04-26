@@ -3,17 +3,17 @@ export const ROOT_DEFAULT_OPTIONS = {
     "algorithm": "layered",
     "elk.direction": "RIGHT",
     "hierarchyHandling": "INCLUDE_CHILDREN",
-    "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
+    // "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
     "elk.layered.considerModelOrder": true,
     "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
     "elk.layered.nodePlacement.favorStraightEdges": true,
     "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
-    "spacing.edgeNode": 30,
-    "spacing.nodeNode": 30,
-    "spacing.edgeEdge": 30,
-    "spacing.nodeNodeBetweenLayers": 40,
-    "spacing.edgeNodeBetweenLayers": 40,
-    "spacing.edgeEdgeBetweenLayers": 30,
+    "spacing.edgeNode": 50,
+    "spacing.nodeNode": 50,
+    "spacing.edgeEdge": 50,
+    "spacing.edgeEdgeBetweenLayers": 80,
+    "spacing.nodeNodeBetweenLayers": 80,
+    "spacing.edgeNodeBetweenLayers": 80,
   }
 };
 
@@ -28,8 +28,8 @@ export const NON_ROOT_DEFAULT_OPTIONS = {
     "spacing.edgeNode": 30,
     "spacing.nodeNode": 30,
     "spacing.edgeEdge": 30,
-    "spacing.nodeNodeBetweenLayers": 40,
-    "spacing.edgeNodeBetweenLayers": 40,
-    "spacing.edgeEdgeBetweenLayers": 30,
+    "spacing.edgeEdgeBetweenLayers": 50,
+    "spacing.nodeNodeBetweenLayers": 50,
+    "spacing.edgeNodeBetweenLayers": 50,
   }
 }; 

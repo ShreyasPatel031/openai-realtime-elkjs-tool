@@ -1,3 +1,7 @@
+/**
+ * Main application component for the OpenAI Real-time Console.
+ * Handles WebRTC connection management, session state, and message handling.
+ */
 import { useEffect, useRef, useState } from "react";
 import logo from "/assets/openai-logomark.svg";
 import EventLog from "./console/EventLog";
@@ -6,7 +10,12 @@ import ToolPanel from "./ui/ToolPanel";
 import ElkTestPage from "./test/ElkTestPage";
 import ErrorBoundary from "./console/ErrorBoundary";
 import InteractiveCanvas from "./ui/InteractiveCanvas";
+import { useChatSession } from "../hooks/useChatSession";
+import { RtcClient } from "../realtime/RtcClient";
 
+/**
+ * MainContent component - Renders the classic UI layout with tool panel and session controls
+ */
 function MainContent({ events, isSessionActive, startSession, stopSession, sendClientEvent, sendTextMessage }) {
   return (
     <>
@@ -42,197 +51,96 @@ function MainContent({ events, isSessionActive, startSession, stopSession, sendC
 }
 
 export default function App() {
+  // State management
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [events, setEvents] = useState([]);
-  const [dataChannel, setDataChannel] = useState(null);
-  const [isDataChannelReady, setIsDataChannelReady] = useState(false);
-  const [currentPage, setCurrentPage] = useState('main');
   const [showNewUI, setShowNewUI] = useState(true);
-  const messageQueue = useRef([]);
-  const peerConnection = useRef(null);
-  const audioElement = useRef(null);
 
+  // RTC client reference
+  const rtc = useRef(null);
+
+  // Get chat session refs
+  const { initSentRef, processedCalls } = useChatSession({
+    isSessionActive,
+    sendTextMessage,
+    sendClientEvent,
+    events,
+    elkGraph: null,
+    setElkGraph: () => {},
+    elkGraphDescription: '',
+    agentInstruction: ''
+  });
+
+  /**
+   * Initiates a new WebRTC session with OpenAI's Realtime API
+   */
   async function startSession() {
     // Get a session token for OpenAI Realtime API
     const tokenResponse = await fetch("/token");
     const data = await tokenResponse.json();
     const EPHEMERAL_KEY = data.client_secret.value;
 
-    // Create a peer connection
-    const pc = new RTCPeerConnection();
-
-    // Set up to play remote audio from the model
-    audioElement.current = document.createElement("audio");
-    audioElement.current.autoplay = true;
-    pc.ontrack = (e) => (audioElement.current.srcObject = e.streams[0]);
-
-    // Add local audio track for microphone input in the browser
-    const ms = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-    });
-    pc.addTrack(ms.getTracks()[0]);
-
-    // Set up data channel for sending and receiving events
-    const dc = pc.createDataChannel("oai-events");
-    setDataChannel(dc);
-
-    // Start the session using the Session Description Protocol (SDP)
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    const baseUrl = "https://api.openai.com/v1/realtime";
-    const model = "gpt-4o-realtime-preview-2024-12-17";
-    // const model = "gpt-4o-mini-realtime-preview-2024-12-17";
-    const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
-      method: "POST",
-      body: offer.sdp,
-      headers: {
-        Authorization: `Bearer ${EPHEMERAL_KEY}`,
-        "Content-Type": "application/sdp",
-      },
-    });
-
-    const answer = {
-      type: "answer",
-      sdp: await sdpResponse.text(),
-    };
-    await pc.setRemoteDescription(answer);
-
-    peerConnection.current = pc;
-  }
-
-  // Stop current session, clean up peer connection and data channel
-  function stopSession() {
-    if (dataChannel) {
-      dataChannel.close();
-    }
-
-    peerConnection.current.getSenders().forEach((sender) => {
-      if (sender.track) {
-        sender.track.stop();
-      }
-    });
-
-    if (peerConnection.current) {
-      peerConnection.current.close();
-    }
-
-    setIsSessionActive(false);
-    setDataChannel(null);
-    peerConnection.current = null;
-  }
-
-  // Send a message to the model
-  function sendClientEvent(message) {
-
-    if (!dataChannel || dataChannel.readyState !== "open") {
-      console.log("Data channel not ready (state: " + (dataChannel ? dataChannel.readyState : "null") + "), queueing message");
-      console.log("Message size:", JSON.stringify(message).length);
-      
-      // Limit queue size to prevent memory issues
-      if (messageQueue.current.length < 100) {
-        messageQueue.current.push(message);
-      } else {
-        console.warn("Message queue full, dropping message");
-      }
-      
-      // If session is active but channel is closed, try to reprocess the queue after a short delay
-      // This can help with temporary disconnections
-      if (isSessionActive && dataChannel && dataChannel.readyState === "closed") {
-        setTimeout(() => {
-          if (isDataChannelReady) {
-            processMessageQueue();
-          }
-        }, 500);
-      }
-      
-      return false; // Return false to indicate message was not sent immediately
-    }
-
-    // At this point we know the data channel is open
-    try {
-      const timestamp = new Date().toLocaleTimeString();
-      message.event_id = message.event_id || crypto.randomUUID();
-
-      console.log("Sending message, size:", JSON.stringify(message).length);
-      dataChannel.send(JSON.stringify(message));
-      
-      if (!message.timestamp) {
-        message.timestamp = timestamp;
-      }
-      setEvents((prev) => [message, ...prev]);
-      return true; // Return true to indicate message was sent successfully
-    } catch (error) {
-      console.error("Failed to send message:", error);
-      console.log("Message size that failed:", JSON.stringify(message).length);
-      
-      // Only queue the message if it's not too large to send
-      const messageSize = JSON.stringify(message).length;
-      if (messageSize < 65536) { // WebRTC has a practical limit of ~64KB
-        messageQueue.current.push(message);
-      } else {
-        console.error("Message too large to queue:", messageSize);
-      }
-      
-      return false; // Return false to indicate message was not sent
-    }
-  }
-
-  // Process queued messages
-  function processMessageQueue() {
-    if (!dataChannel || dataChannel.readyState !== "open") {
-      console.log("Data channel not ready for processing queue, state:", 
-                  dataChannel ? dataChannel.readyState : "null");
-      return false;
-    }
-    
-    let processedCount = 0;
-    const maxProcessPerBatch = 10; // Process at most 10 messages at once
-    
-    while (messageQueue.current.length > 0 && 
-           processedCount < maxProcessPerBatch && 
-           dataChannel.readyState === "open") {
-      
-      const message = messageQueue.current.shift();
-      if (!message) continue;
-      
-      const timestamp = new Date().toLocaleTimeString();
-      message.event_id = message.event_id || crypto.randomUUID();
-      
-      try {
-        dataChannel.send(JSON.stringify(message));
-        if (!message.timestamp) {
-          message.timestamp = timestamp;
+    // Create RTC client or reuse existing one
+    if (!rtc.current) {
+      rtc.current = new RtcClient(event => {
+        if (!event.timestamp) {
+          event.timestamp = new Date().toLocaleTimeString();
         }
-        setEvents((prev) => [message, ...prev]);
-        processedCount++;
-      } catch (error) {
-        console.error("Failed to send queued message:", error);
-        messageQueue.current.unshift(message); // Put it back at the front of the queue
-        break;
-      }
+        setEvents(prev => [event, ...prev]);
+      });
     }
     
-    // If there are more messages and the channel is still open, schedule the next batch
-    if (messageQueue.current.length > 0 && dataChannel.readyState === "open") {
-      setTimeout(processMessageQueue, 50);
-    }
-    
-    return processedCount > 0;
+    // Connect the client
+    await rtc.current.connect(EPHEMERAL_KEY);
+    setIsSessionActive(true);
   }
 
-  // Send a text message to the model
-  function sendTextMessage(message) {
-    // Split message into chunks of 4000 characters
-    const chunkSize = 40000;
-    const chunks = [];
-    for (let i = 0; i < message.length; i += chunkSize) {
-      chunks.push(message.slice(i, i + chunkSize));
+  /**
+   * Terminates the current WebRTC session
+   */
+  function stopSession() {
+    // Close RTC client if it exists
+    if (rtc.current) {
+      rtc.current.close();
     }
 
+    // Reset refs if they exist
+    if (initSentRef && typeof initSentRef === 'object' && initSentRef.current !== undefined) {
+      initSentRef.current = false;
+    }
+    
+    if (processedCalls && typeof processedCalls === 'object' && processedCalls.current !== undefined) {
+      processedCalls.current.clear();
+    }
+
+    // Update state
+    setIsSessionActive(false);
+  }
+
+  /**
+   * Sends a message to the model through the WebRTC data channel
+   */
+  function sendClientEvent(message) {
+    if (!rtc.current) return false;
+    
+    // Add event ID if not present
+    if (!message.event_id) {
+      message.event_id = crypto.randomUUID();
+    }
+    
+    return rtc.current.send(message);
+  }
+
+  /**
+   * Sends a text message to the model, handling large messages by chunking
+   */
+  function sendTextMessage(message) {
+    // Split message into chunks of 40000 characters
+    const chunks = message.match(/.{1,40000}/gs) || [];
+    
     // Send each chunk as a separate message
     chunks.forEach((chunk, index) => {
-      const event = {
+      sendClientEvent({
         type: "conversation.item.create",
         item: {
           type: "message",
@@ -244,9 +152,7 @@ export default function App() {
             },
           ],
         },
-      };
-
-      sendClientEvent(event);
+      });
       
       // Only send response.create after the last chunk
       if (index === chunks.length - 1) {
@@ -255,83 +161,14 @@ export default function App() {
     });
   }
 
-  // Add an effect to monitor data channel status
+  // Cleanup on unmount
   useEffect(() => {
-    if (dataChannel) {
-      // Set up an interval to check the data channel state
-      const intervalId = setInterval(() => {
-        if (dataChannel.readyState === "closed" && isSessionActive) {
-          console.log("Data channel closed but session marked as active - updating status");
-          setIsDataChannelReady(false);
-          
-          // If closed for too long, mark session as inactive
-          if (Date.now() - lastDataChannelActivityRef.current > 10000) {
-            console.log("Data channel closed for too long, marking session as inactive");
-            setIsSessionActive(false);
-          }
-        } 
-        else if (dataChannel.readyState === "open" && !isDataChannelReady) {
-          console.log("Data channel open but marked as not ready - updating status");
-          setIsDataChannelReady(true);
-          lastDataChannelActivityRef.current = Date.now();
-          
-          // Process any queued messages
-          processMessageQueue();
-        }
-      }, 1000);
-      
-      return () => clearInterval(intervalId);
-    }
-  }, [dataChannel, isSessionActive, isDataChannelReady]);
-
-  // Use a ref to track last data channel activity time
-  const lastDataChannelActivityRef = useRef(Date.now());
-
-  // Update state when the data channel changes
-  useEffect(() => {
-    if (dataChannel) {
-      setIsDataChannelReady(dataChannel.readyState === "open");
-      
-      dataChannel.addEventListener("message", (e) => {
-        try {
-          const event = JSON.parse(e.data);
-          if (!event.timestamp) {
-            event.timestamp = new Date().toLocaleTimeString();
-          }
-          setEvents((prev) => [event, ...prev]);
-          lastDataChannelActivityRef.current = Date.now();
-        } catch (error) {
-          console.error("Error parsing message data:", error);
-          console.error("Raw data:", e.data);
-          // Add a safe event to the list
-          setEvents((prev) => [{
-            type: "error",
-            timestamp: new Date().toLocaleTimeString(),
-            error: "Failed to parse message data"
-          }, ...prev]);
-        }
-      });
-
-      dataChannel.addEventListener("open", () => {
-        console.log("Data channel opened");
-        setIsSessionActive(true);
-        setIsDataChannelReady(true);
-        lastDataChannelActivityRef.current = Date.now();
-        setEvents([]);
-        processMessageQueue();
-      });
-
-      dataChannel.addEventListener("close", () => {
-        console.log("Data channel closed");
-        setIsDataChannelReady(false);
-        // Don't immediately set session inactive - allow for reconnection
-        // setIsSessionActive(false); 
-      });
-    }
-  }, [dataChannel]);
+    return () => stopSession(); // Auto-cleanup on component unmount
+  }, []);
 
   return (
     <div className="flex flex-col h-screen">
+      {/* Header with logo and connection status */}
       <header className="h-16 bg-gray-100 flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
           <img src={logo} alt="OpenAI Logo" className="w-8 h-8" />
@@ -361,6 +198,8 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {/* Main content area with either modern or classic UI */}
       <main className="flex-grow relative">
         {showNewUI ? (
           <ErrorBoundary>
@@ -387,3 +226,4 @@ export default function App() {
     </div>
   );
 }
+

@@ -1,7 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const path = fileURLToPath(import.meta.url);
 
 export default defineConfig({
+  root: join(dirname(path), "client"),
   plugins: [react()],
   optimizeDeps: {
     include: ['@excalidraw/excalidraw', 'roughjs'],

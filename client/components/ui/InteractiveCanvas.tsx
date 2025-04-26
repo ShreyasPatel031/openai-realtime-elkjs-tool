@@ -128,7 +128,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     messages,
     isSending,
     messageSendStatus,
-    initSentRef,
     handleChatSubmit,
     processEvents,
     safeSendClientEvent

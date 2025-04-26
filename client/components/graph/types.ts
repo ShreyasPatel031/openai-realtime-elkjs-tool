@@ -62,4 +62,25 @@ export interface ElkGraph {
   children?: ElkGraphNode[];
   edges?: ElkGraphEdge[];
   layoutOptions?: Record<string, any>;
+}
+
+export interface InputAudioTranscription {
+  /**
+   * The language of the input audio. Supplying the input language in ISO-639-1 (e.g. en) 
+   * format will improve accuracy and latency.
+   */
+  language?: string;
+  
+  /**
+   * The model to use for transcription, current options are gpt-4o-transcribe, 
+   * gpt-4o-mini-transcribe, and whisper-1.
+   */
+  model?: string;
+  
+  /**
+   * An optional text to guide the model's style or continue a previous audio segment. 
+   * For whisper-1, the prompt is a list of keywords. For gpt-4o-transcribe models, 
+   * the prompt is a free text string, for example "expect words related to technology".
+   */
+  prompt?: string;
 } 

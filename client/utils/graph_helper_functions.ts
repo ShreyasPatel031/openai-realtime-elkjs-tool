@@ -214,13 +214,17 @@ export function moveNode(
 ): ElkNode {
   const node = findNodeById(layout, nodeId);
   const newParent = findNodeById(layout, newParentId);
-  if (!node || !newParent) {
-    console.error("Node or new parent not found");
+  if (!node) {
+    console.warn(`Node not found: ${nodeId}`);
+    return layout;
+  }
+  if (!newParent) {
+    console.warn(`New parent not found: ${newParentId}`);
     return layout;
   }
   const oldParent = findParentOfNode(layout, nodeId);
   if (!oldParent || !oldParent.children) {
-    console.error(`Node not found in any parent: ${nodeId}`);
+    console.warn(`Node not found in any parent: ${nodeId}`);
     return layout;
   }
   // Remove the node from its old parent
@@ -300,7 +304,7 @@ export function groupNodes(
 ): ElkNode {
   const parent = findNodeById(layout, parentId);
   if (!parent || !parent.children) {
-    console.error(`Parent not found: ${parentId}`);
+    console.warn(`Parent not found: ${parentId}`);
     return layout;
   }
   
@@ -335,8 +339,13 @@ export function groupNodes(
     groupNode.children.push(node);
   }
   
-  // Add the group node to the parent
-  parent.children.push(groupNode);
+  // Only add the group if it has children
+  if (groupNode.children && groupNode.children.length > 0) {
+    parent.children.push(groupNode);
+  } else {
+    console.warn(`No nodes were moved to group ${groupId}`);
+    return layout;
+  }
   
   // Update edges for moved nodes
   if (groupNode.children) {
@@ -355,12 +364,12 @@ export function groupNodes(
 export function removeGroup(groupId: string, layout: ElkNode): ElkNode {
   const groupNode = findNodeById(layout, groupId);
   if (!groupNode) {
-    console.error(`Group not found: ${groupId}`);
+    console.warn(`Group not found: ${groupId}`);
     return layout;
   }
   const parent = findParentOfNode(layout, groupId);
   if (!parent || !parent.children) {
-    console.error("The group node does not have a parent (maybe it is the root).");
+    console.warn(`The group node does not have a parent (maybe it is the root).`);
     return layout;
   }
   if (groupNode.children) {

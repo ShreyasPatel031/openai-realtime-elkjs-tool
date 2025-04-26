@@ -1,11 +1,14 @@
 import express from "express";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
+import { fileURLToPath } from "url";
+import { dirname, resolve } from "path";
 import "dotenv/config";
 
 const app = express();
 const port = process.env.PORT || 3000;
 const apiKey = process.env.OPENAI_API_KEY;
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 if (!apiKey) {
   console.error("OPENAI_API_KEY is not set in .env file");
@@ -16,6 +19,8 @@ if (!apiKey) {
 const vite = await createViteServer({
   server: { middlewareMode: true },
   appType: "custom",
+  configFile: resolve(__dirname, "vite.config.js"),
+  root: resolve(__dirname, "client"),
 });
 app.use(vite.middlewares);
 

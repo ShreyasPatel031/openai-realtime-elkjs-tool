@@ -30,8 +30,8 @@ import { ChatBoxProps, Message as ChatMessage, ChatWindowProps, InteractiveCanva
 import { CustomNode, NodeData, EdgeData, ElkGraph, ElkGraphNode, ElkGraphEdge } from "../../types/graph"
 import { ROOT_DEFAULT_OPTIONS, NON_ROOT_DEFAULT_OPTIONS } from "../graph/elk/elkOptions"
 import { getInitialElkGraph } from "../graph/initialGraph"
-import { addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup } from "../graph/elk/mutations"
-import { useElkFlow } from "../../hooks/useElkFlow"
+import { addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate } from "../graph/elk/mutations"
+import { useElkToReactflowGraphConverter } from "../../hooks/useElkToReactflowGraphConverter"
 import { useChatSession } from '../../hooks/useChatSession'
 
 // Import extracted components
@@ -39,6 +39,7 @@ import CustomNodeComponent from "../CustomNode"
 import GroupNode from "../GroupNode"
 import StepEdge from "../StepEdge"
 import ConnectionStatus from "../ConnectionStatus"
+import DevPanel from "../DevPanel"
 
 import Chatbox from "./Chatbox"
 import ChatWindow from "./ChatWindow"
@@ -102,6 +103,21 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   sendClientEvent = () => {},
   events = [],
 }) => {
+  // State for DevPanel visibility
+  const [showDev, setShowDev] = useState(false);
+  
+  // State for visualization mode (ReactFlow vs SVG)
+  const [useReactFlow, setUseReactFlow] = useState(true);
+  
+  // State for SVG content when in SVG mode
+  const [svgContent, setSvgContent] = useState<string | null>(null);
+  
+  // Log initial graph
+  useEffect(() => {
+    const initialGraph = getInitialElkGraph();
+    console.log('1. Initial Graph (barebones):', initialGraph);
+  }, []);
+  
   // Use the new ElkFlow hook instead of managing ELK state directly
   const {
     // State
@@ -118,8 +134,55 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     // Handlers
     onNodesChange,
     onEdgesChange,
-    onConnect
-  } = useElkFlow(getInitialElkGraph());
+    onConnect,
+    
+  } = useElkToReactflowGraphConverter(getInitialElkGraph());
+  
+  // Log processed graph with options
+  useEffect(() => {
+    console.log('2. Processed Graph (with elkOptions):', elkGraph);
+  }, [elkGraph]);
+  
+  // Log final layout used for rendering
+  useEffect(() => {
+    console.log('3. Final Layout (used for rendering):', {
+      nodes: nodes.map(node => ({
+        id: node.id,
+        position: node.position,
+        data: node.data,
+        parentNode: node.parentNode
+      })),
+      edges: edges.map(edge => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        type: edge.type
+      }))
+    });
+  }, [nodes, edges]);
+
+  // const stripGeom = (g: any) =>
+  //   JSON.parse(
+  //     JSON.stringify(g),
+  //     (key, val) => 
+  //       (key === 'x' ||
+  //        key === 'y' ||
+  //        key === 'sections' ||
+  //        key === 'absoluteBendPoints')
+  //         ? undefined
+  //         : val
+  //   );
+  
+  // Handler for graph changes from DevPanel
+  const handleGraphChange = useCallback((newGraph: ElkGraph) => {
+    console.group('[DevPanel] Graph Change');
+    console.log('raw newGraph:', newGraph);
+    // console.log('raw newGraph:', stripGeom(newGraph));
+    // setElkGraph(stripGeom(newGraph));
+    setElkGraph(newGraph);
+    console.log('…called setElkGraph');
+    console.groupEnd();
+  }, [setElkGraph]);
   
   // Memoize node and edge types to prevent recreation on each render
   const memoizedNodeTypes = useMemo(() => nodeTypes, []);
@@ -141,13 +204,14 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     setElkGraph,
     elkGraphDescription,
     agentInstruction,
-    addNode,
-    deleteNode,
-    moveNode,
-    addEdge,
-    deleteEdge,
-    groupNodes,
-    removeGroup
+    addNode: addNode as any,
+    deleteNode: deleteNode as any,
+    moveNode: moveNode as any,
+    addEdge: addEdge as any,
+    deleteEdge: deleteEdge as any,
+    groupNodes: groupNodes as any,
+    removeGroup: removeGroup as any,
+    batchUpdate: batchUpdate as any
   });
   
   // Process events when they change
@@ -230,12 +294,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     // Run the fix immediately
     ensureEdgesVisible();
     
-    // Set up a more frequent periodic check to ensure edges remain visible
-    const intervalId = setInterval(ensureEdgesVisible, 150);
+    // Set up animation frame for next paint
+    const id = requestAnimationFrame(ensureEdgesVisible);
     
-    // Clear the interval on cleanup
-    return () => clearInterval(intervalId);
-  }, [setEdges, selectedNodeIds]); // Important: Add selectedNodeIds as dependency
+    // Clean up
+    return () => cancelAnimationFrame(id);
+  }, [setEdges, layoutVersion]); // Run on mount and when layout changes
 
   // Update message handling to use the hook's state
   const handleNodeClick = useCallback((nodeId: string) => {
@@ -243,9 +307,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     
     const message = `I want to focus on node ${nodeId}`;
     safeSendClientEvent({
-      type: 'node_click',
-      nodeId,
-      message
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'text', text: message }]
+      }
     });
   }, [isSessionActive, safeSendClientEvent]);
 
@@ -254,88 +321,122 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     
     const message = `I want to focus on edge ${edgeId}`;
     safeSendClientEvent({
-      type: 'edge_click',
-      edgeId,
-      message
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'text', text: message }]
+      }
     });
   }, [isSessionActive, safeSendClientEvent]);
 
+  // Handler for switching visualization modes
+  const handleToggleVisMode = useCallback((reactFlowMode: boolean) => {
+    setUseReactFlow(reactFlowMode);
+  }, []);
+  
+  // Handler for receiving SVG content from DevPanel
+  const handleSvgGenerated = useCallback((svg: string) => {
+    setSvgContent(svg);
+  }, []);
 
   return (
     <div className="w-full h-full flex flex-col overflow-hidden bg-white dark:bg-black">
       <div className="flex-1 relative min-h-0 overflow-hidden">
-        {/* ReactFlow container */}
-        <div className="absolute inset-0 h-full w-full z-0">
-          <ReactFlow 
-            nodes={nodes} 
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onSelectionChange={onSelectionChange}
-            nodeTypes={memoizedNodeTypes}
-            edgeTypes={memoizedEdgeTypes}
-            className="w-full h-full bg-gray-50 dark:bg-gray-950"
-            defaultEdgeOptions={{
-              style: { stroke: '#000', strokeWidth: 2 },
-              animated: false,
-              zIndex: 5000,
-            }}
-            fitView
-            minZoom={0.2}
-            maxZoom={3}
-            defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-            zoomOnScroll
-            panOnScroll
-            panOnDrag
-            selectionOnDrag
-            elementsSelectable={true}
-            nodesDraggable={true}
-            nodesConnectable={true}
-            selectNodesOnDrag={true}
-            style={{ cursor: 'grab' }}
-            elevateEdgesOnSelect={true}
-            disableKeyboardA11y={false}
-            edgesFocusable={true}
-            edgesUpdatable={true}
-            deleteKeyCode="Delete"
-            connectOnClick={false}
-            elevateNodesOnSelect={false}
-          >
-            <Background 
-              color="#333" 
-              gap={16} 
-              size={1}
-              variant={BackgroundVariant.Dots}
-            />
-            <Controls 
-              position="bottom-left" 
-              showInteractive={true}
-              showZoom={true}
-              showFitView={true}
-              style={{ 
-                backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                borderRadius: '8px',
-                padding: '8px',
-                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                color: '#000'
+        {/* ReactFlow container - only show when in ReactFlow mode */}
+        {useReactFlow && (
+          <div className="absolute inset-0 h-full w-full z-0">
+            <ReactFlow 
+              nodes={nodes} 
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onSelectionChange={onSelectionChange}
+              nodeTypes={memoizedNodeTypes}
+              edgeTypes={memoizedEdgeTypes}
+              className="w-full h-full bg-gray-50 dark:bg-gray-950"
+              defaultEdgeOptions={{
+                style: { stroke: '#000', strokeWidth: 2 },
+                animated: false,
+                zIndex: 5000,
               }}
+              fitView
+              minZoom={0.2}
+              maxZoom={3}
+              defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+              zoomOnScroll
+              panOnScroll
+              panOnDrag
+              selectionOnDrag
+              elementsSelectable={true}
+              nodesDraggable={true}
+              nodesConnectable={true}
+              selectNodesOnDrag={true}
+              style={{ cursor: 'grab' }}
+              elevateEdgesOnSelect={true}
+              disableKeyboardA11y={false}
+              edgesFocusable={true}
+              edgesUpdatable={true}
+              deleteKeyCode="Delete"
+              connectOnClick={false}
+              elevateNodesOnSelect={false}
+            >
+              <Background 
+                color="#333" 
+                gap={16} 
+                size={1}
+                variant={BackgroundVariant.Dots}
+              />
+              <Controls 
+                position="bottom-left" 
+                showInteractive={true}
+                showZoom={true}
+                showFitView={true}
+                style={{ 
+                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                  borderRadius: '8px',
+                  padding: '8px',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+                  color: '#000'
+                }}
+              />
+              <MiniMap 
+                position="bottom-right"
+                nodeStrokeWidth={3}
+                nodeColor="#000"
+                maskColor="rgba(255, 255, 255, 0.1)"
+                style={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                  borderRadius: '8px',
+                  padding: '8px',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+                }}
+              />
+              {/* <DebugGeometry /> */}
+            </ReactFlow>
+          </div>
+        )}
+        
+        {/* SVG Visualization - only show when in SVG mode */}
+        {!useReactFlow && svgContent && (
+          <div className="absolute inset-0 h-full w-full z-0 flex items-center justify-center p-4 bg-gray-50 dark:bg-gray-950 overflow-auto">
+            <div 
+              className="svg-container shadow-lg rounded-lg bg-white"
+              dangerouslySetInnerHTML={{ __html: svgContent }}
             />
-            <MiniMap 
-              position="bottom-right"
-              nodeStrokeWidth={3}
-              nodeColor="#000"
-              maskColor="rgba(255, 255, 255, 0.1)"
-              style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                borderRadius: '8px',
-                padding: '8px',
-                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
-              }}
-            />
-            {/* <DebugGeometry /> */}
-          </ReactFlow>
-        </div>
+          </div>
+        )}
+        
+        {/* Show a message when SVG mode is selected but no SVG is generated */}
+        {!useReactFlow && !svgContent && (
+          <div className="absolute inset-0 h-full w-full z-0 flex items-center justify-center p-4 bg-gray-50 dark:bg-gray-950">
+            <div className="text-center p-6 bg-white rounded-lg shadow-lg">
+              <p className="text-lg font-medium text-gray-700">No SVG visualization available</p>
+              <p className="text-sm text-gray-500 mt-2">Click "Generate SVG" in the Dev Panel to create a visualization</p>
+            </div>
+          </div>
+        )}
         
         {/* Chat overlay */}
         <div className="absolute top-10 left-4 z-10 max-w-md pointer-events-none">
@@ -343,6 +444,29 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             <ChatWindow messages={messages} isMinimized={true} />
           </div>
         </div>
+
+        {/* Dev Panel Toggle Button */}
+        <div className="absolute top-4 right-4 z-50">
+          <button
+            onClick={() => setShowDev((p) => !p)}
+            className="px-3 py-1 rounded-md bg-purple-600 text-white"
+          >
+            {showDev ? "Close Dev" : "Dev Panel"}
+          </button>
+        </div>
+        
+        {/* Dev Panel */}
+        {showDev && (
+          <div className="absolute top-16 right-4 z-50">
+            <DevPanel 
+              elkGraph={elkGraph} 
+              onGraphChange={handleGraphChange}
+              onToggleVisMode={handleToggleVisMode}
+              useReactFlow={useReactFlow}
+              onSvgGenerated={handleSvgGenerated}
+            />
+          </div>
+        )}
       </div>
       
       {/* ChatBox at the bottom */}
@@ -358,8 +482,14 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       {/* Connection status indicator */}
       <ConnectionStatus 
         isSessionActive={isSessionActive}
-        messageSendStatus={messageSendStatus}
+        messageSendStatus={{
+          sending: false,
+          retrying: false,
+          retryCount: 0,
+          lastError: null
+        }}
       />
+
     </div>
   )
 }

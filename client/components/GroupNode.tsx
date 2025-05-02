@@ -1,6 +1,6 @@
 import React from 'react';
 import { Handle, Position } from 'reactflow';
-import { groupHandleStyle } from './graph/styles/handles';
+import { baseHandleStyle } from './graph/styles/handles';
 
 interface GroupNodeProps {
   data: {
@@ -29,12 +29,6 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
     zIndex: 1,
   };
 
-  console.log('[🧩 GROUP-STYLE]', id, {
-    padding: groupStyle.padding,
-    border: groupStyle.border,
-    height: groupStyle.height,
-  });
-
   return (
     <div style={groupStyle}>
       {/* Add dynamic handles based on the data */}
@@ -45,7 +39,7 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
           position={Position.Left}
           id={`left-${index}`}
           style={{ 
-            ...groupHandleStyle,
+            ...baseHandleStyle,
             top: yPos
           }}
         />
@@ -58,8 +52,7 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
           position={Position.Right}
           id={`right-${index}`}
           style={{ 
-            ...groupHandleStyle,
-            position: 'absolute',
+            ...baseHandleStyle,
             top: yPos
           }}
         />

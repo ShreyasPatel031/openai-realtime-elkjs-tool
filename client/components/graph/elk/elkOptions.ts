@@ -11,9 +11,9 @@ export const ROOT_DEFAULT_OPTIONS = {
     "spacing.edgeNode": 50,
     "spacing.nodeNode": 50,
     "spacing.edgeEdge": 50,
-    "spacing.edgeEdgeBetweenLayers": 80,
-    "spacing.nodeNodeBetweenLayers": 80,
-    "spacing.edgeNodeBetweenLayers": 80,
+    "spacing.edgeEdgeBetweenLayers": 50,
+    "spacing.nodeNodeBetweenLayers": 50,
+    "spacing.edgeNodeBetweenLayers": 50,
   }
 };
 

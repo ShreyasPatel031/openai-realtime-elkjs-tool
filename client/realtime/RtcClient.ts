@@ -9,7 +9,7 @@ export class RtcClient {
   constructor(onEvent: EventCB) { this.onEvent = onEvent; }
 
   /** Open peer-conn, mic → track, data-channel. */
-  async connect(token: string, model = "gpt-4o-realtime-preview-2024-12-17") {
+  async connect(token: string) {
     this.pc = new RTCPeerConnection();
     /* audio track ↓ */
     const mic = await navigator.mediaDevices.getUserMedia({ audio:true });
@@ -27,7 +27,7 @@ export class RtcClient {
     /* SDP dance */
     const off = await this.pc.createOffer();
     await this.pc.setLocalDescription(off);
-    const res = await fetch(`https://api.openai.com/v1/realtime?model=${model}`, {
+    const res = await fetch(`https://api.openai.com/v1/realtime`, {
       method:"POST", body:off.sdp,
       headers:{ Authorization:`Bearer ${token}`, "Content-Type":"application/sdp" },
     });

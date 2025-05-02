@@ -1,5 +1,5 @@
 // utils/elk/ids.ts
-import { ROOT_DEFAULT_OPTIONS, NON_ROOT_DEFAULT_OPTIONS } from "../../elk/elkOptions";
+import { ROOT_DEFAULT_OPTIONS, NON_ROOT_DEFAULT_OPTIONS } from "../../elk/elkOptions.js";
 
 /**
  * Recursively assigns stable IDs and layoutOptions.

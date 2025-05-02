@@ -1,15 +1,27 @@
 // client/realtime/handleFunctionCall.ts
+import { FunctionCall, ClientEvent } from './types';
+
+interface MutationHelpers {
+  addNode: (nodeName: string, parentId: string, graph: any) => any;
+  deleteNode: (nodeId: string, graph: any) => any;
+  moveNode: (nodeId: string, newParentId: string, graph: any) => any;
+  addEdge: (edgeId: string, containerId: string | null, sourceId: string, targetId: string, graph: any) => any;
+  deleteEdge: (edgeId: string, graph: any) => any;
+  groupNodes: (nodeIds: string[], parentId: string, groupId: string, graph: any) => any;
+  removeGroup: (groupId: string, graph: any) => any;
+  batchUpdate: (operations: Array<{name: string, args: any}>, graph: any) => any;
+}
+
+interface FunctionCallHelpers {
+  elkGraph: any;
+  setElkGraph: (g: any) => void;
+  mutations: MutationHelpers;
+  safeSend: (e: ClientEvent) => void;
+}
+
 export function handleFunctionCall(
-  call: any,
-  helpers: {
-    elkGraph: any;
-    setElkGraph: (g: any) => void;
-    mutations: {
-      addNode: any; deleteNode: any; moveNode: any;
-      addEdge: any; deleteEdge: any; groupNodes: any; removeGroup: any;
-    };
-    safeSend: (e: object) => void;
-  }
+  call: FunctionCall,
+  helpers: FunctionCallHelpers
 ) {
   const { name, arguments: argStr, call_id } = call;
   const args = typeof argStr === "string" ? JSON.parse(argStr) : argStr;
@@ -59,6 +71,11 @@ export function handleFunctionCall(
       case "remove_group":
         updated = mutations.removeGroup(args.groupId, elkGraph);
         console.log(`📭 Removed group '${args.groupId}'`);
+        break;
+        
+      case "batch_update":
+        updated = mutations.batchUpdate(args.operations, elkGraph);
+        console.log(`🔄 Batch updated graph with ${args.operations.length} operations`);
         break;
         
       default:

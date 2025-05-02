@@ -4,6 +4,19 @@ export interface CustomNode extends Node {
   parentId?: string;
 }
 
+// Branded types for type safety
+export type NodeID = string & { __brand: "NodeID" };
+export type EdgeID = string & { __brand: "EdgeID" };
+
+// Helper functions to create branded IDs
+export function createNodeID(id: string): NodeID {
+  return id as NodeID;
+}
+
+export function createEdgeID(id: string): EdgeID {
+  return id as EdgeID;
+}
+
 export interface NodeData {
   label: string;
   width?: number;
@@ -19,7 +32,7 @@ export interface EdgeData {
 }
 
 export interface ElkGraphNode {
-  id: string;
+  id: NodeID;
   x?: number;
   y?: number;
   width?: number;
@@ -28,7 +41,7 @@ export interface ElkGraphNode {
   children?: ElkGraphNode[];
   edges?: ElkGraphEdge[];
   layoutOptions?: Record<string, any>;
-  container?: string;
+  container?: NodeID;
   absoluteBendPoints?: Array<{
     index: number;
     x: number;
@@ -39,15 +52,15 @@ export interface ElkGraphNode {
 }
 
 export interface ElkGraphEdge {
-  id: string;
-  sources: string[];
-  targets: string[];
+  id: EdgeID;
+  sources: NodeID[];
+  targets: NodeID[];
   sections?: {
     startPoint: { x: number; y: number };
     endPoint: { x: number; y: number };
     bendPoints?: { x: number; y: number }[];
   }[];
-  container?: string;
+  container?: NodeID;
   absoluteBendPoints?: Array<{
     index: number;
     x: number;
@@ -58,7 +71,7 @@ export interface ElkGraphEdge {
 }
 
 export interface ElkGraph {
-  id: string;
+  id: NodeID;
   children?: ElkGraphNode[];
   edges?: ElkGraphEdge[];
   layoutOptions?: Record<string, any>;

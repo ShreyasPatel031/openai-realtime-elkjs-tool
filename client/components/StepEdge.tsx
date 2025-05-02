@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { BaseEdge } from 'reactflow';
 
 interface StepEdgeProps {
@@ -24,16 +24,6 @@ const StepEdge: React.FC<StepEdgeProps> = ({
   style = {}, 
   markerEnd 
 }) => {
-
-  useEffect(() => {
-    // Keep it compact but readable
-    if (id === 'e1'){
-      console.log('[🟡 EDGE-RENDER]', {
-        id, sourceX, sourceY, targetX, targetY
-      });
-    } 
-  }, [id, sourceX, sourceY, targetX, targetY]);
-
   let edgePath = '';
   
   // Check if we have bend points
@@ -86,8 +76,9 @@ const StepEdge: React.FC<StepEdgeProps> = ({
   else {
     // No bend points, use default step edge
     const midX = sourceX + (targetX - sourceX) / 2;
-    // Use sourceY for both points to ensure exact alignment
-    edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${sourceY} L ${targetX} ${sourceY}`;
+    // Use sourceY for targetY to ensure exact alignment
+    // const targetY = sourceY;
+    edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
   }
   
   return (

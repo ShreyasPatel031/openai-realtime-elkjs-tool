@@ -13,6 +13,12 @@ import InteractiveCanvas from "./ui/InteractiveCanvas";
 import { useChatSession } from "../hooks/useChatSession";
 import { RtcClient } from "../realtime/RtcClient";
 
+// Model configuration
+const MODEL_CONFIG = {
+  name: "gpt-4o-realtime-preview-2024-12-17",
+  apiEndpoint: "https://api.openai.com/v1/realtime"
+};
+
 /**
  * MainContent component - Renders the classic UI layout with tool panel and session controls
  */
@@ -90,7 +96,7 @@ export default function App() {
       });
     }
     
-    // Connect the client
+    // Connect the client with model configuration
     await rtc.current.connect(EPHEMERAL_KEY);
     setIsSessionActive(true);
   }

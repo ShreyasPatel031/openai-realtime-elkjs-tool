@@ -5,9 +5,15 @@ import { sendEventWithAutoChunk } from '../utils/eventSender';
 import { sendFunctionResult } from '../utils/sendFunctionResult';
 import { initSession } from '../realtime/initSession';
 import { handleFunctionCall } from '../realtime/handleFunctionCall';
-import { safeSend, SendStatus } from '../realtime/safeSend';
+import { safeSend } from '../realtime/safeSend';
 import { latestAssistantText, functionCallEvents } from '../realtime/eventSelectors';
 import { useSessionLifecycle } from './useSessionLifecycle';
+import { ClientEvent, ResponseDeltaEvent, MessageDelta, TextContent } from '../realtime/types';
+
+// Type guard to ensure text content is valid
+function isValidTextContent(content: any): content is TextContent {
+  return content && content.type === 'text' && typeof content.text === 'string';
+}
 
 interface UseChatSessionProps {
   isSessionActive: boolean;
@@ -26,43 +32,44 @@ interface UseChatSessionProps {
   deleteEdge?: (edgeId: string, graph: any) => any;
   groupNodes?: (nodeIds: string[], parentId: string, groupId: string, graph: any) => any;
   removeGroup?: (groupId: string, graph: any) => any;
+  batchUpdate?: (operations: Array<{name: string, args: any}>, graph: any) => any;
 }
 
 export const useChatSession = ({
   isSessionActive,
   sendTextMessage,
   sendClientEvent,
-  events = [],
+  events,
   elkGraph,
   setElkGraph,
-  elkGraphDescription = '',
-  agentInstruction = '',
+  elkGraphDescription,
+  agentInstruction,
   addNode,
   deleteNode,
   moveNode,
   addEdge,
   deleteEdge,
   groupNodes,
-  removeGroup
+  removeGroup,
+  batchUpdate
 }: UseChatSessionProps) => {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isSending, setIsSending] = useState(false);
-  const [messageSendStatus, setMessageSendStatus] = useState<SendStatus>({
-    sending: false,
-    retrying: false,
-    retryCount: 0,
-    lastError: null
-  });
+  // Use a Map as the single source of truth for messages
   const messagesMap = useRef<Map<string, Message>>(new Map());
+  const processed = useRef<Set<string>>(new Set());
+  const initSent = useRef(false);
 
-  // Safe wrapper for sending client events
-  const safeSendClientEvent = useMemo(
-    () => safeSend(sendClientEvent, setMessageSendStatus),
-    [sendClientEvent]
+  // Derive messages array from Map
+  const messages = useMemo(() => 
+    Array.from(messagesMap.current.values()),
+    [messagesMap.current]
   );
 
-  // Handle session lifecycle
-  const { initSent, processed } = useSessionLifecycle(events, safeSendClientEvent);
+  // Safe wrapper for sending client events
+  const safeSendClientEvent = useCallback((event: ClientEvent) => {
+    if (sendClientEvent) {
+      sendClientEvent(event);
+    }
+  }, [sendClientEvent]);
 
   // Process events from the server
   const processEvents = useCallback(() => {
@@ -73,18 +80,19 @@ export const useChatSession = ({
     
     if (latestServerEvent) {
       // Extract text from the event
-      const text = latestServerEvent.delta.content[0].text;
-      const messageId = latestServerEvent.event_id;
+      const delta = latestServerEvent.delta as MessageDelta;
+      const content = delta.content[0];
       
-      // Update or add message in the Map
-      messagesMap.current.set(messageId, {
-        id: messageId,
-        content: text,
-        sender: 'assistant'
-      });
-
-      // Update React state with array of messages
-      setMessages(Array.from(messagesMap.current.values()));
+      if (isValidTextContent(content)) {
+        const messageId = latestServerEvent.event_id;
+        
+        // Update or add message in the Map
+        messagesMap.current.set(messageId, {
+          id: messageId,
+          content: content.text!, // Non-null assertion since we know it's defined after type guard
+          sender: 'assistant'
+        });
+      }
     }
 
     // Log function calls from the agent
@@ -102,7 +110,7 @@ export const useChatSession = ({
         // Parse function arguments if they're a string
         let functionArgs;
         try {
-          functionArgs = typeof functionArgsStr === 'string' ? JSON.parse(functionArgsStr) : functionArgsStr;
+          functionArgs = typeof functionArgsStr === 'string' ? JSON.parse(functionArgsStr) : functionArgsStr || {};
         } catch (e) {
           console.error(`❌ Failed to parse arguments for ${functionName}:`, e);
           if (sendClientEvent) {
@@ -120,32 +128,30 @@ export const useChatSession = ({
 
         // Detailed console logging for function calls
         console.log(`🔧 Agent called function: ${functionName}`);
-        console.log(`📝 Arguments:`, JSON.stringify(functionArgs, null, 2));
-        if (result) console.log(`✅ Result:`, result);
-        
-        // Add function call to messages Map
-        messagesMap.current.set(id, {
-          id,
-          sender: "system",
-          content: `🔧 Function: ${functionName}\n📝 Args: ${JSON.stringify(functionArgs, null, 2)}${result ? `\n✅ Result: ${JSON.stringify(result, null, 2)}` : ''}`
-        });
+        console.log(`📦 Arguments:`, functionArgs);
+        console.log(`📦 Result:`, result);
 
-        // Update React state
-        setMessages(Array.from(messagesMap.current.values()));
-
-        // Make sure setElkGraph is defined
-        if (setElkGraph && elkGraph) {
-          // Use the handleFunctionCall helper to process the function call
+        // Handle the function call
+        if (elkGraph && setElkGraph) {
           handleFunctionCall(call, {
             elkGraph,
             setElkGraph,
-            mutations: { addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup },
+            mutations: {
+              addNode: addNode || (() => elkGraph),
+              deleteNode: deleteNode || (() => elkGraph),
+              moveNode: moveNode || (() => elkGraph),
+              addEdge: addEdge || (() => elkGraph),
+              deleteEdge: deleteEdge || (() => elkGraph),
+              groupNodes: groupNodes || (() => elkGraph),
+              removeGroup: removeGroup || (() => elkGraph),
+              batchUpdate: batchUpdate || (() => elkGraph)
+            },
             safeSend: safeSendClientEvent
           });
         }
       });
     }
-  }, [events, isSessionActive, elkGraph, setElkGraph, addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, agentInstruction, safeSendClientEvent, processed]);
+  }, [isSessionActive, events, elkGraph, setElkGraph, addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate, safeSendClientEvent]);
 
   // Initialize session with tool definitions
   useEffect(() => {
@@ -154,68 +160,56 @@ export const useChatSession = ({
     if (!events || events.length === 0) return;
 
     // Use the initSession helper to initialize the session
-    const sent = initSession(events, safeSendClientEvent, elkGraphDescription);
+    const sent = initSession(events, safeSendClientEvent, elkGraphDescription || '');
     if (sent) initSent.current = true;
     
   }, [events, isSessionActive, safeSendClientEvent, elkGraphDescription, initSent]);
 
   // Handle chat submission
-  const handleChatSubmit = useCallback((message: string) => {
-    // Add the user message to the UI immediately
-    const messageId = Date.now().toString();
+  const handleChatSubmit = useCallback(async (message: string) => {
+    if (!message.trim()) return;
+
+    const messageId = crypto.randomUUID();
     const newMessage: Message = {
       id: messageId,
       content: message,
-      sender: "user",
+      sender: 'user'
     };
-    
-    // Add to Map and update state
+
+    // Add to Map
     messagesMap.current.set(messageId, newMessage);
-    setMessages(Array.from(messagesMap.current.values()));
     
     // If there's a session, send the message to the AI
     if (isSessionActive && sendTextMessage) {
-      setMessageSendStatus(prev => ({ ...prev, sending: true }));
       try {
-        sendTextMessage(message);
-        setMessageSendStatus(prev => ({ ...prev, sending: false, retryCount: 0, lastError: null }));
+        await sendTextMessage(message);
       } catch (error) {
-        setMessageSendStatus(prev => ({ 
-          ...prev, 
-          sending: false, 
-          retrying: true, 
-          retryCount: prev.retryCount + 1,
-          lastError: error as Error
-        }));
-      }
-    } else {
-      // If no session, show a message prompting to start a session
-      setTimeout(() => {
-        const systemMessageId = `system-${Date.now()}`;
-        messagesMap.current.set(systemMessageId, {
-          id: systemMessageId,
-          content: "Please start a session to chat with the AI.",
+        console.error('Failed to send message:', error);
+        // Add error message to Map
+        messagesMap.current.set(`error-${messageId}`, {
+          id: `error-${messageId}`,
+          content: 'Failed to send message. Please try again.',
           sender: "assistant"
         });
-        setMessages(Array.from(messagesMap.current.values()));
-      }, 500);
+      }
     }
   }, [isSessionActive, sendTextMessage]);
 
-  // Reset state when session stops
+  // Clear messages when session becomes inactive
   useEffect(() => {
     if (!isSessionActive) {
       messagesMap.current.clear();
-      setMessages([]);
     }
   }, [isSessionActive]);
 
   return {
     messages,
-    isSending,
-    messageSendStatus,
+    isSending: false,
+    messageSendStatus: 'idle',
     handleChatSubmit,
     processEvents,
-    safeSendClientEvent
+    safeSendClientEvent,
+    initSentRef: initSent,
+    processedCalls: processed
   };
 }; 

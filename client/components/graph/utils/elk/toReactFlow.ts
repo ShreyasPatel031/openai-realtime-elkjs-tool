@@ -8,6 +8,7 @@ interface NodeDimensions {
   height: number;
   groupWidth: number;
   groupHeight: number;
+  padding: number;
 }
 
 export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) {
@@ -23,15 +24,13 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
 
   /* ---------- helper to create RF nodes -------------------------------- */
   const createNode = (node: any, parentAbsolutePosition = { x: 0, y: 0 }, parentId?: string) => {
-    // const nodePosition = absolutePositions[node.id];
-    const absPos       = absolutePositions[node.id]; 
+    const absPos = absolutePositions[node.id]; 
     const isGroupNode = (node.children?.length ?? 0) > 0;
 
     nodes.push({
       id: node.id,
       type: isGroupNode ? "group" : "custom",
-      // position: parentId ? { x: node.x || 0, y: node.y || 0 } : { x: nodePosition.x, y: nodePosition.y },
-      position : parentId? { x: node.x ?? 0, y: node.y ?? 0 } : { x: absPos.x,   y: absPos.y },
+      position: parentId ? { x: node.x ?? 0, y: node.y ?? 0 } : { x: absPos.x, y: absPos.y },
       parentId,
       zIndex: isGroupNode ? 5 : 50,
       selectable: true,
@@ -44,13 +43,15 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
         isParent: isGroupNode,
         leftHandles: (edgeConnectionPoints[node.id]?.left ?? []).map(connectionPoint => {
           const delta = connectionPoint.y - absPos.y;
-          const TOP_PAD = isGroupNode ? 10 : 0;
-          return delta - TOP_PAD;
+          // const TOP_PAD = isGroupNode ? dimensions.padding : 0;
+          // return delta - TOP_PAD;
+          return delta;
         }),
         rightHandles: (edgeConnectionPoints[node.id]?.right ?? []).map(connectionPoint => {
           const delta = connectionPoint.y - absPos.y;
-          const TOP_PAD = isGroupNode ? 10 : 0;
-          return delta - TOP_PAD;
+          // const TOP_PAD = isGroupNode ? dimensions.padding : 0;
+          // return delta - TOP_PAD;
+          return delta;
         }),
         position: { x: absPos.x, y: absPos.y }
       },
@@ -62,23 +63,12 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
         display: 'flex',
         justifyContent: 'flex-start',
         alignItems: 'flex-start',
-        padding: '10px',
+        padding: `${dimensions.padding}px`,
         pointerEvents: 'all'
       } : {
         pointerEvents: 'all'
       }
     } as CustomNode);
-
-    if (node.id === 'api' || node.id === 'lambda') {   // <-- focus nodes
-      console.log('[🟢 NODE]', {
-        id: node.id,
-        absPos,
-        heightElk: node.height,
-        handlesL: (edgeConnectionPoints[node.id]?.left ?? []).map(p => p.y),
-        handlesR: (edgeConnectionPoints[node.id]?.right ?? []).map(p => p.y),
-      });
-    }
-    
 
     // Process child nodes recursively
     (node.children || []).forEach((childNode: any) => createNode(childNode, absPos, node.id));
@@ -137,18 +127,6 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
             selected: false,
             hidden: false,
             focusable: true,
-          });
-        }
-
-        if (edgeId === 'e1'){ 
-          console.log('[📦 EDGE-MAP]', {
-            id: edgeId,
-            sNode: sourceNodeId,
-            tNode: targetNodeId,
-            sHandle: sourceHandle,
-            tHandle: targetHandle,
-            sAbsPos: edgeConnectionPoints[sourceNodeId]?.right?.[sourceHandleIndex],
-            tAbsPos: edgeConnectionPoints[targetNodeId]?.left?.[targetHandleIndex],
           });
         }
       })

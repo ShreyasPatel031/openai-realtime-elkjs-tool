@@ -12,13 +12,18 @@
     "isolatedModules": false,
     "jsx": "preserve",
     "incremental": true,
-    "types": ["react", "react-dom", "jest", "@testing-library/jest-dom", "node"]
+    "types": ["react", "react-dom", "jest", "@testing-library/jest-dom", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "*": ["*", "*.js", "*.ts"]
+    }
   },
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
     "client/**/*.ts",
     "client/**/*.tsx",
+    "dev/**/*.ts",
     "**/*.test.ts",
     "**/*.test.tsx"
   ],

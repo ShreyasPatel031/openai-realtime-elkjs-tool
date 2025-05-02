@@ -1,17 +1,11 @@
 import { Dispatch, SetStateAction } from "react";
-
-export interface SendStatus {
-  sending: boolean;
-  retrying: boolean;
-  retryCount: number;
-  lastError: Error | null;
-}
+import { SendStatus, ClientEvent } from './types';
 
 export function safeSend(
-  send: ((e: any) => void) | undefined,
+  send: ((e: ClientEvent) => void) | undefined,
   setStatus: Dispatch<SetStateAction<SendStatus>>,
 ) {
-  return (evt: any) => {
+  return (evt: ClientEvent) => {
     if (!send) return;
     setStatus(s => ({ ...s, sending: true }));
     try {

@@ -4,6 +4,15 @@ import ELK from "elkjs/lib/elk.bundled.js";
 import { ensureIds } from './graph/utils/elk/ids';
 import { structuralHash } from './graph/utils/elk/structuralHash';
 import { ROOT_DEFAULT_OPTIONS, NON_ROOT_DEFAULT_OPTIONS } from './graph/utils/elk/elkOptions';
+import { 
+  addNode, 
+  deleteNode, 
+  moveNode, 
+  addEdge, 
+  deleteEdge, 
+  groupNodes, 
+  removeGroup
+} from './graph/mutations';
 
 interface DevPanelProps {
   elkGraph: ElkGraph;
@@ -63,41 +72,18 @@ const DevPanel: React.FC<DevPanelProps> = ({
   const handleAddNode = () => {
     if (!nodeLabel) return;
     
-    const newNodeId = nodeLabel.toLowerCase().replace(/\s+/g, '_');
-    
     // Create a deep copy of the graph
     const updatedGraph = JSON.parse(JSON.stringify(elkGraph));
     
-    // Find the parent container
-    let parentContainer = updatedGraph;
-    if (parentId !== 'root') {
-      const findContainer = (container: any): any => {
-        if (container.id === parentId) return container;
-        
-        if (container.children) {
-          for (const node of container.children) {
-            const found = findContainer(node);
-            if (found) return found;
-          }
-        }
-        return null;
-      };
-      
-      parentContainer = findContainer(updatedGraph) || updatedGraph;
-    }
-    
-    // Add the new node to the parent container
-    if (!parentContainer.children) parentContainer.children = [];
-    parentContainer.children.push({
-      id: newNodeId,
-      labels: [{ text: nodeLabel }]
-    });
+    // Use the mutation function from the imported file
+    const newNodeId = nodeLabel.toLowerCase().replace(/\s+/g, '_');
+    const mutatedGraph = addNode(nodeLabel, parentId, updatedGraph);
     
     // Pass the updated graph back to the parent
     console.group("[DevPanel] onGraphChange");
-    console.log("updatedGraph (raw)", updatedGraph);
+    console.log("updatedGraph (domain graph)", mutatedGraph);
     console.groupEnd();
-    onGraphChange(updatedGraph);
+    onGraphChange(mutatedGraph);
     
     // Clear the form
     setNodeLabel('');
@@ -106,24 +92,20 @@ const DevPanel: React.FC<DevPanelProps> = ({
   const handleAddEdge = () => {
     if (!sourceId || !targetId) return;
     
+    // Create the edge ID
     const edgeId = `edge_${sourceId}_to_${targetId}`;
     
     // Create a deep copy of the graph
     const updatedGraph = JSON.parse(JSON.stringify(elkGraph));
     
-    // Add the edge to the root level
-    if (!updatedGraph.edges) updatedGraph.edges = [];
-    updatedGraph.edges.push({
-      id: edgeId,
-      sources: [sourceId],
-      targets: [targetId],
-    });
+    // Use the mutation function from the imported file
+    const mutatedGraph = addEdge(edgeId, null, sourceId, targetId, updatedGraph);
     
     // Pass the updated graph back to the parent
     console.group("[DevPanel] onGraphChange");
-    console.log("updatedGraph (raw)", updatedGraph);
+    console.log("updatedGraph (domain graph)", mutatedGraph);
     console.groupEnd();
-    onGraphChange(updatedGraph);
+    onGraphChange(mutatedGraph);
     
     // Clear the form
     setSourceId('');
@@ -358,225 +340,110 @@ const DevPanel: React.FC<DevPanelProps> = ({
     return null;
   };
 
-  // New handlers for additional operations
+  // New handlers for additional operations using imported mutation functions
   const handleDeleteNode = () => {
     if (!nodeToDelete) return;
     
+    // Create a deep copy of the graph
     const updatedGraph = JSON.parse(JSON.stringify(elkGraph));
-    const deleteNodeFromParent = (parent: any, id: string): boolean => {
-      if (!parent.children) return false;
-      
-      const index = parent.children.findIndex((child: any) => child.id === id);
-      if (index >= 0) {
-        parent.children.splice(index, 1);
-        return true;
-      }
-      
-      for (const child of parent.children) {
-        if (deleteNodeFromParent(child, id)) return true;
-      }
-      
-      return false;
-    };
     
-    if (!deleteNodeFromParent(updatedGraph, nodeToDelete)) {
-      console.error(`Node '${nodeToDelete}' not found`);
-      return;
+    try {
+      // Use the mutation function from the imported file
+      const mutatedGraph = deleteNode(nodeToDelete, updatedGraph);
+      
+      console.group("[DevPanel] onGraphChange");
+      console.log("updatedGraph (domain graph)", mutatedGraph);
+      console.groupEnd();
+      onGraphChange(mutatedGraph);
+      setNodeToDelete('');
+    } catch (error) {
+      console.error(`Error deleting node: ${error}`);
     }
-    
-    console.group("[DevPanel] onGraphChange");
-    console.log("updatedGraph (raw)", updatedGraph);
-    console.groupEnd();
-    onGraphChange(updatedGraph);
-    setNodeToDelete('');
   };
 
   const handleMoveNode = () => {
     if (!nodeToMove || !newParentId) return;
     
+    // Create a deep copy of the graph
     const updatedGraph = JSON.parse(JSON.stringify(elkGraph));
-    const findNodeById = (node: any, id: string): any => {
-      if (node.id === id) return node;
-      if (node.children) {
-        for (const child of node.children) {
-          const found = findNodeById(child, id);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
     
-    const node = findNodeById(updatedGraph, nodeToMove);
-    const newParent = findNodeById(updatedGraph, newParentId);
-    
-    if (!node || !newParent) {
-      console.error('Node or new parent not found');
-      return;
+    try {
+      // Use the mutation function from the imported file
+      const mutatedGraph = moveNode(nodeToMove, newParentId, updatedGraph);
+      
+      console.group("[DevPanel] onGraphChange");
+      console.log("updatedGraph (domain graph)", mutatedGraph);
+      console.groupEnd();
+      onGraphChange(mutatedGraph);
+      setNodeToMove('');
+      setNewParentId('');
+    } catch (error) {
+      console.error(`Error moving node: ${error}`);
     }
-    
-    // Remove from old parent
-    const removeFromParent = (parent: any, id: string): boolean => {
-      if (!parent.children) return false;
-      
-      const index = parent.children.findIndex((child: any) => child.id === id);
-      if (index >= 0) {
-        const [movedNode] = parent.children.splice(index, 1);
-        if (!newParent.children) newParent.children = [];
-        newParent.children.push(movedNode);
-        return true;
-      }
-      
-      for (const child of parent.children) {
-        if (removeFromParent(child, id)) return true;
-      }
-      
-      return false;
-    };
-    
-    if (!removeFromParent(updatedGraph, nodeToMove)) {
-      console.error(`Failed to move node '${nodeToMove}'`);
-      return;
-    }
-    
-    console.group("[DevPanel] onGraphChange");
-    console.log("updatedGraph (raw)", updatedGraph);
-    console.groupEnd();
-    onGraphChange(updatedGraph);
-    setNodeToMove('');
-    setNewParentId('');
   };
 
   const handleDeleteEdge = () => {
     if (!edgeToDelete) return;
     
+    // Create a deep copy of the graph
     const updatedGraph = JSON.parse(JSON.stringify(elkGraph));
-    const deleteEdgeFromNode = (node: any, id: string): boolean => {
-      if (node.edges) {
-        const index = node.edges.findIndex((edge: any) => edge.id === id);
-        if (index >= 0) {
-          node.edges.splice(index, 1);
-          return true;
-        }
-      }
-      
-      if (node.children) {
-        for (const child of node.children) {
-          if (deleteEdgeFromNode(child, id)) return true;
-        }
-      }
-      
-      return false;
-    };
     
-    if (!deleteEdgeFromNode(updatedGraph, edgeToDelete)) {
-      console.error(`Edge '${edgeToDelete}' not found`);
-      return;
+    try {
+      // Use the mutation function from the imported file
+      const mutatedGraph = deleteEdge(edgeToDelete, updatedGraph);
+      
+      console.group("[DevPanel] onGraphChange");
+      console.log("updatedGraph (domain graph)", mutatedGraph);
+      console.groupEnd();
+      onGraphChange(mutatedGraph);
+      setEdgeToDelete('');
+    } catch (error) {
+      console.error(`Error deleting edge: ${error}`);
     }
-    
-    console.group("[DevPanel] onGraphChange");
-    console.log("updatedGraph (raw)", updatedGraph);
-    console.groupEnd();
-    onGraphChange(updatedGraph);
-    setEdgeToDelete('');
   };
 
   const handleGroupNodes = () => {
     if (nodesToGroup.length === 0 || !groupLabel) return;
     
+    // Create the group ID
     const groupId = groupLabel.toLowerCase().replace(/\s+/g, '_');
+    
+    // Create a deep copy of the graph
     const updatedGraph = JSON.parse(JSON.stringify(elkGraph));
     
-    // Find the parent node
-    const parentNode = findNodeById(updatedGraph, groupParentId);
-    if (!parentNode) {
-      console.error(`Parent node '${groupParentId}' not found`);
-      return;
-    }
-    
-    // Create the new group node
-    const groupNode: any = {
-      id: groupId,
-      labels: [{ text: groupLabel }],
-      children: []
-    };
-    
-    // Move each node to the group
-    for (const nodeId of nodesToGroup) {
-      let found = false;
+    try {
+      // Use the mutation function from the imported file
+      const mutatedGraph = groupNodes(nodesToGroup, groupParentId, groupId, updatedGraph);
       
-      for (let i = 0; i < parentNode.children.length; i++) {
-        if (parentNode.children[i].id === nodeId) {
-          groupNode.children.push(parentNode.children[i]);
-          parentNode.children.splice(i, 1);
-          found = true;
-          break;
-        }
-      }
-      
-      if (!found) {
-        console.error(`Node '${nodeId}' not found in parent '${groupParentId}'`);
-        return;
-      }
+      console.group("[DevPanel] onGraphChange");
+      console.log("updatedGraph (domain graph)", mutatedGraph);
+      console.groupEnd();
+      onGraphChange(mutatedGraph);
+      setNodesToGroup([]);
+      setGroupLabel('');
+    } catch (error) {
+      console.error(`Error grouping nodes: ${error}`);
     }
-    
-    // Add the group node to the parent
-    parentNode.children.push(groupNode);
-    
-    console.group("[DevPanel] onGraphChange");
-    console.log("updatedGraph (raw)", updatedGraph);
-    console.groupEnd();
-    onGraphChange(updatedGraph);
-    setNodesToGroup([]);
-    setGroupLabel('');
   };
 
   const handleRemoveGroup = () => {
     if (!groupToRemove) return;
     
+    // Create a deep copy of the graph
     const updatedGraph = JSON.parse(JSON.stringify(elkGraph));
     
-    // Find the group and its parent
-    let groupNode: any = null;
-    let parentNode: any = null;
-    
-    const findGroupAndParent = (node: any, parent: any, groupId: string): boolean => {
-      if (!node.children) return false;
+    try {
+      // Use the mutation function from the imported file
+      const mutatedGraph = removeGroup(groupToRemove, updatedGraph);
       
-      for (let i = 0; i < node.children.length; i++) {
-        const child = node.children[i];
-        if (child.id === groupId) {
-          groupNode = child;
-          parentNode = node;
-          return true;
-        }
-        if (child.children && findGroupAndParent(child, node, groupId)) {
-          return true;
-        }
-      }
-      return false;
-    };
-    
-    findGroupAndParent(updatedGraph, null, groupToRemove);
-    
-    if (!groupNode) {
-      console.error(`Group '${groupToRemove}' not found`);
-      return;
+      console.group("[DevPanel] onGraphChange");
+      console.log("updatedGraph (domain graph)", mutatedGraph);
+      console.groupEnd();
+      onGraphChange(mutatedGraph);
+      setGroupToRemove('');
+    } catch (error) {
+      console.error(`Error removing group: ${error}`);
     }
-    
-    // Get the index of the group in the parent
-    const groupIndex = parentNode.children.indexOf(groupNode);
-    
-    // Get the children of the group
-    const groupChildren = groupNode.children || [];
-    
-    // Replace the group with its children
-    parentNode.children.splice(groupIndex, 1, ...groupChildren);
-    
-    console.group("[DevPanel] onGraphChange");
-    console.log("updatedGraph (raw)", updatedGraph);
-    console.groupEnd();
-    onGraphChange(updatedGraph);
-    setGroupToRemove('');
   };
 
   // Helper function to handle SVG zoom

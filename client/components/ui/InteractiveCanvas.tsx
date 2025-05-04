@@ -459,7 +459,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   // Handler for switching visualization modes
   const handleToggleVisMode = useCallback((reactFlowMode: boolean) => {
-    console.log('[InteractiveCanvas] Toggle visualization mode:', reactFlowMode ? 'ReactFlow' : 'SVG');
     setUseReactFlow(reactFlowMode);
     
     // If switching to SVG mode, generate SVG immediately if layoutGraph is available

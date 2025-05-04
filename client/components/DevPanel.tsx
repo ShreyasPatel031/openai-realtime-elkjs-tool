@@ -45,6 +45,7 @@ const DevPanel: React.FC<DevPanelProps> = ({
   const [groupParentId, setGroupParentId] = useState('root');
   const [groupLabel, setGroupLabel] = useState('');
   const [groupToRemove, setGroupToRemove] = useState('');
+  const [nodeSearchTerm, setNodeSearchTerm] = useState('');
   
   // Add state for SVG zoom
   const [svgZoom, setSvgZoom] = useState(1);
@@ -421,6 +422,7 @@ const DevPanel: React.FC<DevPanelProps> = ({
       onGraphChange(mutatedGraph);
       setNodesToGroup([]);
       setGroupLabel('');
+      setNodeSearchTerm('');  // Reset search term after successful group creation
     } catch (error) {
       console.error(`Error grouping nodes: ${error}`);
     }
@@ -631,19 +633,49 @@ const DevPanel: React.FC<DevPanelProps> = ({
       <div className="mb-4">
         <h4 className="text-sm font-medium mb-2">Group Nodes</h4>
         <div className="space-y-2">
+          <input
+            type="text"
+            placeholder="Search nodes..."
+            value={nodeSearchTerm}
+            onChange={(e) => setNodeSearchTerm(e.target.value)}
+            className="w-full px-2 py-1 border rounded text-sm"
+          />
+          
           <select
             multiple
             value={nodesToGroup}
-            onChange={(e) => setNodesToGroup(Array.from(e.target.selectedOptions, option => option.value))}
+            onChange={(e) => {
+              const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
+              // Merge new selections with existing ones, removing duplicates
+              const newSelection = Array.from(new Set([...nodesToGroup, ...selectedOptions]));
+              setNodesToGroup(newSelection);
+            }}
             className="w-full px-2 py-1 border rounded text-sm"
             size={3}
           >
-            {nodeIds.filter(id => id !== 'root').map(id => (
-              <option key={id} value={id}>
-                {id}
-              </option>
-            ))}
+            {nodeIds
+              .filter(id => id !== 'root')
+              .filter(id => id.toLowerCase().includes(nodeSearchTerm.toLowerCase()))
+              .map(id => (
+                <option 
+                  key={id} 
+                  value={id}
+                  style={{ 
+                    backgroundColor: nodesToGroup.includes(id) ? '#e2e8f0' : 'transparent',
+                    fontWeight: nodesToGroup.includes(id) ? 'bold' : 'normal'
+                  }}
+                >
+                  {id}
+                </option>
+              ))}
           </select>
+          
+          {/* Show selected nodes count */}
+          {nodesToGroup.length > 0 && (
+            <div className="text-sm text-gray-600">
+              Selected: {nodesToGroup.length} node{nodesToGroup.length !== 1 ? 's' : ''}
+            </div>
+          )}
           
           <select
             value={groupParentId}

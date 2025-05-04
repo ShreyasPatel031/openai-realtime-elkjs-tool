@@ -58,12 +58,12 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
       style: isGroupNode ? {
         width: node.width || dimensions.groupWidth,
         height: node.height || dimensions.groupHeight,
-        backgroundColor: 'rgba(240, 240, 240, 0.8)',
-        border: '1px dashed #999',
+        backgroundColor: 'transparent',
+        border: 'none',
         display: 'flex',
         justifyContent: 'flex-start',
         alignItems: 'flex-start',
-        padding: `${dimensions.padding}px`,
+        padding: '0px',
         pointerEvents: 'all'
       } : {
         pointerEvents: 'all'

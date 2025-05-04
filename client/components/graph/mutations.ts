@@ -18,6 +18,49 @@ import { ElkGraphNode, ElkGraphEdge, NodeID, EdgeID, createNodeID, createEdgeID 
 import { RawGraph } from "./types/index";
 
 // ──────────────────────────────────────────────
+// NEW HELPERS – tiny & fast, no external deps
+// ──────────────────────────────────────────────
+
+/** DFS yields *all* nodes inside a subtree (including the root). */
+const collectNodeIds = (n: ElkGraphNode, acc: Set<NodeID> = new Set()) => {
+  acc.add(n.id);
+  (n.children ?? []).forEach(c => collectNodeIds(c, acc));
+  return acc;
+};
+
+/** True if "maybeDesc" lives somewhere inside "root". */
+const isDescendantOf = (root: ElkGraphNode, maybeDesc: ElkGraphNode): boolean =>
+  collectNodeIds(root).has(maybeDesc.id);
+
+/** True if any edge id matches. */
+const edgeIdExists = (g: ElkGraphNode, eid: EdgeID): boolean =>
+  collectEdges(g).some(({ edgeArr }) => edgeArr.some(e => e.id === eid));
+
+/** Remove every edge whose *any* endpoint is found in `victimIds`. */
+const purgeEdgesReferencing = (root: ElkGraphNode, victimIds: Set<NodeID>): void => {
+  const sweep = (n: ElkGraphNode) => {
+    if (n.edges) {
+      n.edges = n.edges.filter(
+        e =>
+          !e.sources.some(s => victimIds.has(s)) &&
+          !e.targets.some(t => victimIds.has(t))
+      );
+    }
+    (n.children ?? []).forEach(sweep);
+  };
+  sweep(root);
+};
+
+const reattachEdgesForSubtree = (subRoot: ElkGraphNode, graph: ElkGraphNode) => {
+  const queue: ElkGraphNode[] = [subRoot];
+  while (queue.length) {
+    const n = queue.shift()!;
+    updateEdgesForNode(n.id, graph);
+    n.children?.forEach(c => queue.push(c));
+  }
+};
+
+// ──────────────────────────────────────────────
 // HELPER FUNCTIONS
 // ──────────────────────────────────────────────
 
@@ -79,7 +122,6 @@ const findCommonAncestor = (
   id1: NodeID,
   id2: NodeID
 ): ElkGraphNode | null => {
-  console.time("findCommonAncestor");
   const path1 = getPathToNode(layout, id1);
   const path2 = getPathToNode(layout, id2);
   if (!path1 || !path2) return null;
@@ -91,7 +133,6 @@ const findCommonAncestor = (
       break;
     }
   }
-  console.timeEnd("findCommonAncestor");
   return common;
 };
 
@@ -123,7 +164,6 @@ const collectEdges = (node: ElkGraphNode, collection: EdgeCollection[] = []): Ed
  * under the common ancestor of its endpoints.
  */
 const updateEdgesForNode = (nodeId: NodeID, layout: ElkGraphNode): ElkGraphNode => {
-  console.time("updateEdgesForNode");
   const allEdges = collectEdges(layout);
   for (const { edgeArr, parent } of allEdges) {
     // Loop backwards in case we need to remove any edges.
@@ -143,33 +183,7 @@ const updateEdgesForNode = (nodeId: NodeID, layout: ElkGraphNode): ElkGraphNode 
       }
     }
   }
-  console.timeEnd("updateEdgesForNode");
   return layout;
-};
-
-
-const rehomeEdgesForSubtree = (n: ElkGraphNode, root: ElkGraphNode) => {
-  const dfs = (curr: ElkGraphNode) => {
-    // one pass lifts each edge at most one level
-    let movedSomething = false;
-    collectEdges(root).forEach(({ edgeArr, parent }) => {
-      for (let i = edgeArr.length - 1; i >= 0; i--) {
-        const e = edgeArr[i];
-        if (e.sources.includes(curr.id) || e.targets.includes(curr.id)) {
-          const ca = findCommonAncestor(root, e.sources[0], e.targets[0]);
-          if (ca && ca.id !== parent.id) {
-            edgeArr.splice(i, 1);
-            (ca.edges ??= []).push(e);
-            movedSomething = true;
-          }
-        }
-      }
-    });
-    // keep bubbling until nothing moves
-    if (movedSomething) dfs(curr);
-    (curr.children ?? []).forEach(c => rehomeEdgesForSubtree(c, root));
-  };
-  dfs(n);
 };
 
 // Logging helper
@@ -190,6 +204,10 @@ const notFound = (type: "node"|"edge"|"shape", id: string) =>
 export const addNode = (nodeName: string, parentId: NodeID, graph: RawGraph): RawGraph => {
   console.group(`[mutation] addNode '${nodeName}' → parent '${parentId}'`);
   console.time("addNode");
+
+  if (findNodeById(graph, nodeName)) {
+    throw new Error(`A node with id '${nodeName}' already exists`);
+  }
   
   const parentNode = findNodeById(graph, parentId);
   if (!parentNode) {
@@ -230,25 +248,15 @@ export const deleteNode = (nodeId: NodeID, graph: RawGraph): RawGraph => {
     notFound("node", nodeId);
     throw new Error(`Node '${nodeId}' not found or trying to remove root`);
   }
+
+  // 1. locate
+  const doomed = parent.children.find(c => c.id === nodeId)!;
   
-  parent.children = parent.children.filter(child => child.id !== nodeId);
-
-  // Function to remove edges related to the deleted node
-  function removeEdges(node: ElkGraphNode): void {
-    if (node.edges) {
-      node.edges = node.edges.filter(edge => 
-        !edge.sources.includes(nodeId) && !edge.targets.includes(nodeId)
-      );
-    }
-    if (node.children) {
-      for (const child of node.children) {
-        removeEdges(child);
-      }
-    }
-  }
-
-  // Remove edges from all levels of the graph
-  removeEdges(graph);
+  // 2. remove from parent
+  parent.children = parent.children.filter(c => c !== doomed);
+  
+  // 3. purge every edge that pointed to it or descendants
+  purgeEdgesReferencing(graph, collectNodeIds(doomed));
   
   console.timeEnd("deleteNode");
   console.groupEnd();
@@ -275,6 +283,16 @@ export const moveNode = (nodeId: NodeID, newParentId: NodeID, graph: RawGraph): 
     throw new Error(`New parent node '${newParentId}' not found`);
   }
   
+  // 1. forbid moving into own descendant (cycle)
+  if (isDescendantOf(node, newParent)) {
+    throw new Error(`Cannot move '${nodeId}' into its own descendant '${newParentId}'`);
+  }
+
+  // 2. forbid ID collision among siblings (already ensured but cheap to keep)
+  if (newParent.children?.some(c => c.id === nodeId)) {
+    throw new Error(`'${newParentId}' already contains a child with id '${nodeId}'`);
+  }
+  
   const oldParent = findParentOfNode(graph, nodeId);
   if (!oldParent || !oldParent.children) {
     throw new Error(`Node '${nodeId}' not found in any parent`);
@@ -288,12 +306,12 @@ export const moveNode = (nodeId: NodeID, newParentId: NodeID, graph: RawGraph): 
   newParent.children.push(node);
   
   // Update edge connections - this is the key improvement
-  const updatedGraph = updateEdgesForNode(nodeId, graph);
-  rehomeEdgesForSubtree(node, graph);
+  // const updatedGraph = updateEdgesForNode(nodeId, graph);
+  reattachEdgesForSubtree(node, graph);
   
   console.timeEnd("moveNode");
   console.groupEnd();
-  return updatedGraph;
+  return graph;
 };
 
 //
@@ -306,6 +324,15 @@ export const moveNode = (nodeId: NodeID, newParentId: NodeID, graph: RawGraph): 
 export const addEdge = (edgeId: EdgeID, containerId: NodeID | null, sourceId: NodeID, targetId: NodeID, graph: RawGraph): RawGraph => {
   console.group(`[mutation] addEdge '${edgeId}' (${sourceId} → ${targetId})`);
   console.time("addEdge");
+  
+  // duplicate-ID check
+  if (edgeIdExists(graph, edgeId)) {
+    throw new Error(`Edge id '${edgeId}' already exists`);
+  }
+  // self-loop guard
+  if (sourceId === targetId) {
+    throw new Error(`Self-loop edges are not supported (source === target '${sourceId}')`);
+  }
   
   // Find the common ancestor for edge placement - KEY IMPROVEMENT
   const commonAncestor = findCommonAncestor(graph, sourceId, targetId);
@@ -383,6 +410,10 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
   console.group(`[mutation] groupNodes '${groupId}' (${nodeIds.length} nodes) → parent '${parentId}'`);
   console.time("groupNodes");
   
+  if (findNodeById(graph, groupId)) {
+    throw new Error(`A node or group with id '${groupId}' already exists`);
+  }
+  
   const parent = findNodeById(graph, parentId);
   if (!parent || !parent.children) {
     notFound("node", parentId);
@@ -427,10 +458,10 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
   if (groupNode.children && groupNode.children.length > 0) {
     parent.children.push(groupNode);
     
-    // Update edges for all moved nodes - this is the key improvement
-    for (const nodeId of movedNodeIds) {
-      graph = updateEdgesForNode(nodeId, graph);
-    }
+    // Update edges for all moved nodes and their descendants
+    movedNodeIds
+      .map(id => findNodeById(graph, id)!)
+      .forEach(subRoot => reattachEdgesForSubtree(subRoot, graph));
   } else {
     console.warn(`No nodes were moved to group ${groupId}`);
   }
@@ -442,43 +473,36 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
 };
 
 /**
- * Removes a group node, moving its children to the parent and
- * properly handling edge reattachment.
+ * Removes a group by hoisting each child with moveNode, then moves
+ * the group's own edges to its parent.  No extra helpers needed.
  */
 export const removeGroup = (groupId: NodeID, graph: RawGraph): RawGraph => {
   console.group(`[mutation] removeGroup '${groupId}'`);
   console.time("removeGroup");
-  
-  const groupNode = findNodeById(graph, groupId);
-  if (!groupNode) {
-    notFound("node", groupId);
-    throw new Error(`Group '${groupId}' not found`);
+
+  /* locate group & parent ------------------------------------------------ */
+  const groupNode  = findNodeById(graph, groupId);
+  if (!groupNode)          throw new Error(`Group '${groupId}' not found`);
+  const parentNode = findParentOfNode(graph, groupId);
+  if (!parentNode || !parentNode.children)
+    throw new Error(`Group '${groupId}' has no parent (maybe root?)`);
+
+  /* 1. hoist every child with the *existing* moveNode -------------------- */
+  const childIds = (groupNode.children ?? []).map(c => c.id);
+  for (const cid of childIds) moveNode(cid, parentNode.id, graph);
+
+  /* 2. relocate the group's own edges straight into the parent ----------- */
+  if (groupNode.edges?.length) {
+    parentNode.edges = parentNode.edges ?? [];
+    parentNode.edges.push(...groupNode.edges);
   }
-  
-  const parent = findParentOfNode(graph, groupId);
-  if (!parent || !parent.children) {
-    throw new Error(`The group node does not have a parent (might be the root)`);
-  }
-  
-  // Track which nodes are being moved up to update their edges
-  const movedNodeIds: NodeID[] = [];
-  
-  // Add all group children to the parent
-  if (groupNode.children) {
-    for (const child of groupNode.children) {
-      parent.children.push(child);
-      movedNodeIds.push(child.id);
-    }
-  }
-  
-  // Remove the group node from the parent
-  parent.children = parent.children.filter(child => child.id !== groupId);
-  
-  // Update edges for all moved nodes - this is the key improvement
-  for (const nodeId of movedNodeIds) {
-    graph = updateEdgesForNode(nodeId, graph);
-  }
-  
+
+  /* 3. finally remove the empty group container -------------------------- */
+  parentNode.children = parentNode.children.filter(c => c.id !== groupId);
+
+  /* 4. scrub edges that pointed *to* the deleted group itself ------------ */
+  purgeEdgesReferencing(graph, new Set<NodeID>([groupId]));
+
   console.timeEnd("removeGroup");
   console.groupEnd();
   return graph;

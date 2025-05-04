@@ -8,12 +8,12 @@ export const ROOT_DEFAULT_OPTIONS = {
     "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
     "elk.layered.nodePlacement.favorStraightEdges": true,
     "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
-    "spacing.edgeNode": 50,
-    "spacing.nodeNode": 50,
-    "spacing.edgeEdge": 50,
-    "spacing.edgeEdgeBetweenLayers": 50,
-    "spacing.nodeNodeBetweenLayers": 50,
-    "spacing.edgeNodeBetweenLayers": 50,
+    "spacing.edgeNode": 30,
+    "spacing.nodeNode": 30,
+    "spacing.edgeEdge": 30,
+    "spacing.edgeEdgeBetweenLayers": 30,
+    "spacing.nodeNodeBetweenLayers": 30,
+    "spacing.edgeNodeBetweenLayers": 30,
   }
 };
 

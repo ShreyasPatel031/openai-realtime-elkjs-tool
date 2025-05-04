@@ -1,5 +1,21 @@
+/**
+ *  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ *  ┃  **DATA LAYERS – READ ME BEFORE EDITING**                    ┃
+ *  ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ *  ┃  1. domain-graph (graph/*)                                   ┃
+ *  ┃     - pure ELK JSON                                           ┃
+ *  ┃     - NO x/y/sections/width/height/etc                        ┃
+ *  ┃                                                               ┃
+ *  ┃  2. processed-graph (ensureIds + elkOptions)                  ┃
+ *  ┃     - lives only inside hooks/layout funcs                    ┃
+ *  ┃     - generated, never mutated manually                       ┃
+ *  ┃                                                               ┃
+ *  ┃  3. view-graph (ReactFlow nodes/edges)                        ┃
+ *  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
 // utils/elk/ids.ts
-import { ROOT_DEFAULT_OPTIONS, NON_ROOT_DEFAULT_OPTIONS } from "../../elk/elkOptions.js";
+import { ROOT_DEFAULT_OPTIONS, NON_ROOT_DEFAULT_OPTIONS } from "./elkOptions";
 
 /**
  * Recursively assigns stable IDs and layoutOptions.

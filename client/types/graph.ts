@@ -1,5 +1,11 @@
 import { Node } from "reactflow";
 
+export type NodeID = string;
+export type EdgeID = string;
+
+export const createNodeID = (name: string): NodeID => name.toLowerCase().replace(/\s+/g, '_');
+export const createEdgeID = (source: NodeID, target: NodeID): EdgeID => `edge_${source}_to_${target}`;
+
 export interface CustomNode extends Node {
   parentId?: string;
 }

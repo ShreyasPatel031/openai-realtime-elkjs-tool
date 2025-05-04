@@ -1,4 +1,21 @@
-import { ElkGraph, ElkGraphNode, NodeID, EdgeID, createNodeID, createEdgeID } from "../types";
+/**
+ *  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ *  ┃  **DATA LAYERS – READ ME BEFORE EDITING**                    ┃
+ *  ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ *  ┃  1. domain-graph (graph/*)                                   ┃
+ *  ┃     - pure ELK JSON                                           ┃
+ *  ┃     - NO x/y/sections/width/height/etc                        ┃
+ *  ┃                                                               ┃
+ *  ┃  2. processed-graph (ensureIds + elkOptions)                  ┃
+ *  ┃     - lives only inside hooks/layout funcs                    ┃
+ *  ┃     - generated, never mutated manually                       ┃
+ *  ┃                                                               ┃
+ *  ┃  3. view-graph (ReactFlow nodes/edges)                        ┃
+ *  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+import { ElkGraphNode, NodeID, EdgeID, createNodeID, createEdgeID } from "../../types/graph";
+import { RawGraph } from "./types/index";
 
 // Helper to find a node by ID
 const findNodeById = (node: ElkGraphNode, id: NodeID): ElkGraphNode | null => {
@@ -12,10 +29,16 @@ const findNodeById = (node: ElkGraphNode, id: NodeID): ElkGraphNode | null => {
   return null;
 };
 
+const notFound = (type: "node"|"edge"|"shape", id: string) =>
+  console.error(`❌ ${type} '${id}' not found – caller / stack:`, new Error().stack);
+
 // Add a new node under a parent
-export const addNode = (nodeName: string, parentId: NodeID, graph: ElkGraph): ElkGraph => {
+export const addNode = (nodeName: string, parentId: NodeID, graph: RawGraph): RawGraph => {
+  console.group(`[mutation] addNode '${nodeName}' → parent '${parentId}'`);
+  console.time("addNode");
   const parentNode = findNodeById(graph, parentId);
   if (!parentNode) {
+    notFound("node", parentId);
     throw new Error(`Parent node '${parentId}' not found`);
   }
   
@@ -33,11 +56,15 @@ export const addNode = (nodeName: string, parentId: NodeID, graph: ElkGraph): El
   // Add to parent
   parentNode.children.push(newNode);
   
+  console.timeEnd("addNode");
+  console.groupEnd();
   return graph;
 };
 
 // Delete a node and its edges
-export const deleteNode = (nodeId: NodeID, graph: ElkGraph): ElkGraph => {
+export const deleteNode = (nodeId: NodeID, graph: RawGraph): RawGraph => {
+  console.group(`[mutation] deleteNode '${nodeId}'`);
+  console.time("deleteNode");
   const deleteNodeFromParent = (parent: ElkGraphNode, id: NodeID): boolean => {
     if (!parent.children) return false;
     
@@ -55,22 +82,29 @@ export const deleteNode = (nodeId: NodeID, graph: ElkGraph): ElkGraph => {
   };
   
   if (!deleteNodeFromParent(graph, nodeId)) {
+    notFound("node", nodeId);
     throw new Error(`Node '${nodeId}' not found`);
   }
   
+  console.timeEnd("deleteNode");
+  console.groupEnd();
   return graph;
 };
 
 // Move a node to a new parent
-export const moveNode = (nodeId: NodeID, newParentId: NodeID, graph: ElkGraph): ElkGraph => {
+export const moveNode = (nodeId: NodeID, newParentId: NodeID, graph: RawGraph): RawGraph => {
+  console.group(`[mutation] moveNode '${nodeId}' → new parent '${newParentId}'`);
+  console.time("moveNode");
   const node = findNodeById(graph, nodeId);
   if (!node) {
+    notFound("node", nodeId);
     throw new Error(`Node '${nodeId}' not found`);
   }
   
   const newParent = findNodeById(graph, newParentId);
   if (!newParent) {
-    throw new Error(`New parent '${newParentId}' not found`);
+    notFound("node", newParentId);
+    throw new Error(`New parent node '${newParentId}' not found`);
   }
   
   // Remove from old parent
@@ -97,13 +131,18 @@ export const moveNode = (nodeId: NodeID, newParentId: NodeID, graph: ElkGraph): 
     throw new Error(`Failed to move node '${nodeId}'`);
   }
   
+  console.timeEnd("moveNode");
+  console.groupEnd();
   return graph;
 };
 
 // Add an edge between nodes
-export const addEdge = (edgeId: EdgeID, containerId: NodeID | null, sourceId: NodeID, targetId: NodeID, graph: ElkGraph): ElkGraph => {
+export const addEdge = (edgeId: EdgeID, containerId: NodeID | null, sourceId: NodeID, targetId: NodeID, graph: RawGraph): RawGraph => {
+  console.group(`[mutation] addEdge '${edgeId}' (${sourceId} → ${targetId})`);
+  console.time("addEdge");
   const container = containerId ? findNodeById(graph, containerId) : graph;
   if (!container) {
+    notFound("node", containerId?.toString() || "null");
     throw new Error(`Container '${containerId}' not found`);
   }
   
@@ -122,11 +161,15 @@ export const addEdge = (edgeId: EdgeID, containerId: NodeID | null, sourceId: No
   // Add to container
   container.edges.push(newEdge);
   
+  console.timeEnd("addEdge");
+  console.groupEnd();
   return graph;
 };
 
 // Delete an edge
-export const deleteEdge = (edgeId: EdgeID, graph: ElkGraph): ElkGraph => {
+export const deleteEdge = (edgeId: EdgeID, graph: RawGraph): RawGraph => {
+  console.group(`[mutation] deleteEdge '${edgeId}'`);
+  console.time("deleteEdge");
   const deleteEdgeFromNode = (node: ElkGraphNode, id: EdgeID): boolean => {
     if (node.edges) {
       const index = node.edges.findIndex(edge => edge.id === id);
@@ -146,17 +189,23 @@ export const deleteEdge = (edgeId: EdgeID, graph: ElkGraph): ElkGraph => {
   };
   
   if (!deleteEdgeFromNode(graph, edgeId)) {
+    notFound("edge", edgeId);
     throw new Error(`Edge '${edgeId}' not found`);
   }
   
+  console.timeEnd("deleteEdge");
+  console.groupEnd();
   return graph;
 };
 
 // Group nodes together
-export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID, graph: ElkGraph): ElkGraph => {
+export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID, graph: RawGraph): RawGraph => {
+  console.group(`[mutation] groupNodes '${groupId}' (${nodeIds.length} nodes) → parent '${parentId}'`);
+  console.time("groupNodes");
   // Find the parent node
   const parentNode = findNodeById(graph, parentId);
   if (!parentNode) {
+    notFound("node", parentId);
     throw new Error(`Parent node '${parentId}' not found`);
   }
   
@@ -187,6 +236,7 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
     }
     
     if (!found) {
+      notFound("node", nodeId);
       throw new Error(`Node '${nodeId}' not found in parent '${parentId}'`);
     }
   }
@@ -194,11 +244,15 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
   // Add the group node to the parent
   parentNode.children.push(groupNode);
   
+  console.timeEnd("groupNodes");
+  console.groupEnd();
   return graph;
 };
 
 // Remove a group, moving its children to the parent
-export const removeGroup = (groupId: NodeID, graph: ElkGraph): ElkGraph => {
+export const removeGroup = (groupId: NodeID, graph: RawGraph): RawGraph => {
+  console.group(`[mutation] removeGroup '${groupId}'`);
+  console.time("removeGroup");
   // Find the group and its parent
   let groupNode: ElkGraphNode | null = null;
   let parentNode: ElkGraphNode | null = null;
@@ -223,6 +277,7 @@ export const removeGroup = (groupId: NodeID, graph: ElkGraph): ElkGraph => {
   findGroupAndParent(graph, null, groupId);
   
   if (!groupNode) {
+    notFound("node", groupId);
     throw new Error(`Group '${groupId}' not found`);
   }
   
@@ -235,6 +290,8 @@ export const removeGroup = (groupId: NodeID, graph: ElkGraph): ElkGraph => {
   // Replace the group with its children
   parentNode!.children!.splice(groupIndex, 1, ...groupChildren);
   
+  console.timeEnd("removeGroup");
+  console.groupEnd();
   return graph;
 };
 
@@ -249,7 +306,7 @@ export const batchUpdate = (operations: Array<{
   targetId?: NodeID;
   nodeIds?: NodeID[];
   groupId?: NodeID;
-}>, graph: ElkGraph) => {
+}>, graph: RawGraph) => {
   let updatedGraph = { ...graph };
   
   for (const operation of operations) {

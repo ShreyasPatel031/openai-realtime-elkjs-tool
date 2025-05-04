@@ -1,3 +1,19 @@
+/**
+ *  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ *  ┃  **DATA LAYERS – READ ME BEFORE EDITING**                    ┃
+ *  ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ *  ┃  1. domain-graph (graph/*)                                   ┃
+ *  ┃     - pure ELK JSON                                           ┃
+ *  ┃     - NO x/y/sections/width/height/etc                        ┃
+ *  ┃                                                               ┃
+ *  ┃  2. processed-graph (ensureIds + elkOptions)                  ┃
+ *  ┃     - lives only inside hooks/layout funcs                    ┃
+ *  ┃     - generated, never mutated manually                       ┃
+ *  ┃                                                               ┃
+ *  ┃  3. view-graph (ReactFlow nodes/edges)                        ┃
+ *  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import ELK from "elkjs/lib/elk.bundled.js";
 import {
@@ -7,72 +23,59 @@ import {
   Connection, OnConnect
 } from "reactflow";
 
+import { RawGraph, LayoutGraph } from "../components/graph/types/index";
 import { ensureIds } from "../components/graph/utils/elk/ids";
-import { processLayoutedGraph } from "../components/graph/utils/elk/toReactFlow";
 import { structuralHash } from "../components/graph/utils/elk/structuralHash";
+import { processLayoutedGraph } from "../components/graph/utils/toReactFlow";
 
 import {
   addNode, deleteNode, moveNode,
   addEdge, deleteEdge,
   groupNodes, removeGroup,
   batchUpdate
-} from "../components/graph/elk/mutations";
+} from "../components/graph/mutations";
 
 import {
   NON_ROOT_DEFAULT_OPTIONS   // ← 1️⃣ single source-of-truth sizes
-} from "../components/graph/elk/elkOptions";
+} from "../components/graph/utils/elk/elkOptions";
 
 /* -------------------------------------------------- */
-/* 🔹 1.  one global ELK instance                      */
+/* 🔹 1.  ELK instance                                */
 /* -------------------------------------------------- */
 const elk = new ELK();
 
 /* -------------------------------------------------- */
 /* 🔹 2.  hook                                         */
 /* -------------------------------------------------- */
-export function useElkToReactflowGraphConverter(initialRaw: any) {
-  /* normalise once so EVERY node has width/height */
-  // const initial = useMemo(
-  //   () => ensureIds(structuredClone(initialRaw)),
-  //   []
-  // );
-
-  // const [elkGraph, setElkGraph] = useState(initial);
-
-  const [elkGraph, setElkGraph] = useState(
-    structuredClone(initialRaw)           // <- NO ensureIds, NO x/y
-  );
-
+export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
+  /* 1) raw‐graph state */
+  const [rawGraph, setRawGraph] = useState<RawGraph>(initialRaw);
+  
+  /* 2) layouted‐graph state */
+  const [layoutGraph, setLayoutGraph] = useState<LayoutGraph|null>(null);
+  
   /* refs that NEVER cause re-render */
-  const hashRef   = useRef<string>(structuralHash(initialRaw));
-  const abortRef  = useRef<AbortController | null>(null);
-
+  const hashRef = useRef<string>(structuralHash(initialRaw));
+  const abortRef = useRef<AbortController | null>(null);
+  
   /* react-flow state */
-  const [nodes, setNodes]   = useState<Node[]>([]);
-  const [edges, setEdges]   = useState<Edge[]>([]);
+  const [nodes, setNodes] = useState<Node[]>([]);
+  const [edges, setEdges] = useState<Edge[]>([]);
   const [layoutVersion, incLayoutVersion] = useState(0);
-
+  
   /* -------------------------------------------------- */
   /* 🔹 3. mutate helper (sync hash update)              */
   /* -------------------------------------------------- */
   type MutFn = (...a: any[]) => any;
-
-  // const mutate = useCallback((fn: MutFn, ...a: any[]) => {
-  //   setElkGraph((prev: any) => {
-  //     const next = ensureIds(structuredClone(fn(...a, prev)));
-  //     hashRef.current = structuralHash(next);   // ← **sync** update
-  //     return next;                              // triggers useEffect
-  //   });
-  // }, []);
-
+  
   const mutate = useCallback((fn: MutFn, ...a: any[]) => {
-    setElkGraph((prev: any) => {
-      const next = structuredClone(fn(...a, prev)); // still *minimal*
+    setRawGraph(prev => {
+      const next = fn(...a, prev) as RawGraph;
       hashRef.current = structuralHash(next);       // hash before layout
       return next;                                  // triggers useEffect
     });
   }, []);
-
+  
   /* -------------------------------------------------- */
   /* 🔹 4.  exposed handlers                            */
   /* -------------------------------------------------- */
@@ -86,33 +89,38 @@ export function useElkToReactflowGraphConverter(initialRaw: any) {
     handleRemoveGroup : (...a: any[]) => mutate(removeGroup,  ...a),
     handleBatchUpdate : (...a: any[]) => mutate(batchUpdate,  ...a),
   }), [mutate]);
-
   
-
   /* -------------------------------------------------- */
   /* 🔹 5. layout side-effect                           */
   /* -------------------------------------------------- */
   useEffect(() => {
-    if (!elkGraph) return;
-
+    if (!rawGraph) return;
+    
     /* cancel any in-flight run */
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
-
+    
     const hashAtStart = hashRef.current;
-
+    
     (async () => {
       try {
-        console.group(`[ELK Hook] layoutVersion ${layoutVersion}`);
-        const layoutInput = ensureIds(structuredClone(elkGraph));
-        console.log('elkGraph ➜ layout IN:', layoutInput);
-        const layout = await elk.layout(layoutInput);
-        console.log('elk.layout OUT:', layout);
-
+        // 1) inject IDs + elkOptions onto a clone of rawGraph
+        const prepared = ensureIds(structuredClone(rawGraph));
+        
+        // 2) run ELK
+        const layout = await elk.layout(prepared);
+        console.groupCollapsed(`[ELK] layout OK   (nodes ${layout.children?.length ?? 0}, edges ${layout.edges?.length ?? 0})`);
+        console.log(layout);
+        console.groupEnd();
+        
         /* stale result? – ignore */
         if (hashAtStart !== hashRef.current) return;
-
+        
+        // 3) store for SVG & RF conversion
+        setLayoutGraph(layout as LayoutGraph);
+        
+        // 4) convert to ReactFlow nodes/edges
         const { nodes: rfNodes, edges: rfEdges } =
           processLayoutedGraph(layout, {
             width      : NON_ROOT_DEFAULT_OPTIONS.width,
@@ -121,44 +129,41 @@ export function useElkToReactflowGraphConverter(initialRaw: any) {
             groupHeight: NON_ROOT_DEFAULT_OPTIONS.height * 3,
             padding    : 10
           });
-        console.log('→ converted to RF nodes/edges:', rfNodes, rfEdges);
-
+        
         setNodes(rfNodes);
         setEdges(rfEdges);
         incLayoutVersion(v => v + 1);
-        console.groupEnd();
       } catch (e: any) {
         if (e.name !== "AbortError")
           console.error("[ELK] layout failed", e);
       }
     })();
-
+    
     return () => ac.abort();
-  }, [elkGraph]);
-
+  }, [rawGraph]);
+  
   /* -------------------------------------------------- */
   /* 🔹 6. react-flow helpers                           */
   /* -------------------------------------------------- */
   const onNodesChange = useCallback(
     (c: NodeChange[]) => setNodes(n => applyNodeChanges(c, n)), []);
-
+  
   const onEdgesChange = useCallback(
     (c: EdgeChange[]) => setEdges(e => applyEdgeChanges(c, e)), []);
-
+  
   const onConnect: OnConnect = useCallback(({ source, target }: Connection) => {
     if (!source || !target) return;
     const id = `edge-${Math.random().toString(36).slice(2, 9)}`;
     handlers.handleAddEdge(id, source, target);
   }, [handlers]);
-
+  
   /* -------------------------------------------------- */
   /* 🔹 7. public API                                   */
   /* -------------------------------------------------- */
   return {
-    elkGraph, nodes, edges, layoutVersion,
-    setElkGraph, setNodes, setEdges,
+    rawGraph, layoutGraph, nodes, edges, layoutVersion,
+    setRawGraph, setNodes, setEdges,
     ...handlers,
     onNodesChange, onEdgesChange, onConnect
   } as const;
-  
 }

@@ -2,7 +2,8 @@ import React, { useState, useRef } from 'react';
 import { ElkGraph } from '../types/graph';
 import ELK from "elkjs/lib/elk.bundled.js";
 import { ensureIds } from './graph/utils/elk/ids';
-import { ROOT_DEFAULT_OPTIONS, NON_ROOT_DEFAULT_OPTIONS } from './graph/elk/elkOptions';
+import { structuralHash } from './graph/utils/elk/structuralHash';
+import { ROOT_DEFAULT_OPTIONS, NON_ROOT_DEFAULT_OPTIONS } from './graph/utils/elk/elkOptions';
 
 interface DevPanelProps {
   elkGraph: ElkGraph;
@@ -25,6 +26,19 @@ const DevPanel: React.FC<DevPanelProps> = ({
   const [targetId, setTargetId] = useState('');
   const [isGeneratingSvg, setIsGeneratingSvg] = useState(false);
   const svgRef = useRef<HTMLDivElement>(null);
+  
+  // New state for additional operations
+  const [nodeToDelete, setNodeToDelete] = useState('');
+  const [nodeToMove, setNodeToMove] = useState('');
+  const [newParentId, setNewParentId] = useState('');
+  const [edgeToDelete, setEdgeToDelete] = useState('');
+  const [nodesToGroup, setNodesToGroup] = useState<string[]>([]);
+  const [groupParentId, setGroupParentId] = useState('root');
+  const [groupLabel, setGroupLabel] = useState('');
+  const [groupToRemove, setGroupToRemove] = useState('');
+  
+  // Add state for SVG zoom
+  const [svgZoom, setSvgZoom] = useState(1);
   
   // Get all possible node IDs from the graph
   const nodeIds = React.useMemo(() => {
@@ -80,6 +94,9 @@ const DevPanel: React.FC<DevPanelProps> = ({
     });
     
     // Pass the updated graph back to the parent
+    console.group("[DevPanel] onGraphChange");
+    console.log("updatedGraph (raw)", updatedGraph);
+    console.groupEnd();
     onGraphChange(updatedGraph);
     
     // Clear the form
@@ -103,6 +120,9 @@ const DevPanel: React.FC<DevPanelProps> = ({
     });
     
     // Pass the updated graph back to the parent
+    console.group("[DevPanel] onGraphChange");
+    console.log("updatedGraph (raw)", updatedGraph);
+    console.groupEnd();
     onGraphChange(updatedGraph);
     
     // Clear the form
@@ -326,37 +346,256 @@ const DevPanel: React.FC<DevPanelProps> = ({
     }
   };
   
-  return (
-    <div className="bg-white p-4 rounded-md shadow-lg border border-gray-200 w-64">
-      <h3 className="text-lg font-semibold mb-4">Dev Panel</h3>
+  // Helper function to find a node by ID
+  const findNodeById = (node: any, id: string): any => {
+    if (node.id === id) return node;
+    if (node.children) {
+      for (const child of node.children) {
+        const found = findNodeById(child, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  // New handlers for additional operations
+  const handleDeleteNode = () => {
+    if (!nodeToDelete) return;
+    
+    const updatedGraph = JSON.parse(JSON.stringify(elkGraph));
+    const deleteNodeFromParent = (parent: any, id: string): boolean => {
+      if (!parent.children) return false;
       
-      {/* Visualization Toggle */}
-      {onToggleVisMode && (
-        <div className="mb-4 pb-4 border-b border-gray-200">
-          <h4 className="text-sm font-medium mb-2">Visualization Mode</h4>
-          <div className="flex items-center">
-            <label className="inline-flex items-center cursor-pointer">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  className="sr-only peer"
-                  checked={useReactFlow}
-                  onChange={handleToggleVisMode}
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              </div>
-              <span className="ml-3 text-sm font-medium text-gray-900">
-                {useReactFlow ? 'ReactFlow' : 'SVG'}
-              </span>
-            </label>
-          </div>
-          <div className="mt-1 text-xs text-gray-500">
-            {useReactFlow 
-              ? 'Using interactive ReactFlow visualization' 
-              : 'Using static SVG visualization'}
-          </div>
-        </div>
-      )}
+      const index = parent.children.findIndex((child: any) => child.id === id);
+      if (index >= 0) {
+        parent.children.splice(index, 1);
+        return true;
+      }
+      
+      for (const child of parent.children) {
+        if (deleteNodeFromParent(child, id)) return true;
+      }
+      
+      return false;
+    };
+    
+    if (!deleteNodeFromParent(updatedGraph, nodeToDelete)) {
+      console.error(`Node '${nodeToDelete}' not found`);
+      return;
+    }
+    
+    console.group("[DevPanel] onGraphChange");
+    console.log("updatedGraph (raw)", updatedGraph);
+    console.groupEnd();
+    onGraphChange(updatedGraph);
+    setNodeToDelete('');
+  };
+
+  const handleMoveNode = () => {
+    if (!nodeToMove || !newParentId) return;
+    
+    const updatedGraph = JSON.parse(JSON.stringify(elkGraph));
+    const findNodeById = (node: any, id: string): any => {
+      if (node.id === id) return node;
+      if (node.children) {
+        for (const child of node.children) {
+          const found = findNodeById(child, id);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    
+    const node = findNodeById(updatedGraph, nodeToMove);
+    const newParent = findNodeById(updatedGraph, newParentId);
+    
+    if (!node || !newParent) {
+      console.error('Node or new parent not found');
+      return;
+    }
+    
+    // Remove from old parent
+    const removeFromParent = (parent: any, id: string): boolean => {
+      if (!parent.children) return false;
+      
+      const index = parent.children.findIndex((child: any) => child.id === id);
+      if (index >= 0) {
+        const [movedNode] = parent.children.splice(index, 1);
+        if (!newParent.children) newParent.children = [];
+        newParent.children.push(movedNode);
+        return true;
+      }
+      
+      for (const child of parent.children) {
+        if (removeFromParent(child, id)) return true;
+      }
+      
+      return false;
+    };
+    
+    if (!removeFromParent(updatedGraph, nodeToMove)) {
+      console.error(`Failed to move node '${nodeToMove}'`);
+      return;
+    }
+    
+    console.group("[DevPanel] onGraphChange");
+    console.log("updatedGraph (raw)", updatedGraph);
+    console.groupEnd();
+    onGraphChange(updatedGraph);
+    setNodeToMove('');
+    setNewParentId('');
+  };
+
+  const handleDeleteEdge = () => {
+    if (!edgeToDelete) return;
+    
+    const updatedGraph = JSON.parse(JSON.stringify(elkGraph));
+    const deleteEdgeFromNode = (node: any, id: string): boolean => {
+      if (node.edges) {
+        const index = node.edges.findIndex((edge: any) => edge.id === id);
+        if (index >= 0) {
+          node.edges.splice(index, 1);
+          return true;
+        }
+      }
+      
+      if (node.children) {
+        for (const child of node.children) {
+          if (deleteEdgeFromNode(child, id)) return true;
+        }
+      }
+      
+      return false;
+    };
+    
+    if (!deleteEdgeFromNode(updatedGraph, edgeToDelete)) {
+      console.error(`Edge '${edgeToDelete}' not found`);
+      return;
+    }
+    
+    console.group("[DevPanel] onGraphChange");
+    console.log("updatedGraph (raw)", updatedGraph);
+    console.groupEnd();
+    onGraphChange(updatedGraph);
+    setEdgeToDelete('');
+  };
+
+  const handleGroupNodes = () => {
+    if (nodesToGroup.length === 0 || !groupLabel) return;
+    
+    const groupId = groupLabel.toLowerCase().replace(/\s+/g, '_');
+    const updatedGraph = JSON.parse(JSON.stringify(elkGraph));
+    
+    // Find the parent node
+    const parentNode = findNodeById(updatedGraph, groupParentId);
+    if (!parentNode) {
+      console.error(`Parent node '${groupParentId}' not found`);
+      return;
+    }
+    
+    // Create the new group node
+    const groupNode: any = {
+      id: groupId,
+      labels: [{ text: groupLabel }],
+      children: []
+    };
+    
+    // Move each node to the group
+    for (const nodeId of nodesToGroup) {
+      let found = false;
+      
+      for (let i = 0; i < parentNode.children.length; i++) {
+        if (parentNode.children[i].id === nodeId) {
+          groupNode.children.push(parentNode.children[i]);
+          parentNode.children.splice(i, 1);
+          found = true;
+          break;
+        }
+      }
+      
+      if (!found) {
+        console.error(`Node '${nodeId}' not found in parent '${groupParentId}'`);
+        return;
+      }
+    }
+    
+    // Add the group node to the parent
+    parentNode.children.push(groupNode);
+    
+    console.group("[DevPanel] onGraphChange");
+    console.log("updatedGraph (raw)", updatedGraph);
+    console.groupEnd();
+    onGraphChange(updatedGraph);
+    setNodesToGroup([]);
+    setGroupLabel('');
+  };
+
+  const handleRemoveGroup = () => {
+    if (!groupToRemove) return;
+    
+    const updatedGraph = JSON.parse(JSON.stringify(elkGraph));
+    
+    // Find the group and its parent
+    let groupNode: any = null;
+    let parentNode: any = null;
+    
+    const findGroupAndParent = (node: any, parent: any, groupId: string): boolean => {
+      if (!node.children) return false;
+      
+      for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i];
+        if (child.id === groupId) {
+          groupNode = child;
+          parentNode = node;
+          return true;
+        }
+        if (child.children && findGroupAndParent(child, node, groupId)) {
+          return true;
+        }
+      }
+      return false;
+    };
+    
+    findGroupAndParent(updatedGraph, null, groupToRemove);
+    
+    if (!groupNode) {
+      console.error(`Group '${groupToRemove}' not found`);
+      return;
+    }
+    
+    // Get the index of the group in the parent
+    const groupIndex = parentNode.children.indexOf(groupNode);
+    
+    // Get the children of the group
+    const groupChildren = groupNode.children || [];
+    
+    // Replace the group with its children
+    parentNode.children.splice(groupIndex, 1, ...groupChildren);
+    
+    console.group("[DevPanel] onGraphChange");
+    console.log("updatedGraph (raw)", updatedGraph);
+    console.groupEnd();
+    onGraphChange(updatedGraph);
+    setGroupToRemove('');
+  };
+
+  // Helper function to handle SVG zoom
+  const handleSvgZoom = (delta: number) => {
+    setSvgZoom(prev => {
+      const newZoom = Math.max(0.1, Math.min(5, prev + delta));
+      return newZoom;
+    });
+  };
+  
+  const svgStyle = {
+    transform: `scale(${svgZoom})`,
+    transformOrigin: 'top left',
+    transition: 'transform 0.2s'
+  };
+
+  return (
+    <div className="bg-white p-4 rounded-md shadow-lg border border-gray-200 w-64 h-[calc(100vh-2rem)] overflow-y-auto">
+      <h3 className="text-lg font-semibold mb-4 sticky top-0 bg-white pb-2">Dev Panel</h3>
       
       {/* Add Node Form */}
       <div className="mb-4">
@@ -432,6 +671,170 @@ const DevPanel: React.FC<DevPanelProps> = ({
         </div>
       </div>
       
+      {/* Delete Node Form */}
+      <div className="mb-4">
+        <h4 className="text-sm font-medium mb-2">Delete Node</h4>
+        <div className="space-y-2">
+          <select
+            value={nodeToDelete}
+            onChange={(e) => setNodeToDelete(e.target.value)}
+            className="w-full px-2 py-1 border rounded text-sm"
+          >
+            <option value="">-- Select Node to Delete --</option>
+            {nodeIds.filter(id => id !== 'root').map(id => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+          
+          <button
+            onClick={handleDeleteNode}
+            disabled={!nodeToDelete}
+            className="w-full px-3 py-1 bg-red-600 text-white rounded text-sm disabled:opacity-50"
+          >
+            Delete Node
+          </button>
+        </div>
+      </div>
+      
+      {/* Move Node Form */}
+      <div className="mb-4">
+        <h4 className="text-sm font-medium mb-2">Move Node</h4>
+        <div className="space-y-2">
+          <select
+            value={nodeToMove}
+            onChange={(e) => setNodeToMove(e.target.value)}
+            className="w-full px-2 py-1 border rounded text-sm"
+          >
+            <option value="">-- Select Node to Move --</option>
+            {nodeIds.filter(id => id !== 'root').map(id => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+          
+          <select
+            value={newParentId}
+            onChange={(e) => setNewParentId(e.target.value)}
+            className="w-full px-2 py-1 border rounded text-sm"
+          >
+            <option value="">-- Select New Parent --</option>
+            {nodeIds.map(id => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+          
+          <button
+            onClick={handleMoveNode}
+            disabled={!nodeToMove || !newParentId}
+            className="w-full px-3 py-1 bg-yellow-600 text-white rounded text-sm disabled:opacity-50"
+          >
+            Move Node
+          </button>
+        </div>
+      </div>
+      
+      {/* Delete Edge Form */}
+      <div className="mb-4">
+        <h4 className="text-sm font-medium mb-2">Delete Edge</h4>
+        <div className="space-y-2">
+          <input
+            type="text"
+            placeholder="Edge ID (e.g., edge_source_to_target)"
+            value={edgeToDelete}
+            onChange={(e) => setEdgeToDelete(e.target.value)}
+            className="w-full px-2 py-1 border rounded text-sm"
+          />
+          
+          <button
+            onClick={handleDeleteEdge}
+            disabled={!edgeToDelete}
+            className="w-full px-3 py-1 bg-red-600 text-white rounded text-sm disabled:opacity-50"
+          >
+            Delete Edge
+          </button>
+        </div>
+      </div>
+      
+      {/* Group Nodes Form */}
+      <div className="mb-4">
+        <h4 className="text-sm font-medium mb-2">Group Nodes</h4>
+        <div className="space-y-2">
+          <select
+            multiple
+            value={nodesToGroup}
+            onChange={(e) => setNodesToGroup(Array.from(e.target.selectedOptions, option => option.value))}
+            className="w-full px-2 py-1 border rounded text-sm"
+            size={3}
+          >
+            {nodeIds.filter(id => id !== 'root').map(id => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+          
+          <select
+            value={groupParentId}
+            onChange={(e) => setGroupParentId(e.target.value)}
+            className="w-full px-2 py-1 border rounded text-sm"
+          >
+            {nodeIds.map(id => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+          
+          <input
+            type="text"
+            placeholder="Group Label"
+            value={groupLabel}
+            onChange={(e) => setGroupLabel(e.target.value)}
+            className="w-full px-2 py-1 border rounded text-sm"
+          />
+          
+          <button
+            onClick={handleGroupNodes}
+            disabled={nodesToGroup.length === 0 || !groupLabel}
+            className="w-full px-3 py-1 bg-green-600 text-white rounded text-sm disabled:opacity-50"
+          >
+            Create Group
+          </button>
+        </div>
+      </div>
+      
+      {/* Remove Group Form */}
+      <div className="mb-4">
+        <h4 className="text-sm font-medium mb-2">Remove Group</h4>
+        <div className="space-y-2">
+          <select
+            value={groupToRemove}
+            onChange={(e) => setGroupToRemove(e.target.value)}
+            className="w-full px-2 py-1 border rounded text-sm"
+          >
+            <option value="">-- Select Group to Remove --</option>
+            {nodeIds.filter(id => id !== 'root').map(id => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+          
+          <button
+            onClick={handleRemoveGroup}
+            disabled={!groupToRemove}
+            className="w-full px-3 py-1 bg-red-600 text-white rounded text-sm disabled:opacity-50"
+          >
+            Remove Group
+          </button>
+        </div>
+      </div>
+      
       {/* Debug Tools */}
       <div className="pt-4 border-t border-gray-200">
         <h4 className="text-sm font-medium mb-2">Debug Tools</h4>
@@ -442,8 +845,55 @@ const DevPanel: React.FC<DevPanelProps> = ({
           >
             Export JSON
           </button>
+          
+          <button
+            onClick={handleGenerateSVG}
+            className="w-full px-3 py-1 bg-blue-600 text-white rounded text-sm generate-svg-btn"
+            disabled={isGeneratingSvg}
+          >
+            {isGeneratingSvg ? 'Generating SVG...' : 'Generate SVG'}
+          </button>
+          
+          <button
+            onClick={handleToggleVisMode}
+            className="w-full px-3 py-1 bg-purple-600 text-white rounded text-sm"
+          >
+            {useReactFlow ? 'Switch to SVG View' : 'Switch to ReactFlow View'}
+          </button>
         </div>
       </div>
+      
+      {/* SVG Visualization with zoom controls */}
+      {svgRef.current?.innerHTML && (
+        <div className="mt-4">
+          <div className="flex justify-between mb-2">
+            <span className="text-sm font-medium">SVG Preview (Zoom: {(svgZoom * 100).toFixed(0)}%)</span>
+            <div className="flex gap-1">
+              <button 
+                onClick={() => handleSvgZoom(-0.1)} 
+                className="px-2 py-0.5 bg-gray-200 rounded text-xs"
+              >
+                -
+              </button>
+              <button 
+                onClick={() => handleSvgZoom(0.1)} 
+                className="px-2 py-0.5 bg-gray-200 rounded text-xs"
+              >
+                +
+              </button>
+              <button 
+                onClick={() => setSvgZoom(1)} 
+                className="px-2 py-0.5 bg-gray-200 rounded text-xs"
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+          <div className="border rounded p-2 bg-gray-50 overflow-auto max-h-80">
+            <div ref={svgRef} style={svgStyle} className="transform-gpu"></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

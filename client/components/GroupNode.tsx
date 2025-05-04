@@ -1,6 +1,6 @@
 import React from 'react';
 import { Handle, Position } from 'reactflow';
-import { baseHandleStyle } from './graph/styles/handles';
+import { baseHandleStyle } from './graph/handles';
 
 interface GroupNodeProps {
   data: {
@@ -20,13 +20,14 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
     border: selected ? '2px solid #6c757d' : '1px solid #ccc',
     borderRadius: '8px',
     padding: '10px',
-    width: data.width || 200,
-    height: data.height || 200,
+    width: '100%',
+    height: '100%',
     fontSize: '12px',
     position: 'relative' as const,
     color: '#333',
     pointerEvents: 'all' as const,
     zIndex: 1,
+    boxSizing: 'border-box' as const
   };
 
   return (

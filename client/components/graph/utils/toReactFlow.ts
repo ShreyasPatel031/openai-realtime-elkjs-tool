@@ -1,6 +1,6 @@
 import { Edge, MarkerType } from "reactflow";
-import { CustomNode } from "../../types";
-import { computeAbsolutePositions } from "./absPositions";
+import { CustomNode } from "../../../types/graph";
+import { computeAbsolutePositions } from "./elk/absPositions";
 import { buildNodeEdgePoints } from "./edgePoints";
 
 interface NodeDimensions {
@@ -127,6 +127,14 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
             selected: false,
             hidden: false,
             focusable: true,
+          });
+        } else {
+          console.warn("[RF-convert] edge skipped – handle not found", {
+            edgeId,
+            sourceNodeId,
+            targetNodeId,
+            sourceHandle,
+            targetHandle
           });
         }
       })

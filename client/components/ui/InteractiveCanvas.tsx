@@ -28,9 +28,9 @@ import { cn } from "../../lib/utils"
 // Import types from separate type definition files
 import { ChatBoxProps, Message as ChatMessage, ChatWindowProps, InteractiveCanvasProps } from "../../types/chat"
 import { CustomNode, NodeData, EdgeData, ElkGraph, ElkGraphNode, ElkGraphEdge } from "../../types/graph"
-import { ROOT_DEFAULT_OPTIONS, NON_ROOT_DEFAULT_OPTIONS } from "../graph/elk/elkOptions"
+import { RawGraph } from "../graph/types/index"
 import { getInitialElkGraph } from "../graph/initialGraph"
-import { addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate } from "../graph/elk/mutations"
+import { addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate } from "../graph/mutations"
 import { useElkToReactflowGraphConverter } from "../../hooks/useElkToReactflowGraphConverter"
 import { useChatSession } from '../../hooks/useChatSession'
 
@@ -112,22 +112,21 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // State for SVG content when in SVG mode
   const [svgContent, setSvgContent] = useState<string | null>(null);
   
-  // Log initial graph
-  useEffect(() => {
-    const initialGraph = getInitialElkGraph();
-    console.log('1. Initial Graph (barebones):', initialGraph);
-  }, []);
+  // State for SVG zoom
+  const [svgZoom, setSvgZoom] = useState(1);
+  const svgContainerRef = useRef<HTMLDivElement>(null);
   
   // Use the new ElkFlow hook instead of managing ELK state directly
   const {
     // State
-    elkGraph,
+    rawGraph,
+    layoutGraph,
     nodes,
     edges,
     layoutVersion,
     
     // Setters
-    setElkGraph,
+    setRawGraph,
     setNodes,
     setEdges,
     
@@ -138,51 +137,16 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     
   } = useElkToReactflowGraphConverter(getInitialElkGraph());
   
-  // Log processed graph with options
-  useEffect(() => {
-    console.log('2. Processed Graph (with elkOptions):', elkGraph);
-  }, [elkGraph]);
-  
-  // Log final layout used for rendering
-  useEffect(() => {
-    console.log('3. Final Layout (used for rendering):', {
-      nodes: nodes.map(node => ({
-        id: node.id,
-        position: node.position,
-        data: node.data,
-        parentNode: node.parentNode
-      })),
-      edges: edges.map(edge => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        type: edge.type
-      }))
-    });
-  }, [nodes, edges]);
 
-  // const stripGeom = (g: any) =>
-  //   JSON.parse(
-  //     JSON.stringify(g),
-  //     (key, val) => 
-  //       (key === 'x' ||
-  //        key === 'y' ||
-  //        key === 'sections' ||
-  //        key === 'absoluteBendPoints')
-  //         ? undefined
-  //         : val
-  //   );
   
   // Handler for graph changes from DevPanel
-  const handleGraphChange = useCallback((newGraph: ElkGraph) => {
+  const handleGraphChange = useCallback((newGraph: RawGraph) => {
     console.group('[DevPanel] Graph Change');
     console.log('raw newGraph:', newGraph);
-    // console.log('raw newGraph:', stripGeom(newGraph));
-    // setElkGraph(stripGeom(newGraph));
-    setElkGraph(newGraph);
-    console.log('…called setElkGraph');
+    setRawGraph(newGraph);
+    console.log('…called setRawGraph');
     console.groupEnd();
-  }, [setElkGraph]);
+  }, [setRawGraph]);
   
   // Memoize node and edge types to prevent recreation on each render
   const memoizedNodeTypes = useMemo(() => nodeTypes, []);
@@ -200,8 +164,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     sendTextMessage,
     sendClientEvent,
     events,
-    elkGraph,
-    setElkGraph,
+    elkGraph: rawGraph,
+    setElkGraph: setRawGraph,
     elkGraphDescription,
     agentInstruction,
     addNode: addNode as any,
@@ -330,15 +294,220 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     });
   }, [isSessionActive, safeSendClientEvent]);
 
+  // Function to generate SVG directly from layoutGraph
+  const generateSVG = useCallback((layoutedGraph: any): string => {
+    if (!layoutedGraph) return '';
+    
+    // Create accumulator for flattened nodes and edges
+    const collected = { nodes: [] as any[], edges: [] as any[] };
+    
+    // Helper function to flatten graph with proper coordinates
+    const flattenGraph = (
+      node: any,
+      parentX: number = 0,
+      parentY: number = 0
+    ) => {
+      const absX = (node.x ?? 0) + parentX;
+      const absY = (node.y ?? 0) + parentY;
+      
+      // Add node with absolute coordinates
+      collected.nodes.push({
+        ...node,
+        x: absX,
+        y: absY,
+        isContainer: Array.isArray(node.children) && node.children.length > 0
+      });
+      
+      // Process edges
+      if (Array.isArray(node.edges)) {
+        for (const edge of node.edges) {
+          const edgeCopy = { ...edge };
+          if (edge.sections) {
+            edgeCopy.sections = edge.sections.map((section: any) => {
+              return {
+                ...section,
+                startPoint: {
+                  x: section.startPoint.x + absX,
+                  y: section.startPoint.y + absY
+                },
+                endPoint: {
+                  x: section.endPoint.x + absX,
+                  y: section.endPoint.y + absY
+                },
+                bendPoints: section.bendPoints ? section.bendPoints.map((bp: any) => ({
+                  x: bp.x + absX,
+                  y: bp.y + absY
+                })) : []
+              };
+            });
+          }
+          collected.edges.push(edgeCopy);
+        }
+      }
+      
+      // Recurse through children
+      if (Array.isArray(node.children)) {
+        node.children.forEach((child: any) => {
+          flattenGraph(child, absX, absY);
+        });
+      }
+    };
+    
+    // Start the flattening process
+    flattenGraph(layoutedGraph);
+    
+    const { nodes, edges } = collected;
+    
+    // Calculate bounding box
+    let minX = Infinity, minY = Infinity;
+    let maxX = -Infinity, maxY = -Infinity;
+    
+    for (const node of nodes) {
+      const x2 = node.x + (node.width ?? 120);
+      const y2 = node.y + (node.height ?? 60);
+      if (node.x < minX) minX = node.x;
+      if (node.y < minY) minY = node.y;
+      if (x2 > maxX) maxX = x2;
+      if (y2 > maxY) maxY = y2;
+    }
+    
+    const padding = 20;
+    const svgWidth = maxX - minX + padding * 2;
+    const svgHeight = maxY - minY + padding * 2;
+    
+    const shiftX = (x: number) => x - minX + padding;
+    const shiftY = (y: number) => y - minY + padding;
+    
+    // Start building SVG
+    let svg = `<svg width="${svgWidth}" height="${svgHeight}" xmlns="http://www.w3.org/2000/svg">`;
+    
+    // Add defs for markers
+    svg += `
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" 
+          markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d6bc4" />
+        </marker>
+      </defs>
+    `;
+    
+    // Draw nodes
+    for (const node of nodes) {
+      const x = shiftX(node.x);
+      const y = shiftY(node.y);
+      const width = node.width ?? 120;
+      const height = node.height ?? 60;
+      const isContainer = node.isContainer;
+      const fill = isContainer ? "#f0f4f8" : "#d0e3ff";
+      
+      svg += `
+        <rect x="${x}" y="${y}" width="${width}" height="${height}" 
+          fill="${fill}" stroke="#2d6bc4" stroke-width="2" rx="5" ry="5" />
+      `;
+      
+      // Add label if it exists
+      const label = node.data?.label || (node.labels && node.labels[0]?.text) || node.id;
+      if (label) {
+        svg += `
+          <text x="${x + width/2}" y="${y + height/2}" 
+            text-anchor="middle" dominant-baseline="middle" 
+            font-size="14" font-weight="bold" fill="#2d6bc4">${label}</text>
+        `;
+      }
+      
+      // Add node ID as smaller text below
+      svg += `
+        <text x="${x + width/2}" y="${y + height - 10}" 
+          text-anchor="middle" dominant-baseline="middle" 
+          font-size="10" fill="#666666">(${node.id})</text>
+      `;
+    }
+    
+    // Draw edges
+    for (const edge of edges) {
+      if (edge.sections) {
+        for (const section of edge.sections) {
+          const startX = shiftX(section.startPoint.x);
+          const startY = shiftY(section.startPoint.y);
+          const endX = shiftX(section.endPoint.x);
+          const endY = shiftY(section.endPoint.y);
+          
+          let points = `${startX},${startY}`;
+          
+          // Add bend points if they exist
+          if (section.bendPoints && section.bendPoints.length > 0) {
+            for (const bp of section.bendPoints) {
+              points += ` ${shiftX(bp.x)},${shiftY(bp.y)}`;
+            }
+          }
+          
+          points += ` ${endX},${endY}`;
+          
+          svg += `
+            <polyline points="${points}" fill="none" stroke="#2d6bc4" 
+              stroke-width="2" marker-end="url(#arrow)" />
+          `;
+        }
+      }
+    }
+    
+    // Close SVG tag
+    svg += '</svg>';
+    
+    return svg;
+  }, []);
+
   // Handler for switching visualization modes
   const handleToggleVisMode = useCallback((reactFlowMode: boolean) => {
+    console.log('[InteractiveCanvas] Toggle visualization mode:', reactFlowMode ? 'ReactFlow' : 'SVG');
     setUseReactFlow(reactFlowMode);
-  }, []);
+    
+    // If switching to SVG mode, generate SVG immediately if layoutGraph is available
+    if (!reactFlowMode && layoutGraph) {
+      const svgContent = generateSVG(layoutGraph);
+      setSvgContent(svgContent);
+    }
+  }, [layoutGraph, generateSVG]);
   
   // Handler for receiving SVG content from DevPanel
   const handleSvgGenerated = useCallback((svg: string) => {
+    console.log('[InteractiveCanvas] Received SVG content, length:', svg?.length || 0);
     setSvgContent(svg);
   }, []);
+
+  // SVG zoom handler
+  const handleSvgZoom = useCallback((delta: number) => {
+    setSvgZoom(prev => {
+      const newZoom = Math.max(0.2, Math.min(5, prev + delta));
+      return newZoom;
+    });
+  }, []);
+
+  // Effect to generate SVG content when needed
+  useEffect(() => {
+    if (!useReactFlow && !svgContent && layoutGraph) {
+      const newSvgContent = generateSVG(layoutGraph);
+      setSvgContent(newSvgContent);
+    }
+  }, [useReactFlow, svgContent, layoutGraph, generateSVG]);
+
+  // Event handler for mousewheel to zoom SVG
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (!useReactFlow && svgContainerRef.current && svgContainerRef.current.contains(e.target as Element)) {
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          const delta = e.deltaY > 0 ? -0.1 : 0.1;
+          handleSvgZoom(delta);
+        }
+      }
+    };
+
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      window.removeEventListener('wheel', handleWheel);
+    };
+  }, [useReactFlow, handleSvgZoom]);
 
   return (
     <div className="w-full h-full flex flex-col overflow-hidden bg-white dark:bg-black">
@@ -421,10 +590,36 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         {/* SVG Visualization - only show when in SVG mode */}
         {!useReactFlow && svgContent && (
           <div className="absolute inset-0 h-full w-full z-0 flex items-center justify-center p-4 bg-gray-50 dark:bg-gray-950 overflow-auto">
-            <div 
-              className="svg-container shadow-lg rounded-lg bg-white"
-              dangerouslySetInnerHTML={{ __html: svgContent }}
-            />
+            <div className="relative" ref={svgContainerRef}>
+              {/* Zoom controls */}
+              <div className="absolute bottom-4 right-4 bg-white rounded-md shadow-sm flex gap-1 p-1 z-10">
+                <button 
+                  onClick={() => handleSvgZoom(-0.1)}
+                  className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded"
+                >
+                  <span className="text-xl">−</span>
+                </button>
+                <button
+                  onClick={() => setSvgZoom(1)} 
+                  className="px-2 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded text-sm"
+                >
+                  {Math.round(svgZoom * 100)}%
+                </button>
+                <button 
+                  onClick={() => handleSvgZoom(0.1)}
+                  className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded"
+                >
+                  <span className="text-xl">+</span>
+                </button>
+              </div>
+              
+              {/* SVG content */}
+              <div 
+                className="svg-container shadow-lg rounded-lg bg-white transform origin-center transition-transform"
+                style={{ transform: `scale(${svgZoom})` }}
+                dangerouslySetInnerHTML={{ __html: svgContent }}
+              />
+            </div>
           </div>
         )}
         
@@ -445,21 +640,39 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           </div>
         </div>
 
-        {/* Dev Panel Toggle Button */}
-        <div className="absolute top-4 right-4 z-50">
+        {/* Dev Panel Toggle Button and Visualization Toggle */}
+        <div className="absolute top-4 right-4 z-[100] flex items-center gap-2">
           <button
             onClick={() => setShowDev((p) => !p)}
-            className="px-3 py-1 rounded-md bg-purple-600 text-white"
+            className="w-32 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium"
           >
-            {showDev ? "Close Dev" : "Dev Panel"}
+            {showDev ? 'Hide Dev Panel' : 'Show Dev Panel'}
           </button>
+          
+          {/* Visualization Toggle */}
+          <div className="w-32 flex items-center bg-white rounded-md shadow-sm border border-gray-200 px-3 py-2">
+            <label className="inline-flex items-center cursor-pointer w-full">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={useReactFlow}
+                  onChange={() => handleToggleVisMode(!useReactFlow)}
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </div>
+              <span className="ml-3 text-sm font-medium text-gray-900">
+                {useReactFlow ? 'ReactFlow' : 'SVG'}
+              </span>
+            </label>
+          </div>
         </div>
         
         {/* Dev Panel */}
         {showDev && (
           <div className="absolute top-16 right-4 z-50">
             <DevPanel 
-              elkGraph={elkGraph} 
+              elkGraph={rawGraph} 
               onGraphChange={handleGraphChange}
               onToggleVisMode={handleToggleVisMode}
               useReactFlow={useReactFlow}

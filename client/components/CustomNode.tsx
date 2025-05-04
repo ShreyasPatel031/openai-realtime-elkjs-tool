@@ -1,6 +1,6 @@
 import React from 'react';
 import { Handle, Position } from 'reactflow';
-import { baseHandleStyle } from './graph/styles/handles';
+import { baseHandleStyle } from './graph/handles';
 
 interface CustomNodeProps {
   data: {

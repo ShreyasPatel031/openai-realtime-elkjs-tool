@@ -43,14 +43,18 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
         isParent: isGroupNode,
         leftHandles: (edgeConnectionPoints[node.id]?.left ?? []).map(connectionPoint => {
           const delta = connectionPoint.y - absPos.y;
-          // const TOP_PAD = isGroupNode ? dimensions.padding : 0;
-          // return delta - TOP_PAD;
           return delta;
         }),
         rightHandles: (edgeConnectionPoints[node.id]?.right ?? []).map(connectionPoint => {
           const delta = connectionPoint.y - absPos.y;
-          // const TOP_PAD = isGroupNode ? dimensions.padding : 0;
-          // return delta - TOP_PAD;
+          return delta;
+        }),
+        topHandles: (edgeConnectionPoints[node.id]?.top ?? []).map(connectionPoint => {
+          const delta = connectionPoint.x - absPos.x;
+          return delta;
+        }),
+        bottomHandles: (edgeConnectionPoints[node.id]?.bottom ?? []).map(connectionPoint => {
+          const delta = connectionPoint.x - absPos.x;
           return delta;
         }),
         position: { x: absPos.x, y: absPos.y }
@@ -88,20 +92,48 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
         if (processedEdgeIds.has(edgeId)) return;
         processedEdgeIds.add(edgeId);
 
-        // Find the handle indices for source and target nodes
-        const sourceHandleIndex = (edgeConnectionPoints[sourceNodeId]?.right ?? []).findIndex(
-          connectionPoint => connectionPoint.edgeId === edge.id
-        );
-        
-        const targetHandleIndex = (edgeConnectionPoints[targetNodeId]?.left ?? []).findIndex(
-          connectionPoint => connectionPoint.edgeId === edge.id
-        );
+        // Find the connection points for this edge
+        let sourceHandleIndex = -1;
+        let sourceHandleSide = "right";
+        let targetHandleIndex = -1;
+        let targetHandleSide = "left";
+
+        // Check all sides for the source node
+        for (const side of ["right", "left", "top", "bottom"]) {
+          const connectionPoints = edgeConnectionPoints[sourceNodeId]?.[side] ?? [];
+          const index = connectionPoints.findIndex(
+            connectionPoint => connectionPoint.edgeId === edge.id
+          );
+          if (index >= 0) {
+            sourceHandleIndex = index;
+            sourceHandleSide = side;
+            break;
+          }
+        }
+
+        // Check all sides for the target node
+        for (const side of ["left", "right", "top", "bottom"]) {
+          const connectionPoints = edgeConnectionPoints[targetNodeId]?.[side] ?? [];
+          const index = connectionPoints.findIndex(
+            connectionPoint => connectionPoint.edgeId === edge.id
+          );
+          if (index >= 0) {
+            targetHandleIndex = index;
+            targetHandleSide = side;
+            break;
+          }
+        }
 
         const isSourceGroupNode = nodeTypeMap.get(sourceNodeId) === 'group';
         const isTargetGroupNode = nodeTypeMap.get(targetNodeId) === 'group';
         
-        const sourceHandle = sourceHandleIndex >= 0 ? `right-${sourceHandleIndex}` : undefined;
-        const targetHandle = targetHandleIndex >= 0 ? `left-${targetHandleIndex}` : undefined;
+        // Determine if the handle is a source or target based on the edge's direction
+        // For source handle, prefer "source" type, for target handle, prefer "target" type
+        const sourceHandleType = "source";
+        const targetHandleType = "target";
+        
+        const sourceHandle = sourceHandleIndex >= 0 ? `${sourceHandleSide}-${sourceHandleIndex}-${sourceHandleType}` : undefined;
+        const targetHandle = targetHandleIndex >= 0 ? `${targetHandleSide}-${targetHandleIndex}-${targetHandleType}` : undefined;
 
         if (sourceHandle && targetHandle) {
           edges.push({

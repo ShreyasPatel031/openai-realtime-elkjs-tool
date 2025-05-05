@@ -9,6 +9,8 @@ interface GroupNodeProps {
     height?: number;
     leftHandles?: string[];
     rightHandles?: string[];
+    topHandles?: string[];
+    bottomHandles?: string[];
   };
   id: string;
   selected?: boolean;
@@ -37,31 +39,104 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
 
   return (
     <div style={groupStyle}>
-      {/* Add dynamic handles based on the data */}
+      {/* Left handles */}
       {data.leftHandles && data.leftHandles.map((yPos: string, index: number) => (
-        <Handle
-          key={`left-${index}`}
-          type="target"
-          position={Position.Left}
-          id={`left-${index}`}
-          style={{ 
-            ...baseHandleStyle,
-            top: yPos
-          }}
-        />
+        <React.Fragment key={`left-${index}`}>
+          <Handle
+            type="target"
+            position={Position.Left}
+            id={`left-${index}-target`}
+            style={{ 
+              ...baseHandleStyle,
+              top: yPos
+            }}
+          />
+          <Handle
+            type="source"
+            position={Position.Left}
+            id={`left-${index}-source`}
+            style={{ 
+              ...baseHandleStyle,
+              top: yPos,
+              opacity: 0 // Make it invisible but functional
+            }}
+          />
+        </React.Fragment>
       ))}
       
+      {/* Right handles */}
       {data.rightHandles && data.rightHandles.map((yPos: string, index: number) => (
-        <Handle
-          key={`right-${index}`}
-          type="source"
-          position={Position.Right}
-          id={`right-${index}`}
-          style={{ 
-            ...baseHandleStyle,
-            top: yPos
-          }}
-        />
+        <React.Fragment key={`right-${index}`}>
+          <Handle
+            type="source"
+            position={Position.Right}
+            id={`right-${index}-source`}
+            style={{ 
+              ...baseHandleStyle,
+              top: yPos
+            }}
+          />
+          <Handle
+            type="target"
+            position={Position.Right}
+            id={`right-${index}-target`}
+            style={{ 
+              ...baseHandleStyle,
+              top: yPos,
+              opacity: 0 // Make it invisible but functional
+            }}
+          />
+        </React.Fragment>
+      ))}
+      
+      {/* Top handles */}
+      {data.topHandles && data.topHandles.map((xPos: string, index: number) => (
+        <React.Fragment key={`top-${index}`}>
+          <Handle
+            type="source"
+            position={Position.Top}
+            id={`top-${index}-source`}
+            style={{ 
+              ...baseHandleStyle,
+              left: xPos
+            }}
+          />
+          <Handle
+            type="target"
+            position={Position.Top}
+            id={`top-${index}-target`}
+            style={{ 
+              ...baseHandleStyle,
+              left: xPos,
+              opacity: 0 // Make it invisible but functional
+            }}
+          />
+        </React.Fragment>
+      ))}
+      
+      {/* Bottom handles */}
+      {data.bottomHandles && data.bottomHandles.map((xPos: string, index: number) => (
+        <React.Fragment key={`bottom-${index}`}>
+          <Handle
+            type="target"
+            position={Position.Bottom}
+            id={`bottom-${index}-target`}
+            style={{ 
+              ...baseHandleStyle,
+              left: xPos
+            }}
+          />
+          <Handle
+            type="source"
+            position={Position.Bottom}
+            id={`bottom-${index}-source`}
+            style={{ 
+              ...baseHandleStyle,
+              left: xPos,
+              opacity: 0 // Make it invisible but functional
+            }}
+          />
+        </React.Fragment>
       ))}
       
       {/* Node label */}

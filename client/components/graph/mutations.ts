@@ -205,8 +205,10 @@ export const addNode = (nodeName: string, parentId: NodeID, graph: RawGraph): Ra
   console.group(`[mutation] addNode '${nodeName}' → parent '${parentId}'`);
   console.time("addNode");
 
-  if (findNodeById(graph, nodeName)) {
-    throw new Error(`A node with id '${nodeName}' already exists`);
+  // Check for duplicate ID using normalized name
+  const normalizedId = createNodeID(nodeName);
+  if (findNodeById(graph, normalizedId)) {
+    throw new Error(`duplicate node id '${normalizedId}'`);
   }
   
   const parentNode = findNodeById(graph, parentId);
@@ -222,7 +224,7 @@ export const addNode = (nodeName: string, parentId: NodeID, graph: RawGraph): Ra
   
   // Create the new node - using createNodeID to maintain ID creation consistency
   const newNode: ElkGraphNode = {
-    id: createNodeID(nodeName),
+    id: normalizedId,
     labels: [{ text: nodeName }],
     children: []
   };
@@ -410,8 +412,10 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
   console.group(`[mutation] groupNodes '${groupId}' (${nodeIds.length} nodes) → parent '${parentId}'`);
   console.time("groupNodes");
   
-  if (findNodeById(graph, groupId)) {
-    throw new Error(`A node or group with id '${groupId}' already exists`);
+  // Check for duplicate ID using normalized group ID
+  const normalizedGroupId = createNodeID(groupId);
+  if (findNodeById(graph, normalizedGroupId)) {
+    throw new Error(`duplicate group id '${normalizedGroupId}'`);
   }
   
   const parent = findNodeById(graph, parentId);
@@ -419,9 +423,17 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
     notFound("node", parentId);
     throw new Error(`Parent node '${parentId}' not found`);
   }
+
+  // Prevent cycles: check if any node being grouped is a descendant of the parent or is the parent itself
+  for (const id of nodeIds) {
+    const cand = findNodeById(graph, id)!;
+    if (isDescendantOf(cand, parent) || cand.id === parentId) {
+      throw new Error("Cannot group a node into one of its descendants (cycle)");
+    }
+  }
   
   const groupNode: ElkGraphNode = {
-    id: groupId,
+    id: normalizedGroupId,
     labels: [{ text: groupId }],
     children: [],
     edges: []

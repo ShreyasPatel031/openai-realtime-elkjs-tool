@@ -83,7 +83,6 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
             style={{ 
               ...baseHandleStyle,
               top: yPos,
-              opacity: 0 // Make it invisible but functional
             }}
           />
         </React.Fragment>
@@ -108,7 +107,6 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
             style={{ 
               ...baseHandleStyle,
               left: xPos,
-              opacity: 0 // Make it invisible but functional
             }}
           />
         </React.Fragment>
@@ -133,7 +131,6 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
             style={{ 
               ...baseHandleStyle,
               left: xPos,
-              opacity: 0 // Make it invisible but functional
             }}
           />
         </React.Fragment>

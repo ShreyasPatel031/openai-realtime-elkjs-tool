@@ -39,6 +39,7 @@ export interface ElkGraphEdge {
   id: string;
   sources: string[];
   targets: string[];
+  labels?: { text: string }[];
   sections?: {
     startPoint: { x: number; y: number };
     endPoint: { x: number; y: number };

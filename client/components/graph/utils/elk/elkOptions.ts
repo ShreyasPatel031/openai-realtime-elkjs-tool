@@ -19,7 +19,7 @@ export const ROOT_DEFAULT_OPTIONS = {
 
 export const NON_ROOT_DEFAULT_OPTIONS = {
   width: 80,
-  height: 50,
+  height: 80,
   layoutOptions: {
     "nodeLabels.placement": "INSIDE V_TOP H_LEFT",
     "elk.padding": "[top=30.0,left=30.0,bottom=30.0,right=30.0]",

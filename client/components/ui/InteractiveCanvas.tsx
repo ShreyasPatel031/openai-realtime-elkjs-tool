@@ -60,6 +60,7 @@ const nodeTypes = {
 
 const edgeTypes = {
   step: StepEdge,
+  smoothstep: StepEdge  // Use StepEdge for both types
 };
 
 export const elkGraphDescription = `You are a technical architecture diagram assistant. You can only interact with the system by calling the following functions:
@@ -115,6 +116,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // State for SVG zoom
   const [svgZoom, setSvgZoom] = useState(1);
   const svgContainerRef = useRef<HTMLDivElement>(null);
+  
+  // New state for showing debug information
+  const [showElkDebug, setShowElkDebug] = useState(false);
   
   // Use the new ElkFlow hook instead of managing ELK state directly
   const {
@@ -250,7 +254,16 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             opacity: 1,
             zIndex: 3000, // Very high z-index to ensure visibility
           },
-          zIndex: 3000
+          zIndex: 3000,
+          // Make sure edge labels are positioned correctly based on their original coordinates
+          labelStyle: {
+            ...edge.labelStyle,
+            position: 'absolute',
+            transform: edge.data?.labelPos ? 'translate(-50%, -50%)' : undefined,
+            left: edge.data?.labelPos?.x,
+            top: edge.data?.labelPos?.y,
+          },
+          label: edge.data?.label || undefined
         }));
       });
     };
@@ -447,6 +460,41 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             <polyline points="${points}" fill="none" stroke="#2d6bc4" 
               stroke-width="2" marker-end="url(#arrow)" />
           `;
+          
+          // Add edge label if it exists
+          if (edge.labels && edge.labels.length > 0) {
+            // Use the edge section's coordinates directly 
+            // The edge section already contains proper label positions calculated by ELK
+            let labelX, labelY;
+            
+            // If section contains labelPos, use that directly
+            if (section.labelPos) {
+              labelX = shiftX(section.labelPos.x);
+              labelY = shiftY(section.labelPos.y);
+            } 
+            // Otherwise, use the midpoint of the edge as fallback
+            else if (section.bendPoints && section.bendPoints.length > 0) {
+              // If there are bend points, use the middle one
+              const middleIndex = Math.floor(section.bendPoints.length / 2);
+              labelX = shiftX(section.bendPoints[middleIndex].x);
+              labelY = shiftY(section.bendPoints[middleIndex].y);
+            } else {
+              // For straight edges, use the midpoint
+              labelX = (startX + endX) / 2;
+              labelY = (startY + endY) / 2;
+            }
+            
+            svg += `
+              <text x="${labelX}" y="${labelY}" 
+                text-anchor="middle" dominant-baseline="middle" 
+                font-size="11" fill="#333" 
+                paint-order="stroke"
+                stroke="#fff" 
+                stroke-width="3" 
+                stroke-linecap="round" 
+                stroke-linejoin="round">${edge.labels[0].text}</text>
+            `;
+          }
         }
       }
     }
@@ -665,7 +713,33 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               </span>
             </label>
           </div>
+          
+          {/* Debug Output Toggle */}
+          <button
+            onClick={() => setShowElkDebug((prev) => !prev)}
+            className="w-32 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium"
+          >
+            {showElkDebug ? 'Hide ELK Data' : 'Show ELK Data'}
+          </button>
         </div>
+        
+        {/* Debug panel to show raw ELK layout data */}
+        {showElkDebug && (
+          <div className="absolute bottom-20 right-4 z-50 max-w-lg max-h-[60vh] overflow-auto bg-white rounded-md shadow-lg border border-gray-200 p-4">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-lg font-semibold">ELK Layout Data</h3>
+              <button 
+                onClick={() => setShowElkDebug(false)}
+                className="p-1 rounded hover:bg-gray-100"
+              >
+                ✕
+              </button>
+            </div>
+            <pre className="text-xs bg-gray-50 p-4 rounded-md overflow-auto max-h-[50vh]">
+              {JSON.stringify(layoutGraph, null, 2)}
+            </pre>
+          </div>
+        )}
         
         {/* Dev Panel */}
         {showDev && (

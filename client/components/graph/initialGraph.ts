@@ -43,7 +43,7 @@ export const getInitialElkGraph = (): RawGraph => ({
             }
           ],
           "edges": [
-            { "id": "e6", "sources": [ "chat" ], "targets": [ "fetch" ] }
+            { "id": "e6", "sources": [ "chat" ], "targets": [ "fetch" ], "labels": [{ "text": "Invokes" }] }
           ]
         },
         { 
@@ -56,11 +56,11 @@ export const getInitialElkGraph = (): RawGraph => ({
         }
       ],
       "edges": [
-        { "id": "e1", "sources": [ "api" ], "targets": ["lambda" ] },
-        { "id": "e2", "sources": [ "query" ], "targets": ["vector" ] },
-        { "id": "e3", "sources": [ "pdf" ], "targets": ["vector" ] },
-        { "id": "e4", "sources": [ "pdf" ], "targets": ["storage" ] },
-        { "id": "e5", "sources": [ "fetch" ], "targets": ["storage" ] }
+        { "id": "e1", "sources": [ "api" ], "targets": ["lambda" ], "labels": [{ "text": "Invokes" }] },
+        { "id": "e2", "sources": [ "query" ], "targets": ["vector" ], "labels": [{ "text": "Retrieves" }] },
+        { "id": "e3", "sources": [ "pdf" ], "targets": ["vector" ], "labels": [{ "text": "Indexes" }] },
+        { "id": "e4", "sources": [ "pdf" ], "targets": ["storage" ], "labels": [{ "text": "Stores" }] },
+        { "id": "e5", "sources": [ "fetch" ], "targets": ["storage" ], "labels": [{ "text": "Retrieves" }] }
       ]
     },
     { 
@@ -79,9 +79,9 @@ export const getInitialElkGraph = (): RawGraph => ({
     }
   ],
   "edges": [
-    { "id": "e0", "sources": [ "webapp" ], "targets": [ "api" ] },
-    { "id": "e7", "sources": [ "chat" ], "targets": ["chat_api" ] },
-    { "id": "e8", "sources": [ "embed" ], "targets": [ "query" ] },
-    { "id": "e9", "sources": [ "embed" ], "targets": [ "pdf" ] }
+    { "id": "e0", "sources": [ "webapp" ], "targets": [ "api" ], "labels": [{ "text": "HTTP" }] },
+    { "id": "e7", "sources": [ "chat" ], "targets": ["chat_api" ], "labels": [{ "text": "RPC" }] },
+    { "id": "e8", "sources": [ "embed" ], "targets": [ "query" ], "labels": [{ "text": "vec-search" }] },
+    { "id": "e9", "sources": [ "embed" ], "targets": [ "pdf" ], "labels": [{ "text": "semantic rank" }] }
   ]
 }); 

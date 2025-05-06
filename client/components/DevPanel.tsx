@@ -246,6 +246,41 @@ const DevPanel: React.FC<DevPanelProps> = ({
             <polyline points="${points}" fill="none" stroke="#2d6bc4" 
               stroke-width="2" marker-end="url(#arrow)" />
           `;
+          
+          // Add edge label if it exists
+          if (edge.labels && edge.labels.length > 0) {
+            // Use the edge section's coordinates directly 
+            // The edge section already contains proper label positions calculated by ELK
+            let labelX, labelY;
+            
+            // If section contains labelPos, use that directly
+            if (section.labelPos) {
+              labelX = shiftX(section.labelPos.x);
+              labelY = shiftY(section.labelPos.y);
+            } 
+            // Otherwise, use the midpoint of the edge as fallback
+            else if (section.bendPoints && section.bendPoints.length > 0) {
+              // If there are bend points, use the middle one
+              const middleIndex = Math.floor(section.bendPoints.length / 2);
+              labelX = shiftX(section.bendPoints[middleIndex].x);
+              labelY = shiftY(section.bendPoints[middleIndex].y);
+            } else {
+              // For straight edges, use the midpoint
+              labelX = (startX + endX) / 2;
+              labelY = (startY + endY) / 2;
+            }
+            
+            svg += `
+              <text x="${labelX}" y="${labelY}" 
+                text-anchor="middle" dominant-baseline="middle" 
+                font-size="11" fill="#333" 
+                paint-order="stroke"
+                stroke="#fff" 
+                stroke-width="3" 
+                stroke-linecap="round" 
+                stroke-linejoin="round">${edge.labels[0].text}</text>
+            `;
+          }
         }
       }
     }

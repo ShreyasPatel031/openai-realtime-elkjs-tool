@@ -1,30 +1,25 @@
 import React from 'react';
-import { BaseEdge } from 'reactflow';
+import { BaseEdge, EdgeLabelRenderer, EdgeProps } from 'reactflow';
 
-interface StepEdgeProps {
-  id: string;
-  sourceX: number;
-  sourceY: number;
-  targetX: number;
-  targetY: number;
-  data?: {
-    bendPoints?: { x: number; y: number }[];
-  };
-  style?: React.CSSProperties;
-  markerEnd?: any;
-}
-
-const StepEdge: React.FC<StepEdgeProps> = ({ 
+const StepEdge: React.FC<EdgeProps> = ({ 
   id, 
   sourceX, 
   sourceY, 
   targetX, 
   targetY, 
+  label,
   data, 
   style = {}, 
   markerEnd 
 }) => {
   let edgePath = '';
+  
+  // Calculate midpoint for label positioning
+  const midX = sourceX + (targetX - sourceX) / 2;
+  const midY = sourceY + (targetY - sourceY) / 2;
+  
+  // Determine if we need to show a label
+  const edgeLabel = label || data?.labelText;
   
   // Check if we have bend points
   if (data?.bendPoints && data.bendPoints.length > 0) {
@@ -69,29 +64,48 @@ const StepEdge: React.FC<StepEdgeProps> = ({
     }
     else {
       // For any unexpected number of bend points, fall back to a simple step edge
-      const midX = sourceX + (targetX - sourceX) / 2;
       edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
     }
   } 
   else {
     // No bend points, use default step edge
-    const midX = sourceX + (targetX - sourceX) / 2;
-    // Use sourceY for targetY to ensure exact alignment
-    // const targetY = sourceY;
     edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
   }
   
   return (
-    <BaseEdge
-      id={id}
-      path={edgePath}
-      style={{
-        ...style,
-        stroke: '#999',
-        strokeWidth: 1.5
-      }}
-      markerEnd={markerEnd}
-    />
+    <>
+      <BaseEdge
+        id={id}
+        path={edgePath}
+        style={{
+          ...style,
+          stroke: '#999',
+          strokeWidth: 1.5
+        }}
+        markerEnd={markerEnd}
+      />
+      
+      {edgeLabel && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${midX}px, ${midY}px)`,
+              background: 'white',
+              padding: '2px 6px',
+              border: '1px solid #888',
+              borderRadius: 4,
+              fontSize: 11,
+              fontFamily: 'sans-serif',
+              pointerEvents: 'all',
+              zIndex: 1000
+            }}
+          >
+            {edgeLabel}
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </>
   );
 };
 

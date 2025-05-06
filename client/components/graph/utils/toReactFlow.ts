@@ -155,7 +155,11 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
               height: 20,
               color: '#555'
             },
-            data: { bendPoints: edge.absoluteBendPoints ?? [] },
+            label: edge.labels?.[0]?.text ?? "",
+            data: { 
+              bendPoints: edge.absoluteBendPoints ?? [],
+              labelText: edge.labels?.[0]?.text
+            },
             selected: false,
             hidden: false,
             focusable: true,

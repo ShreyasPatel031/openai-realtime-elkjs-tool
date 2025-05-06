@@ -255,15 +255,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             zIndex: 3000, // Very high z-index to ensure visibility
           },
           zIndex: 3000,
-          // Make sure edge labels are positioned correctly based on their original coordinates
-          labelStyle: {
-            ...edge.labelStyle,
-            position: 'absolute',
-            transform: edge.data?.labelPos ? 'translate(-50%, -50%)' : undefined,
-            left: edge.data?.labelPos?.x,
-            top: edge.data?.labelPos?.y,
-          },
-          label: edge.data?.label || undefined
+          // Set the label from data
+          label: edge.data?.labelText || edge.label
         }));
       });
     };
@@ -463,37 +456,22 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           
           // Add edge label if it exists
           if (edge.labels && edge.labels.length > 0) {
-            // Use the edge section's coordinates directly 
-            // The edge section already contains proper label positions calculated by ELK
-            let labelX, labelY;
-            
-            // If section contains labelPos, use that directly
+            // Only place label if ELK provided a labelPos
+            const rawLabel = edge.labels[0];
             if (section.labelPos) {
-              labelX = shiftX(section.labelPos.x);
-              labelY = shiftY(section.labelPos.y);
-            } 
-            // Otherwise, use the midpoint of the edge as fallback
-            else if (section.bendPoints && section.bendPoints.length > 0) {
-              // If there are bend points, use the middle one
-              const middleIndex = Math.floor(section.bendPoints.length / 2);
-              labelX = shiftX(section.bendPoints[middleIndex].x);
-              labelY = shiftY(section.bendPoints[middleIndex].y);
-            } else {
-              // For straight edges, use the midpoint
-              labelX = (startX + endX) / 2;
-              labelY = (startY + endY) / 2;
+              const labelX = shiftX(section.labelPos.x);
+              const labelY = shiftY(section.labelPos.y);
+              svg += `
+                <text x="${labelX}" y="${labelY}" 
+                  text-anchor="middle" dominant-baseline="middle" 
+                  font-size="11" fill="#333" 
+                  paint-order="stroke"
+                  stroke="#fff" 
+                  stroke-width="3" 
+                  stroke-linecap="round" 
+                  stroke-linejoin="round">${rawLabel.text}</text>
+              `;
             }
-            
-            svg += `
-              <text x="${labelX}" y="${labelY}" 
-                text-anchor="middle" dominant-baseline="middle" 
-                font-size="11" fill="#333" 
-                paint-order="stroke"
-                stroke="#fff" 
-                stroke-width="3" 
-                stroke-linecap="round" 
-                stroke-linejoin="round">${edge.labels[0].text}</text>
-            `;
           }
         }
       }

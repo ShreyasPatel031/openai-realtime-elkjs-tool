@@ -14,6 +14,9 @@ export const ROOT_DEFAULT_OPTIONS = {
     "spacing.edgeEdgeBetweenLayers": 30,
     "spacing.nodeNodeBetweenLayers": 30,
     "spacing.edgeNodeBetweenLayers": 30,
+    // Enable edge label placement
+    "edgeLabels.placement": "CENTER",
+    "elk.edgeLabels.inline": true,
   }
 };
 
@@ -31,5 +34,8 @@ export const NON_ROOT_DEFAULT_OPTIONS = {
     "spacing.edgeEdgeBetweenLayers": 50,
     "spacing.nodeNodeBetweenLayers": 50,
     "spacing.edgeNodeBetweenLayers": 50,
+    // Enable edge label placement
+    "edgeLabels.placement": "CENTER",
+    "elk.edgeLabels.inline": true,
   }
 }; 

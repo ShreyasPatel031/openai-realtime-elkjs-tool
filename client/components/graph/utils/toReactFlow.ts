@@ -85,7 +85,7 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
   // Create a map of node types for quick lookups
   const nodeTypeMap = new Map(nodes.map(node => [node.id, node.type]));
 
-  const createEdge = (edge: any) => {
+  const createEdge = (edge: any, containerAbs: { x: number; y: number }) => {
     edge.sources?.forEach((sourceNodeId: string) =>
       edge.targets?.forEach((targetNodeId: string) => {
         const edgeId = edge.id || `${sourceNodeId}-${targetNodeId}-${Math.random().toString(36).substr(2, 9)}`;
@@ -136,6 +136,12 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
         const targetHandle = targetHandleIndex >= 0 ? `${targetHandleSide}-${targetHandleIndex}-${targetHandleType}` : undefined;
 
         if (sourceHandle && targetHandle) {
+          /* ─────── turn label position into ABSOLUTE coordinates ─────── */
+          const elkLbl      = edge.labels?.[0];
+          const labelTxt    = elkLbl?.text ?? "";
+          const labelPosAbs = elkLbl
+            ? { x: elkLbl.x + containerAbs.x, y: elkLbl.y + containerAbs.y }
+            : undefined;
           edges.push({
             id: edgeId, 
             source: sourceNodeId, 
@@ -155,10 +161,12 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
               height: 20,
               color: '#555'
             },
-            label: edge.labels?.[0]?.text ?? "",
-            data: { 
+            /* put it in BOTH places so every consumer is happy */
+            label: labelTxt,
+            data: {
+              labelText: labelTxt,
               bendPoints: edge.absoluteBendPoints ?? [],
-              labelText: edge.labels?.[0]?.text
+              labelPos: labelPosAbs          // ← now absolute
             },
             selected: false,
             hidden: false,
@@ -178,7 +186,8 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
   };
 
   const processEdges = (node: any) => {
-    (node.edges || []).forEach(createEdge);
+    const abs = absolutePositions[node.id];      // abs pos of this container
+    (node.edges || []).forEach((e: any) => createEdge(e, abs));
     (node.children || []).forEach(processEdges);
   };
   

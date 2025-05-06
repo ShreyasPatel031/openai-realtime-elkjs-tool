@@ -14,13 +14,17 @@ const StepEdge: React.FC<EdgeProps> = ({
 }) => {
   let edgePath = '';
   
-  // Calculate midpoint for label positioning
+  // For edge path calculations only (used in path fallback)
   const midX = sourceX + (targetX - sourceX) / 2;
-  const midY = sourceY + (targetY - sourceY) / 2;
   
-  // Determine if we need to show a label
+  /* ------------------------------------------------------ */
+  /*   Label text & coordinates                           */
+  /* ------------------------------------------------------ */
   const edgeLabel = label || data?.labelText;
-  
+
+  // absolute coordinates from ELK layout (if available)
+  const labelPos = data?.labelPos;          // { x, y } | undefined
+
   // Check if we have bend points
   if (data?.bendPoints && data.bendPoints.length > 0) {
     const bendPoints = data.bendPoints;
@@ -85,12 +89,12 @@ const StepEdge: React.FC<EdgeProps> = ({
         markerEnd={markerEnd}
       />
       
-      {edgeLabel && (
+      {edgeLabel && labelPos && (
         <EdgeLabelRenderer>
           <div
             style={{
               position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${midX}px, ${midY}px)`,
+              transform: `translate(-50%, -50%) translate(${labelPos.x}px, ${labelPos.y}px)`,
               background: 'white',
               padding: '2px 6px',
               border: '1px solid #888',
@@ -98,7 +102,7 @@ const StepEdge: React.FC<EdgeProps> = ({
               fontSize: 11,
               fontFamily: 'sans-serif',
               pointerEvents: 'all',
-              zIndex: 1000
+              zIndex: 5000
             }}
           >
             {edgeLabel}

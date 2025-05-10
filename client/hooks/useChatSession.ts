@@ -126,11 +126,9 @@ export const useChatSession = ({
           return;
         }
 
-        // Detailed console logging for function calls
-        console.log(`🔧 Agent called function: ${functionName}`);
-        console.log(`📦 Arguments:`, functionArgs);
-        console.log(`📦 Result:`, result);
-
+        // Simplified console logging for function calls - just show function name
+        console.log(`🔧 Function call: ${functionName}`);
+        
         // Handle the function call
         if (elkGraph && setElkGraph) {
           handleFunctionCall(call, {
@@ -155,13 +153,42 @@ export const useChatSession = ({
 
   // Initialize session with tool definitions
   useEffect(() => {
-    if (initSent.current) return; // already done
-    if (!isSessionActive) return; // don't initialize if session is not active
-    if (!events || events.length === 0) return;
+    // Static variable to track log suppression across renders
+    const debugLogging = false; // Set to true only when debugging initialization issues
+    
+    if (initSent.current) {
+      // Only log this on first occurrence
+      if (debugLogging) console.log("✅ Session already initialized, skipping");
+      return; // already done
+    }
+    
+    if (!isSessionActive) {
+      // Skip initialization logging when session is inactive
+      return; // don't initialize if session is not active
+    }
+    
+    if (!events || events.length === 0) {
+      if (debugLogging) console.log("⏳ No events yet, waiting for session.created");
+      return;
+    }
 
+    // Check specifically for a session.created event
+    const sessionCreatedEvent = events.find(e => e.type === "session.created");
+    if (!sessionCreatedEvent) {
+      if (debugLogging) console.log("⏳ No session.created event found, waiting...");
+      return;
+    }
+
+    console.log("🚀 Initializing session with elkGraphDescription");
+    
     // Use the initSession helper to initialize the session
     const sent = initSession(events, safeSendClientEvent, elkGraphDescription || '');
-    if (sent) initSent.current = true;
+    if (sent) {
+      console.log("✅ Session initialization complete");
+      initSent.current = true;
+    } else {
+      console.warn("⚠️ Session initialization failed");
+    }
     
   }, [events, isSessionActive, safeSendClientEvent, elkGraphDescription, initSent]);
 

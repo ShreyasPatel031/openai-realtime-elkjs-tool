@@ -9,7 +9,7 @@ import SessionControls from "./console/SessionControls";
 import ToolPanel from "./ui/ToolPanel";
 import ElkTestPage from "./test/ElkTestPage";
 import ErrorBoundary from "./console/ErrorBoundary";
-import InteractiveCanvas from "./ui/InteractiveCanvas";
+import InteractiveCanvas, { elkGraphDescription } from "./ui/InteractiveCanvas";
 import { useChatSession } from "../hooks/useChatSession";
 import { RtcClient } from "../realtime/RtcClient";
 
@@ -73,7 +73,7 @@ export default function App() {
     events,
     elkGraph: null,
     setElkGraph: () => {},
-    elkGraphDescription: '',
+    elkGraphDescription,
     agentInstruction: ''
   });
 
@@ -110,15 +110,24 @@ export default function App() {
       rtc.current.close();
     }
 
-    // Reset refs if they exist
-    if (initSentRef && typeof initSentRef === 'object' && initSentRef.current !== undefined) {
-      initSentRef.current = false;
+    // Reset refs if they exist - with better error handling
+    if (initSentRef && typeof initSentRef === 'object') {
+      console.log("🔄 Resetting initSentRef");
+      if (initSentRef.current !== undefined) {
+        initSentRef.current = false;
+      }
     }
     
-    if (processedCalls && typeof processedCalls === 'object' && processedCalls.current !== undefined) {
-      processedCalls.current.clear();
+    if (processedCalls && typeof processedCalls === 'object') {
+      console.log("🔄 Clearing processedCalls");
+      if (processedCalls.current !== undefined && typeof processedCalls.current.clear === 'function') {
+        processedCalls.current.clear();
+      }
     }
 
+    // Reset state and events 
+    setEvents([]);
+    
     // Update state
     setIsSessionActive(false);
   }

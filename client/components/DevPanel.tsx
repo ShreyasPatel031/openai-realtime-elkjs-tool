@@ -207,18 +207,37 @@ const DevPanel: React.FC<DevPanelProps> = ({
       // Add label if it exists
       const label = node.data?.label || (node.labels && node.labels[0]?.text);
       if (label) {
-        svg += `
-          <text x="${x + width/2}" y="${y + height/2}" 
-            text-anchor="middle" dominant-baseline="middle" 
-            font-size="14" font-weight="bold" fill="#2d6bc4">${label}</text>
-        `;
+        if (isContainer) {
+          // Group node - label at center top
+          svg += `
+            <text x="${x + width/2}" y="${y + 20}" 
+              text-anchor="middle" dominant-baseline="middle" 
+              font-size="14" font-weight="bold" fill="#2d6bc4">${label}</text>
+          `;
+        } else {
+          // Regular node - label at bottom center
+          svg += `
+            <text x="${x + width/2}" y="${y + height - 10}" 
+              text-anchor="middle" dominant-baseline="middle" 
+              font-size="14" font-weight="bold" fill="#2d6bc4">${label}</text>
+          `;
+          
+          // Add icon to regular nodes - circle with first letter
+          const iconLetter = label.charAt(0).toUpperCase();
+          svg += `
+            <circle cx="${x + width/2}" cy="${y + height/2 - 10}" r="15" fill="#2d6bc4" />
+            <text x="${x + width/2}" y="${y + height/2 - 6}" 
+              text-anchor="middle" dominant-baseline="middle" 
+              font-size="14" font-weight="bold" fill="white">${iconLetter}</text>
+          `;
+        }
       }
       
       // Add node ID as smaller text below
       svg += `
-        <text x="${x + width/2}" y="${y + height - 10}" 
-          text-anchor="middle" dominant-baseline="middle" 
-          font-size="10" fill="#666666">(${node.id})</text>
+        <text x="${x + width/2}" y="${y + height - 5}" 
+          text-anchor="middle" dominant-baseline="baseline" 
+          font-size="9" fill="#666666">(${node.id})</text>
       `;
     }
     
@@ -249,37 +268,23 @@ const DevPanel: React.FC<DevPanelProps> = ({
           
           // Add edge label if it exists
           if (edge.labels && edge.labels.length > 0) {
-            // Use the edge section's coordinates directly 
-            // The edge section already contains proper label positions calculated by ELK
-            let labelX, labelY;
-            
-            // If section contains labelPos, use that directly
+            // ONLY render label if ELK provided explicit coordinates
             if (section.labelPos) {
-              labelX = shiftX(section.labelPos.x);
-              labelY = shiftY(section.labelPos.y);
-            } 
-            // Otherwise, use the midpoint of the edge as fallback
-            else if (section.bendPoints && section.bendPoints.length > 0) {
-              // If there are bend points, use the middle one
-              const middleIndex = Math.floor(section.bendPoints.length / 2);
-              labelX = shiftX(section.bendPoints[middleIndex].x);
-              labelY = shiftY(section.bendPoints[middleIndex].y);
-            } else {
-              // For straight edges, use the midpoint
-              labelX = (startX + endX) / 2;
-              labelY = (startY + endY) / 2;
+              const labelX = shiftX(section.labelPos.x);
+              const labelY = shiftY(section.labelPos.y);
+              
+              // Draw label without any fallbacks
+              svg += `
+                <text x="${labelX}" y="${labelY}" 
+                  text-anchor="middle" dominant-baseline="middle" 
+                  font-size="12" fill="#333" 
+                  paint-order="stroke"
+                  stroke="#fff" 
+                  stroke-width="4" 
+                  stroke-linecap="round" 
+                  stroke-linejoin="round">${edge.labels[0].text}</text>
+              `;
             }
-            
-            svg += `
-              <text x="${labelX}" y="${labelY}" 
-                text-anchor="middle" dominant-baseline="middle" 
-                font-size="11" fill="#333" 
-                paint-order="stroke"
-                stroke="#fff" 
-                stroke-width="3" 
-                stroke-linecap="round" 
-                stroke-linejoin="round">${edge.labels[0].text}</text>
-            `;
           }
         }
       }
@@ -323,7 +328,20 @@ const DevPanel: React.FC<DevPanelProps> = ({
               x: bp.x + absX,
               y: bp.y + absY,
             }));
-            return { ...section, startPoint: start, endPoint: end, bendPoints };
+            
+            // Process label position if it exists
+            const labelPos = section.labelPos ? {
+              x: section.labelPos.x + absX,
+              y: section.labelPos.y + absY,
+            } : undefined;
+            
+            return { 
+              ...section, 
+              startPoint: start, 
+              endPoint: end, 
+              bendPoints,
+              labelPos 
+            };
           }),
         };
         accum.edges.push(newEdge);

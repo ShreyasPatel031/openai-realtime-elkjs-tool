@@ -138,15 +138,20 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
       
       {/* Node label */}
       <div style={{ 
-        position: 'absolute',
+        position: 'absolute', 
         top: '5px',
-        left: '5px',
+        left: '0',
+        right: '0',
+        textAlign: 'center',
         fontWeight: 'bold',
         fontSize: '14px',
         color: '#333',
         backgroundColor: 'rgba(255, 255, 255, 0.7)',
         padding: '2px 4px',
+        margin: '0 auto',
+        width: 'fit-content',
         borderRadius: '3px',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
         zIndex: 10
       }}>
         {data.label}

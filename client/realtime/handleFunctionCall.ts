@@ -24,57 +24,60 @@ export function handleFunctionCall(
   helpers: FunctionCallHelpers
 ) {
   const { name, arguments: argStr, call_id } = call;
-  const args = typeof argStr === "string" ? JSON.parse(argStr) : argStr;
+  const args = typeof argStr === "string" ? JSON.parse(argStr) : argStr || {};
   const { elkGraph, setElkGraph, mutations, safeSend } = helpers;
 
-  let updated = elkGraph;
-  
+  // Always start from a deep copy so we never mutate the prev-state object
+  const graphCopy =
+    typeof structuredClone === "function"
+      ? structuredClone(elkGraph)
+      : JSON.parse(JSON.stringify(elkGraph));
+
+  let updated = graphCopy;   // Work on the copy
+
   try {
     switch (name) {
       case "display_elk_graph":
-        // Just return the current graph
-        updated = { ...elkGraph };
-        console.log(updated);
-        console.log(`⚪ Returning current graph with updated`);
+        // Nothing to change, just return a fresh copy so React sees a new object
         break;
         
       case "add_node":
-        updated = mutations.addNode(args.nodename, args.parentId, elkGraph);
+        updated = mutations.addNode(args.nodename, args.parentId, graphCopy);
         console.log(`🟢 Added node '${args.nodename}' to parent '${args.parentId}'`);
         break;
         
       case "delete_node":
-        updated = mutations.deleteNode(args.nodeId, elkGraph);
+        updated = mutations.deleteNode(args.nodeId, graphCopy);
         console.log(`🔴 Deleted node '${args.nodeId}'`);
         break;
         
       case "move_node":
-        updated = mutations.moveNode(args.nodeId, args.newParentId, elkGraph);
+        updated = mutations.moveNode(args.nodeId, args.newParentId, graphCopy);
         console.log(`🔄 Moved node '${args.nodeId}' to parent '${args.newParentId}'`);
         break;
         
       case "add_edge":
-        updated = mutations.addEdge(args.edgeId, null, args.sourceId, args.targetId, elkGraph);
+        updated = mutations.addEdge(args.edgeId, null, args.sourceId, args.targetId, graphCopy);
         console.log(`➡️ Added edge '${args.edgeId}' from '${args.sourceId}' to '${args.targetId}'`);
         break;
         
       case "delete_edge":
-        updated = mutations.deleteEdge(args.edgeId, elkGraph);
+        updated = mutations.deleteEdge(args.edgeId, graphCopy);
         console.log(`✂️ Deleted edge '${args.edgeId}'`);
         break;
         
       case "group_nodes":
-        updated = mutations.groupNodes(args.nodeIds, args.parentId, args.groupId, elkGraph);
+        updated = mutations.groupNodes(args.nodeIds, args.parentId, args.groupId, graphCopy);
         console.log(`📦 Grouped nodes [${args.nodeIds.join(', ')}] into '${args.groupId}' under '${args.parentId}'`);
         break;
         
       case "remove_group":
-        updated = mutations.removeGroup(args.groupId, elkGraph);
+        updated = mutations.removeGroup(args.groupId, graphCopy);
         console.log(`📭 Removed group '${args.groupId}'`);
         break;
         
       case "batch_update":
-        updated = mutations.batchUpdate(args.operations, elkGraph);
+        updated = mutations.batchUpdate(args.operations, graphCopy);
         console.log(`🔄 Batch updated graph with ${args.operations.length} operations`);
         break;
         
@@ -83,9 +86,10 @@ export function handleFunctionCall(
         return;
     }
 
-    // Update the graph state
+    // Push a new reference into state – React & the layout hook will rerun
     setElkGraph(updated);
     console.log(`🔄 Graph state updated after ${name}`);
+    console.log('Updated graph:', updated);
 
     // Send function result back to the agent
     safeSend({

@@ -456,22 +456,38 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           
           // Add edge label if it exists
           if (edge.labels && edge.labels.length > 0) {
-            // Only place label if ELK provided a labelPos
             const rawLabel = edge.labels[0];
+            // Use the edge section's coordinates directly or fall back to calculated positions
+            let labelX, labelY;
+            
+            // If section contains labelPos, use that directly
             if (section.labelPos) {
-              const labelX = shiftX(section.labelPos.x);
-              const labelY = shiftY(section.labelPos.y);
-              svg += `
-                <text x="${labelX}" y="${labelY}" 
-                  text-anchor="middle" dominant-baseline="middle" 
-                  font-size="11" fill="#333" 
-                  paint-order="stroke"
-                  stroke="#fff" 
-                  stroke-width="3" 
-                  stroke-linecap="round" 
-                  stroke-linejoin="round">${rawLabel.text}</text>
-              `;
+              labelX = shiftX(section.labelPos.x);
+              labelY = shiftY(section.labelPos.y);
+            } 
+            // Otherwise, use the midpoint of the edge as fallback
+            else if (section.bendPoints && section.bendPoints.length > 0) {
+              // If there are bend points, use the middle one
+              const middleIndex = Math.floor(section.bendPoints.length / 2);
+              labelX = shiftX(section.bendPoints[middleIndex].x);
+              labelY = shiftY(section.bendPoints[middleIndex].y);
+            } else {
+              // For straight edges, use the midpoint
+              labelX = (startX + endX) / 2;
+              labelY = (startY + endY) / 2;
             }
+            
+            // Draw label with higher z-index to ensure visibility
+            svg += `
+              <text x="${labelX}" y="${labelY}" 
+                text-anchor="middle" dominant-baseline="middle" 
+                font-size="11" fill="#333" 
+                paint-order="stroke"
+                stroke="#fff" 
+                stroke-width="3" 
+                stroke-linecap="round" 
+                stroke-linejoin="round">${rawLabel.text}</text>
+            `;
           }
         }
       }
@@ -666,16 +682,16 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         </div>
 
         {/* Dev Panel Toggle Button and Visualization Toggle */}
-        <div className="absolute top-4 right-4 z-[100] flex items-center gap-2">
+        <div className="absolute top-4 right-4 z-[100] flex items-center gap-4">
           <button
             onClick={() => setShowDev((p) => !p)}
-            className="w-32 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium"
+            className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"
           >
             {showDev ? 'Hide Dev Panel' : 'Show Dev Panel'}
           </button>
           
           {/* Visualization Toggle */}
-          <div className="w-32 flex items-center bg-white rounded-md shadow-sm border border-gray-200 px-3 py-2">
+          <div className="w-36 h-10 flex items-center bg-white rounded-md shadow-sm border border-gray-200 px-3 py-2">
             <label className="inline-flex items-center cursor-pointer w-full">
               <div className="relative">
                 <input
@@ -695,7 +711,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           {/* Debug Output Toggle */}
           <button
             onClick={() => setShowElkDebug((prev) => !prev)}
-            className="w-32 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium"
+            className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"
           >
             {showElkDebug ? 'Hide ELK Data' : 'Show ELK Data'}
           </button>
@@ -703,7 +719,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         
         {/* Debug panel to show raw ELK layout data */}
         {showElkDebug && (
-          <div className="absolute bottom-20 right-4 z-50 max-w-lg max-h-[60vh] overflow-auto bg-white rounded-md shadow-lg border border-gray-200 p-4">
+          <div className="absolute top-24 right-4 z-50 max-w-lg max-h-[calc(100vh-200px)] overflow-auto bg-white rounded-md shadow-lg border border-gray-200 p-4">
             <div className="flex justify-between items-center mb-2">
               <h3 className="text-lg font-semibold">ELK Layout Data</h3>
               <button 
@@ -713,7 +729,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 ✕
               </button>
             </div>
-            <pre className="text-xs bg-gray-50 p-4 rounded-md overflow-auto max-h-[50vh]">
+            <pre className="text-xs bg-gray-50 p-4 rounded-md overflow-auto max-h-[calc(100vh-300px)]">
               {JSON.stringify(layoutGraph, null, 2)}
             </pre>
           </div>

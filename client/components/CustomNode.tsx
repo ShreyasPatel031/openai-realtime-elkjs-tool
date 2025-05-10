@@ -140,15 +140,47 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
         </React.Fragment>
       ))}
       
-      {/* Node label */}
-      <div style={{ 
-        padding: '2px 4px',
-        fontSize: '12px',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap' as const
+      {/* Node icon and label */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        width: '100%',
+        height: '100%',
+        position: 'relative'
       }}>
-        {data.label}
+        <div style={{
+          width: '60px',
+          height: '60px',
+          borderRadius: '50%',
+          backgroundColor: 'transparent',
+          border: '2px solid black',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'black',
+          fontWeight: 'bold',
+          fontSize: '16px',
+          marginTop: '2px'
+        }}>
+        </div>
+        
+        {/* Label at bottom */}
+        <div style={{ 
+          position: 'absolute',
+          bottom: '-8px',
+          left: '0',
+          right: '0',
+          padding: '2px 4px',
+          fontSize: '11px',
+          textAlign: 'center',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap' as const
+        }}>
+          {data.label}
+        </div>
       </div>
     </div>
   );

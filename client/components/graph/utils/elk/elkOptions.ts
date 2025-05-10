@@ -14,15 +14,13 @@ export const ROOT_DEFAULT_OPTIONS = {
     "spacing.edgeEdgeBetweenLayers": 30,
     "spacing.nodeNodeBetweenLayers": 30,
     "spacing.edgeNodeBetweenLayers": 30,
-    // Enable edge label placement
-    "edgeLabels.placement": "CENTER",
-    "elk.edgeLabels.inline": true,
+
   }
 };
 
 export const NON_ROOT_DEFAULT_OPTIONS = {
-  width: 80,
-  height: 80,
+  width: 100,
+  height: 100,
   layoutOptions: {
     "nodeLabels.placement": "INSIDE V_TOP H_LEFT",
     "elk.padding": "[top=30.0,left=30.0,bottom=30.0,right=30.0]",

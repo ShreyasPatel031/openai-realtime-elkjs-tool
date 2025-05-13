@@ -105,15 +105,16 @@ export function handleFunctionCall(
           console.log('Call ID:', call_id);
           
           result = mutations.process_user_requirements();
-          console.log('%cFunction result: %c(long text output)', 'font-weight: bold;', 'font-weight: bold; color: green; font-size: 14px;');
+          console.log(`Function result: Array of ${Array.isArray(result) ? result.length : 0} strings`);
           
-          // Format the response as an object with an 'output' property
+          // Format the array into a response object
           const responseObject = { 
-            text: result,
-            message: "This is the sample code to build the architecture diagram."
+            steps: result,
+            stepCount: Array.isArray(result) ? result.length : 0,
+            message: "Here are the steps to build the architecture diagram."
           };
           const responseJson = JSON.stringify(responseObject);
-          console.log('Sending response as object with text property');
+          console.log(`Sending response as object with ${responseObject.stepCount} steps`);
           
           safeSend({
             type: "conversation.item.create",
@@ -123,7 +124,7 @@ export function handleFunctionCall(
               output: responseJson
             }
           });
-          console.log('Sent response as structured object');
+          console.log('Sent response as structured object with steps array');
           console.groupEnd();
           safeSend({ type: "response.create" });
           return; // Return early to prevent the graph update

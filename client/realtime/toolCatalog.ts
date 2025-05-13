@@ -25,6 +25,45 @@ export const allTools = [
         parentId: {
           type: "string",
           description: "ID of the parent node where this node will be added"
+        },
+        data: {
+          type: "object",
+          description: "Additional data for the node",
+          properties: {
+            label: {
+              type: "string",
+              description: "Display label for the node (defaults to nodename if not provided)"
+            },
+            icon: {
+              type: "string",
+              description: "Icon name to display for the node (e.g., 'browser_client', 'mobile_app', 'cloud_cdn', etc.)"
+            },
+            style: {
+              type: ["object", "string"],
+              description: "Style for the node. Can be a predefined style name (GREEN, BLUE, YELLOW, PURPLE, TEAL, GREY) or a custom style object.",
+              oneOf: [
+                {
+                  type: "string",
+                  enum: ["GREEN", "BLUE", "YELLOW", "PURPLE", "TEAL", "GREY"],
+                  description: "Predefined style name"
+                },
+                {
+                  type: "object",
+                  properties: {
+                    bg: {
+                      type: "string",
+                      description: "Background color"
+                    },
+                    border: {
+                      type: "string",
+                      description: "Border color"
+                    }
+                  },
+                  description: "Custom style object"
+                }
+              ]
+            }
+          }
         }
       },
       required: ["nodename", "parentId"]
@@ -82,6 +121,10 @@ export const allTools = [
         targetId: {
           type: "string", 
           description: "ID of the target node"
+        },
+        label: {
+          type: "string",
+          description: "Optional descriptive label for the edge"
         }
       },
       required: ["edgeId", "sourceId", "targetId"]
@@ -121,6 +164,11 @@ export const allTools = [
         groupId: {
           type: "string",
           description: "ID/name for the new group node"
+        },
+        style: {
+          type: "string",
+          description: "Style color scheme for the group (e.g., 'GREEN', 'BLUE', 'YELLOW', 'PURPLE', 'TEAL', 'GREY'). These correspond to predefined color schemes in the application.",
+          enum: ["GREEN", "BLUE", "YELLOW", "PURPLE", "TEAL", "GREY"]
         }
       },
       required: ["nodeIds", "parentId", "groupId"]
@@ -155,14 +203,98 @@ export const allTools = [
             properties: {
               name: {
                 type: "string",
-                description: "Name of the operation to perform"
+                description: "Name of the operation to perform (add_node, delete_node, move_node, add_edge, delete_edge, group_nodes, remove_group)",
+                enum: ["add_node", "delete_node", "move_node", "add_edge", "delete_edge", "group_nodes", "remove_group"]
               },
-              args: {
+              nodename: {
+                type: "string",
+                description: "For add_node: Name/ID of the new node to add"
+              },
+              parentId: {
+                type: "string",
+                description: "For add_node or group_nodes: ID of the parent node where this node will be added"
+              },
+              nodeId: {
+                type: "string",
+                description: "For delete_node or move_node: ID of the node to operate on"
+              },
+              newParentId: {
+                type: "string",
+                description: "For move_node: ID of the new parent node"
+              },
+              edgeId: {
+                type: "string",
+                description: "For add_edge or delete_edge: ID of the edge"
+              },
+              sourceId: {
+                type: "string",
+                description: "For add_edge: ID of the source node"
+              },
+              targetId: {
+                type: "string",
+                description: "For add_edge: ID of the target node"
+              },
+              nodeIds: {
+                type: "array",
+                items: {
+                  type: "string"
+                },
+                description: "For group_nodes: IDs of the nodes to group"
+              },
+              groupId: {
+                type: "string",
+                description: "For group_nodes or remove_group: ID of the group"
+              },
+              label: {
+                type: "string",
+                description: "For add_edge: Optional descriptive label for the edge"
+              },
+              style: {
+                type: "string",
+                description: "For group_nodes: Style color scheme for the group (GREEN, BLUE, YELLOW, PURPLE, TEAL, GREY). These correspond to predefined color schemes in the application.",
+                enum: ["GREEN", "BLUE", "YELLOW", "PURPLE", "TEAL", "GREY"]
+              },
+              data: {
                 type: "object",
-                description: "Arguments for the operation"
+                description: "For add_node: Additional data for the node",
+                properties: {
+                  label: {
+                    type: "string",
+                    description: "Display label for the node (defaults to nodename if not provided)"
+                  },
+                  icon: {
+                    type: "string",
+                    description: "Icon name to display for the node (e.g., 'browser_client', 'mobile_app', 'cloud_cdn', etc.)"
+                  },
+                  style: {
+                    type: ["object", "string"],
+                    description: "Style for the node. Can be a predefined style name (GREEN, BLUE, YELLOW, PURPLE, TEAL, GREY) or a custom style object.",
+                    oneOf: [
+                      {
+                        type: "string",
+                        enum: ["GREEN", "BLUE", "YELLOW", "PURPLE", "TEAL", "GREY"],
+                        description: "Predefined style name"
+                      },
+                      {
+                        type: "object",
+                        properties: {
+                          bg: {
+                            type: "string",
+                            description: "Background color"
+                          },
+                          border: {
+                            type: "string",
+                            description: "Border color"
+                          }
+                        },
+                        description: "Custom style object"
+                      }
+                    ]
+                  }
+                }
               }
             },
-            required: ["name", "args"]
+            required: ["name"]
           },
           description: "List of operations to execute"
         }

@@ -1,14 +1,5 @@
 import { RawGraph } from "./types/index";
-
-// Style enum for predefined color schemes
-const STYLES = {
-  GREEN: { bg: "#E8F5E9", border: "#43A047" },
-  BLUE: { bg: "#E3F2FD", border: "#1A73E8" },
-  YELLOW: { bg: "#FFF8E1", border: "#FFB300" },
-  PURPLE: { bg: "#F3E5F5", border: "#8E24AA" },
-  TEAL: { bg: "#E0F2F1", border: "#00897B" },
-  GREY: { bg: "#ECEFF1", border: "#546E7A" },
-};
+import { STYLES } from "./styles";
 
 export const getInitialElkGraph = (): RawGraph => ({
   id: "root",

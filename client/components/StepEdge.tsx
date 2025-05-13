@@ -89,12 +89,14 @@ const StepEdge: React.FC<EdgeProps> = ({
         markerEnd={markerEnd}
       />
       
-      {edgeLabel && labelPos && (
+      {edgeLabel && (
         <EdgeLabelRenderer>
           <div
             style={{
               position: 'absolute',
-              transform: `translate(-50%, -50%) translate(${labelPos.x}px, ${labelPos.y}px)`,
+              transform: labelPos 
+                ? `translate(-50%, -50%) translate(${labelPos.x}px, ${labelPos.y}px)`
+                : `translate(-50%, -50%) translate(${(sourceX + targetX) / 2}px, ${(sourceY + targetY) / 2}px)`,
               background: 'white',
               padding: '2px 6px',
               border: '1px solid #888',

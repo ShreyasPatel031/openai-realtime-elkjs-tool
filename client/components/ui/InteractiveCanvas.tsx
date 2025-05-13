@@ -71,7 +71,10 @@ Node: component of architecture
 #impotant: only use these icons and exact names GCP services (app_engine, artifact_registry, batch, bigquery, bigtable, cloud_armor, cloud_build, cloud_cdn, cloud_dns, cloud_functions, cloud_interconnect, cloud_logging, cloud_monitoring, cloud_nat, cloud_run, cloud_router, cloud_scheduler, cloud_sql, cloud_storage, cloud_tasks, cloud_trace, cloud_vpn, compute_engine, data_catalog, dataflow, dataplex, dataproc, eventarc, firestore, gke_autopilot, iam, iot_core, kms, live_stream_api, memorystore_redis, media_cdn, network_intelligence_center, pubsub, pubsub_lite, secret_manager, security_command_center, spanner, stackdriver_profiler, stackdriver_debugger, tpu, transcoder_api, vertex_ai, vpc_network, workflows, workstations) and general architecture (admin_portal, analytics_service, api, api_graphql, api_rest, audit_log, auth, auto_scaler, backup_service, batch_job, billing_service, blue_green_deploy, browser_client, cache, cache_memcached, cache_redis, canary_deploy, cdn, circuit_breaker, config_service, container_registry, cron_scheduler, customer_support_chat, data_center, data_warehouse, database, dlq_queue, docker_engine, external_partner, etl_pipeline, feature_flag_service, firewall_generic, frontend, frontend_spa, git_repo, health_check, jenkins_ci, jwt_provider, kubernetes_cluster, load_balancer_generic, load_test_tool, logging, logging_elasticsearch, message_queue, microservice_generic, mobile_app, monitoring, monitoring_dashboard, monitoring_prometheus, notification_service, oauth_server, on_prem, opensearch, pagerduty_alerts, payment_gateway, rate_limiter, retry_queue, secrets_vault, service_bus, static_assets_bucket, third_party_api, vpn_gateway_generic, waf_generic, web_app, webhooks).
 Edge: relationship between group and node, node and node
 
-
+#Styling:
+Groups should include a style property with one of these color schemes: GREEN, BLUE, YELLOW, PURPLE, TEAL, GREY
+Example: style: "GREEN" - this will apply a predefined green color scheme to the group.
+Edges should include descriptive labels to explain the relationship.
 
 1. Take first logical part of architecture. This is the first group. ( eg: frontend, backend, api, auth, compute, cache, data_plane, control_plane, storage, messaging, observability, security, devops, third_party, networking, orchestration, database, eventing, ml_ops, cdn, load_balancing, identity, monitoring, tracing, logging, queueing, scheduler, workflow, etl_pipeline, feature_flags, rate_limiting, testing, ci_cd, secrets_management, configuration, analytics, billing, notifications. )
 
@@ -115,13 +118,13 @@ You can only interact with the system by calling the following functions:
 
 
 - display_elk_graph(title): Call this first to retrieve and visualize the current graph layout.
-- add_node(nodename, parentId, { label: "Display Label", icon: "icon_name" }): Add a component under a parent container. You cannot add a node if parentId does not exist.
+- add_node(nodename, parentId, { label: "Display Label", icon: "icon_name", style: "GREEN" }): Add a component under a parent container. You cannot add a node if parentId does not exist.
   Available icons: GCP services (app_engine, artifact_registry, batch, bigquery, bigtable, cloud_armor, cloud_build, cloud_cdn, cloud_dns, cloud_functions, cloud_interconnect, cloud_logging, cloud_monitoring, cloud_nat, cloud_run, cloud_router, cloud_scheduler, cloud_sql, cloud_storage, cloud_tasks, cloud_trace, cloud_vpn, compute_engine, data_catalog, dataflow, dataplex, dataproc, eventarc, firestore, gke_autopilot, iam, iot_core, kms, live_stream_api, memorystore_redis, media_cdn, network_intelligence_center, pubsub, pubsub_lite, secret_manager, security_command_center, spanner, stackdriver_profiler, stackdriver_debugger, tpu, transcoder_api, vertex_ai, vpc_network, workflows, workstations) and general architecture (admin_portal, analytics_service, api_graphql, api_rest, audit_log, auto_scaler, backup_service, batch_job, billing_service, blue_green_deploy, browser_client, cache_memcached, cache_redis, canary_deploy, circuit_breaker, config_service, container_registry, cron_scheduler, customer_support_chat, data_center, data_warehouse, dlq_queue, docker_engine, external_partner, etl_pipeline, feature_flag_service, firewall_generic, frontend_spa, git_repo, health_check, jenkins_ci, jwt_provider, kubernetes_cluster, load_balancer_generic, load_test_tool, logging_elasticsearch, message_queue, microservice_generic, mobile_app, monitoring_dashboard, monitoring_prometheus, notification_service, oauth_server, on_prem, opensearch, pagerduty_alerts, payment_gateway, rate_limiter, retry_queue, secrets_vault, service_bus, static_assets_bucket, third_party_api, vpn_gateway_generic, waf_generic, web_app, webhooks).
 - delete_node(nodeId): Remove an existing node.
 - move_node(nodeId, newParentId): Move a node from one group/container to another parent.
-- add_edge(edgeId, sourceId, targetId): Connect two nodes with a directional link.
+- add_edge(edgeId, sourceId, targetId, label): Connect two nodes with a directional link and optional label (e.g., "authenticates", "queries", "streams data").
 - delete_edge(edgeId): Remove an existing edge.
-- group_nodes(nodeIds, parentId, groupId): Create a new container and move specified nodes into it.
+- group_nodes(nodeIds, parentId, groupId, style): Create a new container with style ("GREEN", "BLUE", "YELLOW", etc.) and move specified nodes into it.
 - remove_group(groupId): Disband a group and promote its children to the parent.
 - batch_update(operations): Apply a list of operations to the graph. If applying bath operations make sure that nodes to which you are applying exist.'
 
@@ -138,7 +141,9 @@ You can only interact with the system by calling the following functions:
 3. Build clean architecture diagrams by calling only the provided functions. Avoid reasoning outside this structure.
 
 
-You are not allowed to write explanations, instructions, or visual output. You must interact purely by calling functions to update the architecture diagram.`;
+You are not allowed to write explanations, instructions, or visual output. You must interact purely by calling functions to update the architecture diagram.
+
+#Important: Edges between nodes in different containers (like between backend services and external services) will be automatically attached at the root level. This is normal and expected.`;
 
 
 

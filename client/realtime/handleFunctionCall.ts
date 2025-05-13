@@ -2,14 +2,28 @@
 import { FunctionCall, ClientEvent } from './types';
 
 interface MutationHelpers {
-  addNode: (nodeName: string, parentId: string, graph: any, data?: { label?: string; icon?: string }) => any;
+  addNode: (nodeName: string, parentId: string, graph: any, data?: { label?: string; icon?: string; style?: any }) => any;
   deleteNode: (nodeId: string, graph: any) => any;
   moveNode: (nodeId: string, newParentId: string, graph: any) => any;
-  addEdge: (edgeId: string, containerId: string | null, sourceId: string, targetId: string, graph: any) => any;
+  addEdge: (edgeId: string, containerId: string | null, sourceId: string, targetId: string, graph: any, label?: string) => any;
   deleteEdge: (edgeId: string, graph: any) => any;
-  groupNodes: (nodeIds: string[], parentId: string, groupId: string, graph: any) => any;
+  groupNodes: (nodeIds: string[], parentId: string, groupId: string, graph: any, style?: any) => any;
   removeGroup: (groupId: string, graph: any) => any;
-  batchUpdate: (operations: Array<{name: string, args: any}>, graph: any) => any;
+  batchUpdate: (operations: Array<{
+    name: string;
+    nodename?: string;
+    parentId?: string;
+    nodeId?: string;
+    newParentId?: string;
+    edgeId?: string;
+    sourceId?: string;
+    targetId?: string;
+    nodeIds?: string[];
+    groupId?: string;
+    data?: { label?: string; icon?: string; style?: any };
+    label?: string;
+    style?: any;
+  }>, graph: any) => any;
 }
 
 interface FunctionCallHelpers {
@@ -57,7 +71,7 @@ export function handleFunctionCall(
         break;
         
       case "add_edge":
-        updated = mutations.addEdge(args.edgeId, null, args.sourceId, args.targetId, graphCopy);
+        updated = mutations.addEdge(args.edgeId, null, args.sourceId, args.targetId, graphCopy, args.label);
         console.log(`➡️ Added edge '${args.edgeId}' from '${args.sourceId}' to '${args.targetId}'`);
         break;
         
@@ -67,7 +81,7 @@ export function handleFunctionCall(
         break;
         
       case "group_nodes":
-        updated = mutations.groupNodes(args.nodeIds, args.parentId, args.groupId, graphCopy);
+        updated = mutations.groupNodes(args.nodeIds, args.parentId, args.groupId, graphCopy, args.style);
         console.log(`📦 Grouped nodes [${args.nodeIds.join(', ')}] into '${args.groupId}' under '${args.parentId}'`);
         break;
         

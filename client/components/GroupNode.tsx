@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Handle, Position } from 'reactflow';
 import { baseHandleStyle } from './graph/handles';
+import { getStyle } from './graph/styles';
 
 interface GroupNodeProps {
   data: {
     label: string;
     icon?: string;
-    style?: {
+    style?: string | {
       bg?: string;
       border?: string;
     };
@@ -69,9 +70,10 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
     }
   }, [data.icon]);
 
-  // Get custom styling if available
-  const customBgColor = data.style?.bg || 'rgba(240, 240, 240, 0.6)';
-  const customBorderColor = data.style?.border || (selected ? '#6c757d' : '#999');
+  // Get custom styling using the shared getStyle helper
+  const resolvedStyle = getStyle(data.style);
+  const customBgColor = resolvedStyle.bg || 'rgba(240, 240, 240, 0.6)';
+  const customBorderColor = resolvedStyle.border || (selected ? '#6c757d' : '#999');
   
   // Create a more saturated background color for the header based on the group's background
   const headerBgColor = customBgColor.replace(/rgba?\(([^)]+)\)/, (match, values) => {

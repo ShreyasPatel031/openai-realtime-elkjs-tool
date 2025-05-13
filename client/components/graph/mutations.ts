@@ -16,6 +16,7 @@
 
 import { ElkGraphNode, ElkGraphEdge, NodeID, EdgeID, createNodeID, createEdgeID } from "../../types/graph";
 import { RawGraph } from "./types/index";
+import { getStyle } from "./styles";
 
 // ──────────────────────────────────────────────
 // NEW HELPERS – tiny & fast, no external deps
@@ -205,7 +206,7 @@ export const addNode = (
   nodeName: string, 
   parentId: NodeID, 
   graph: RawGraph,
-  data?: { label?: string; icon?: string }
+  data?: { label?: string; icon?: string; style?: any }
 ): RawGraph => {
   console.group(`[mutation] addNode '${nodeName}' → parent '${parentId}'`);
   console.time("addNode");
@@ -236,6 +237,14 @@ export const addNode = (
   
   // Add optional data properties
   if (data) {
+    // Process style if it's a string reference
+    if (data.style && typeof data.style === 'string') {
+      data = {
+        ...data,
+        style: getStyle(data.style)
+      };
+    }
+    
     newNode.data = {
       ...newNode.data,
       ...data
@@ -336,8 +345,8 @@ export const moveNode = (nodeId: NodeID, newParentId: NodeID, graph: RawGraph): 
 /**
  * Add an edge between nodes at the common ancestor level
  */
-export const addEdge = (edgeId: EdgeID, containerId: NodeID | null, sourceId: NodeID, targetId: NodeID, graph: RawGraph): RawGraph => {
-  console.group(`[mutation] addEdge '${edgeId}' (${sourceId} → ${targetId})`);
+export const addEdge = (edgeId: EdgeID, containerId: NodeID | null, sourceId: NodeID, targetId: NodeID, graph: RawGraph, label?: string): RawGraph => {
+  console.group(`[mutation] addEdge '${edgeId}' (${sourceId} → ${targetId})${label ? ` with label "${label}"` : ''}`);
   console.time("addEdge");
   
   // duplicate-ID check
@@ -353,8 +362,33 @@ export const addEdge = (edgeId: EdgeID, containerId: NodeID | null, sourceId: No
   const commonAncestor = findCommonAncestor(graph, sourceId, targetId);
   
   if (!commonAncestor) {
-    console.error(`Common ancestor not found for nodes: ${sourceId}, ${targetId}`);
-    throw new Error(`Common ancestor not found for connected nodes`);
+    console.warn(`Common ancestor not found for nodes: ${sourceId}, ${targetId}. Attaching edge to root.`);
+    // No common ancestor found, attach to root node instead
+    const root = graph;
+    
+    // Create the edge
+    const newEdge: ElkGraphEdge = {
+      id: edgeId,
+      sources: [sourceId],
+      targets: [targetId]
+    };
+    
+    // Add label if provided
+    if (label) {
+      newEdge.labels = [{ text: label }];
+    }
+    
+    // Ensure the root has edges array
+    if (!root.edges) {
+      root.edges = [];
+    }
+    
+    // Add the edge to the root
+    root.edges.push(newEdge);
+    
+    console.timeEnd("addEdge");
+    console.groupEnd();
+    return graph;
   }
   
   // Create the edge
@@ -363,6 +397,11 @@ export const addEdge = (edgeId: EdgeID, containerId: NodeID | null, sourceId: No
     sources: [sourceId],
     targets: [targetId]
   };
+  
+  // Add label if provided
+  if (label) {
+    newEdge.labels = [{ text: label }];
+  }
   
   // Ensure the common ancestor has edges array
   if (!commonAncestor.edges) {
@@ -421,8 +460,8 @@ export const deleteEdge = (edgeId: EdgeID, graph: RawGraph): RawGraph => {
  * Creates a new group node and moves specified nodes into it,
  * properly handling edge reattachment.
  */
-export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID, graph: RawGraph): RawGraph => {
-  console.group(`[mutation] groupNodes '${groupId}' (${nodeIds.length} nodes) → parent '${parentId}'`);
+export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID, graph: RawGraph, style?: any): RawGraph => {
+  console.group(`[mutation] groupNodes '${groupId}' (${nodeIds.length} nodes) → parent '${parentId}'${style ? ' with style' : ''}`);
   console.time("groupNodes");
   
   // Check for duplicate ID using normalized group ID
@@ -451,6 +490,17 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
     children: [],
     edges: []
   };
+  
+  // Add style data if provided
+  if (style) {
+    // Use the getStyle helper to resolve string style names to actual style objects
+    const resolvedStyle = getStyle(style);
+    groupNode.data = {
+      ...groupNode.data,
+      label: groupId,
+      style: resolvedStyle
+    };
+  }
   
   // Track which nodes are actually moved to update their edges later
   const movedNodeIds: NodeID[] = [];
@@ -547,6 +597,9 @@ export const batchUpdate = (operations: Array<{
   targetId?: NodeID;
   nodeIds?: NodeID[];
   groupId?: NodeID;
+  data?: { label?: string; icon?: string; style?: any };
+  label?: string;
+  style?: any;
 }>, graph: RawGraph) => {
   console.group(`[mutation] batchUpdate (${operations.length} operations)`);
   console.time("batchUpdate");
@@ -558,7 +611,7 @@ export const batchUpdate = (operations: Array<{
     
     switch (name) {
       case "add_node":
-        updatedGraph = addNode(args.nodename!, args.parentId!, updatedGraph);
+        updatedGraph = addNode(args.nodename!, args.parentId!, updatedGraph, args.data);
         break;
         
       case "delete_node":
@@ -570,7 +623,7 @@ export const batchUpdate = (operations: Array<{
         break;
         
       case "add_edge":
-        updatedGraph = addEdge(args.edgeId!, null, args.sourceId!, args.targetId!, updatedGraph);
+        updatedGraph = addEdge(args.edgeId!, null, args.sourceId!, args.targetId!, updatedGraph, args.label);
         break;
         
       case "delete_edge":
@@ -578,7 +631,7 @@ export const batchUpdate = (operations: Array<{
         break;
         
       case "group_nodes":
-        updatedGraph = groupNodes(args.nodeIds!, args.parentId!, args.groupId!, updatedGraph);
+        updatedGraph = groupNodes(args.nodeIds!, args.parentId!, args.groupId!, updatedGraph, args.style || args.data?.style);
         break;
         
       case "remove_group":

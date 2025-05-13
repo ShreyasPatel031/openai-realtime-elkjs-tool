@@ -24,6 +24,7 @@ interface MutationHelpers {
     label?: string;
     style?: any;
   }>, graph: any) => any;
+  process_user_requirements?: () => string;
 }
 
 interface FunctionCallHelpers {
@@ -48,6 +49,7 @@ export function handleFunctionCall(
       : JSON.parse(JSON.stringify(elkGraph));
 
   let updated = graphCopy;   // Work on the copy
+  let result = null;
 
   try {
     switch (name) {
@@ -93,6 +95,39 @@ export function handleFunctionCall(
       case "batch_update":
         updated = mutations.batchUpdate(args.operations, graphCopy);
         console.log(`🔄 Batch updated graph with ${args.operations.length} operations`);
+        break;
+        
+      case "process_user_requirements":
+        if (mutations.process_user_requirements) {
+          console.group('📋 process_user_requirements Function Call');
+          console.log('Arguments from agent:', args);
+          console.log('Raw argument string:', argStr);
+          console.log('Call ID:', call_id);
+          
+          result = mutations.process_user_requirements();
+          console.log('%cFunction result: %c(long text output)', 'font-weight: bold;', 'font-weight: bold; color: green; font-size: 14px;');
+          
+          // Format the response as an object with an 'output' property
+          const responseObject = { 
+            text: result,
+            message: "This is the sample code to build the architecture diagram."
+          };
+          const responseJson = JSON.stringify(responseObject);
+          console.log('Sending response as object with text property');
+          
+          safeSend({
+            type: "conversation.item.create",
+            item: {
+              type: "function_call_output",
+              call_id: call_id,
+              output: responseJson
+            }
+          });
+          console.log('Sent response as structured object');
+          console.groupEnd();
+          safeSend({ type: "response.create" });
+          return; // Return early to prevent the graph update
+        }
         break;
         
       default:

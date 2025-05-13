@@ -32,7 +32,22 @@ interface UseChatSessionProps {
   deleteEdge?: (edgeId: string, graph: any) => any;
   groupNodes?: (nodeIds: string[], parentId: string, groupId: string, graph: any) => any;
   removeGroup?: (groupId: string, graph: any) => any;
-  batchUpdate?: (operations: Array<{name: string, args: any}>, graph: any) => any;
+  batchUpdate?: (operations: Array<{
+    name: string;
+    nodename?: string;
+    parentId?: string;
+    nodeId?: string;
+    newParentId?: string;
+    edgeId?: string;
+    sourceId?: string;
+    targetId?: string;
+    nodeIds?: string[];
+    groupId?: string;
+    data?: { label?: string; icon?: string; style?: any };
+    label?: string;
+    style?: any;
+  }>, graph: any) => any;
+  process_user_requirements?: () => string;
 }
 
 export const useChatSession = ({
@@ -51,7 +66,8 @@ export const useChatSession = ({
   deleteEdge,
   groupNodes,
   removeGroup,
-  batchUpdate
+  batchUpdate,
+  process_user_requirements
 }: UseChatSessionProps) => {
   // Use a Map as the single source of truth for messages
   const messagesMap = useRef<Map<string, Message>>(new Map());
@@ -142,14 +158,15 @@ export const useChatSession = ({
               deleteEdge: deleteEdge || (() => elkGraph),
               groupNodes: groupNodes || (() => elkGraph),
               removeGroup: removeGroup || (() => elkGraph),
-              batchUpdate: batchUpdate || (() => elkGraph)
+              batchUpdate: batchUpdate || (() => elkGraph),
+              process_user_requirements: process_user_requirements
             },
             safeSend: safeSendClientEvent
           });
         }
       });
     }
-  }, [isSessionActive, events, elkGraph, setElkGraph, addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate, safeSendClientEvent]);
+  }, [isSessionActive, events, elkGraph, setElkGraph, addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate, process_user_requirements, safeSendClientEvent]);
 
   // Initialize session with tool definitions
   useEffect(() => {

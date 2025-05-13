@@ -30,7 +30,7 @@ import { ChatBoxProps, Message as ChatMessage, ChatWindowProps, InteractiveCanva
 import { CustomNode, NodeData, EdgeData, ElkGraph, ElkGraphNode, ElkGraphEdge } from "../../types/graph"
 import { RawGraph } from "../graph/types/index"
 import { getInitialElkGraph } from "../graph/initialGraph"
-import { addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate } from "../graph/mutations"
+import { addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate, process_user_requirements } from "../graph/mutations"
 import { useElkToReactflowGraphConverter } from "../../hooks/useElkToReactflowGraphConverter"
 import { useChatSession } from '../../hooks/useChatSession'
 
@@ -126,7 +126,8 @@ You can only interact with the system by calling the following functions:
 - delete_edge(edgeId): Remove an existing edge.
 - group_nodes(nodeIds, parentId, groupId, style): Create a new container with style ("GREEN", "BLUE", "YELLOW", etc.) and move specified nodes into it.
 - remove_group(groupId): Disband a group and promote its children to the parent.
-- batch_update(operations): Apply a list of operations to the graph. If applying bath operations make sure that nodes to which you are applying exist.'
+- batch_update(operations): Apply a list of operations to the graph. If applying bath operations make sure that nodes to which you are applying exist.
+- process_user_requirements(): Called only when user asks to process requirements. This only return instructions for you to follow it does not apply any operations to the graph.
 
 
 
@@ -234,7 +235,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     deleteEdge: deleteEdge as any,
     groupNodes: groupNodes as any,
     removeGroup: removeGroup as any,
-    batchUpdate: batchUpdate as any
+    batchUpdate: batchUpdate as any,
+    process_user_requirements: process_user_requirements as any
   });
   
   // Process events when they change

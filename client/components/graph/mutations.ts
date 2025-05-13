@@ -646,4 +646,131 @@ export const batchUpdate = (operations: Array<{
   console.timeEnd("batchUpdate");
   console.groupEnd();
   return updatedGraph;
+};
+
+/**
+ * Process user requirements and return sample text
+ */
+export const process_user_requirements = () => {
+  console.group(`[mutation] process_user_requirements`);
+  console.time("process_user_requirements");
+  
+  // Return exact text as requested
+  const result = `
+  Perform all 11 steps below.# imortant: Please do not miss any steps.
+  These are instructions for you to follow. Please note none of these operations are applied to the graph. You need to apply these operations to the graph. This functions only processes the requirements and returns the instructions.
+  
+
+  
+
+
+ // ────────────────────────── 0. inspect graph
+display_elk_graph("start")
+
+// ────────────────────────── 1. root-level groups  (NO external yet)
+batch_update([
+  ["add_node","users","root",{ label:"End-Users",             icon:"browser_client", style:"GREEN" }],
+  ["add_node","gcp",  "root",{ label:"Google Cloud Platform", icon:"gcp_logo",       style:"BLUE"  }]
+])
+
+// ────────────────────────── 2. USERS
+batch_update([
+  ["add_node","web_user",   "users",{ label:"Web",    icon:"browser_client", style:"GREEN" }],
+  ["add_node","mobile_user","users",{ label:"Mobile", icon:"mobile_app",     style:"GREEN" }]
+])
+
+// ────────────────────────── 3. EDGE / CDN
+batch_update([
+  ["add_node","edge","gcp",{ label:"Edge & CDN", icon:"cloud_cdn", style:"YELLOW" }],
+  ["add_node","cloud_cdn","edge",{ label:"Cloud CDN", icon:"cloud_cdn", style:"YELLOW" }],
+  ["add_node","lb_https",  "edge",{ label:"HTTPS LB", icon:"load_balancer_generic", style:"YELLOW" }],
+  ["add_edge","e_cdn_lb","cloud_cdn","lb_https","route"],
+  ["add_node","cloud_armor","edge",{ label:"Cloud Armor", icon:"cloud_armor", style:"YELLOW" }],
+  ["add_edge","e_waf_lb","cloud_armor","lb_https","protect"],
+  ["add_edge","e_web_edge",   "web_user","cloud_cdn","HTTPS"],
+  ["add_edge","e_mobile_edge","mobile_user","cloud_cdn","HTTPS"]
+])
+
+// ────────────────────────── 4. API & AUTH
+batch_update([
+  ["add_node","api","gcp",{ label:"API Gateway + Auth", icon:"api_gateway", style:"PURPLE" }],
+  ["add_node","idp",   "api",{ label:"Identity Plat.", icon:"iam",         style:"PURPLE" }],
+  ["add_node","api_gw","api",{ label:"API Gateway",    icon:"api_gateway", style:"PURPLE" }],
+  ["add_edge","e_idp_gw","idp","api_gw","JWT"],
+  ["add_edge","e_lb_api","lb_https","api_gw","HTTPS"]
+])
+
+// ────────────────────────── 5. BACKEND
+batch_update([
+  ["add_node","backend","gcp",{ label:"Backend Svcs", icon:"cloud_run", style:"GREY" }],
+  ["add_node","order_svc",  "backend",{ label:"Order",   icon:"cloud_run", style:"GREY" }],
+  ["add_node","risk_svc",   "backend",{ label:"Risk",    icon:"cloud_run", style:"GREY" }],
+  ["add_edge","e_order_risk","order_svc","risk_svc","score"],
+  ["add_node","catalog_svc","backend",{ label:"Catalog", icon:"cloud_run", style:"GREY" }],
+  ["add_edge","e_api_order",  "api_gw","order_svc","REST"],
+  ["add_edge","e_api_catalog","api_gw","catalog_svc","REST"]
+])
+
+// ────────────────────────── 6. CACHE
+batch_update([
+  ["add_node","cache","gcp",{ label:"Redis Cache", icon:"cache_redis", style:"GREEN" }],
+  ["add_node","redis","cache",{ label:"Memorystore", icon:"cache_redis", style:"GREEN" }],
+  ["add_edge","e_order_cache","order_svc","redis","session"]
+])
+
+// ────────────────────────── 7. DATA STORES
+batch_update([
+  ["add_node","data","gcp",{ label:"Data Stores", icon:"spanner", style:"GREEN" }],
+  ["add_node","spanner",  "data",{ label:"Spanner",  icon:"spanner",  style:"GREEN" }],
+  ["add_node","firestore","data",{ label:"Firestore",icon:"firestore",style:"GREEN" }],
+  ["add_edge","e_catalog_db","catalog_svc","spanner","read"],
+  ["add_edge","e_order_db",  "order_svc","spanner","write"],
+  ["add_edge","e_risk_db",   "risk_svc","spanner","read"],
+  ["add_edge","e_catalog_fs","catalog_svc","firestore","stock"]
+])
+
+// ────────────────────────── 8. ORCHESTRATION
+batch_update([
+  ["add_node","orchestration","gcp",{ label:"Workflows", icon:"workflows", style:"PURPLE" }],
+  ["add_node","workflows",   "orchestration",{ label:"Workflows", icon:"workflows", style:"PURPLE" }],
+  ["add_edge","e_order_flow","order_svc","workflows","invoke"],
+  ["add_node","eventarc",    "orchestration",{ label:"Eventarc", icon:"eventarc", style:"PURPLE" }],
+  ["add_node","cloud_tasks", "orchestration",{ label:"Cloud Tasks", icon:"cloud_tasks", style:"PURPLE" }],
+  ["add_edge","e_flow_risk","workflows","risk_svc","branch"]
+])
+
+// ────────────────────────── 9. MESSAGING
+batch_update([
+  ["add_node","messaging","gcp",{ label:"Pub/Sub", icon:"pubsub", style:"YELLOW" }],
+  ["add_node","order_topic","messaging",{ label:"order-topic", icon:"pubsub", style:"YELLOW" }],
+  ["add_edge","e_flow_topic","workflows","order_topic","publish"],
+  ["add_node","dlq_topic","messaging",{ label:"DLQ", icon:"message_queue", style:"YELLOW" }],
+  ["add_edge","e_topic_dlq","order_topic","dlq_topic","DLQ"]
+])
+
+// ────────────────────────── 10. MONITORING
+batch_update([
+  ["add_node","monitoring","gcp",{ label:"Monitoring", icon:"cloud_monitoring", style:"GREY" }],
+  ["add_node","cloud_monitoring","monitoring",{ label:"Monitoring", icon:"cloud_monitoring", style:"GREY" }],
+  ["add_node","cloud_logging",   "monitoring",{ label:"Logging",    icon:"cloud_logging",    style:"GREY" }],
+  ["add_node","cloud_trace",     "monitoring",{ label:"Trace",      icon:"cloud_trace",      style:"GREY" }],
+  ["add_node","profiler",        "monitoring",{ label:"Profiler",   icon:"stackdriver_profiler", style:"GREY" }]
+])
+
+// ────────────────────────── 11. EXTERNAL 
+batch_update([
+  ["add_node","external","root",{ label:"External APIs", icon:"third_party_api", style:"GREY" }],
+  ["add_node","payment_gateway","external",{ label:"Payment GW", icon:"payment_gateway", style:"GREY" }],
+  ["add_node","email_svc",      "external",{ label:"Email",      icon:"notification_service", style:"GREY" }],
+  ["add_edge","e_payment","order_svc","payment_gateway","charge"],
+  ["add_edge","e_email",  "workflows","email_svc","notify"]
+])
+
+// ────────────────────────── final view
+display_elk_graph("done")
+`;
+  
+  console.timeEnd("process_user_requirements");
+  console.groupEnd();
+  return result;
 }; 

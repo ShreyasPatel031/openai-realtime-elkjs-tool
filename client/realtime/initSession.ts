@@ -75,7 +75,7 @@ export function initSession(
     }
   });
 
-  safeSend({ type: "response.create" });
+  // safeSend({ type: "response.create" });
   
-  return true; // did send
+  return true;
 } 

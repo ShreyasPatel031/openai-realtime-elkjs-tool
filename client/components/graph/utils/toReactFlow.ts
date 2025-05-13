@@ -41,6 +41,10 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
         width: node.width || dimensions.width,
         height: node.height || dimensions.height,
         isParent: isGroupNode,
+        // Pass through icon if it exists in the node data
+        ...(node.data?.icon && { icon: node.data.icon }),
+        // Pass through style if it exists in the node data
+        ...(node.data?.style && { style: node.data.style }),
         leftHandles: (edgeConnectionPoints[node.id]?.left ?? []).map(connectionPoint => {
           const delta = connectionPoint.y - absPos.y;
           return delta;

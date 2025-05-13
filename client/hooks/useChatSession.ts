@@ -25,7 +25,7 @@ interface UseChatSessionProps {
   elkGraphDescription?: string;
   agentInstruction?: string;
   // For use with mutations
-  addNode?: (nodeName: string, parentId: string, graph: any) => any;
+  addNode?: (nodeName: string, parentId: string, graph: any, data?: { label?: string; icon?: string }) => any;
   deleteNode?: (nodeId: string, graph: any) => any;
   moveNode?: (nodeId: string, newParentId: string, graph: any) => any;
   addEdge?: (edgeId: string, containerId: string | null, sourceId: string, targetId: string, graph: any) => any;

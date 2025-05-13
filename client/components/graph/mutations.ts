@@ -201,7 +201,12 @@ const notFound = (type: "node"|"edge"|"shape", id: string) =>
 /**
  * Add a new node under a parent
  */
-export const addNode = (nodeName: string, parentId: NodeID, graph: RawGraph): RawGraph => {
+export const addNode = (
+  nodeName: string, 
+  parentId: NodeID, 
+  graph: RawGraph,
+  data?: { label?: string; icon?: string }
+): RawGraph => {
   console.group(`[mutation] addNode '${nodeName}' → parent '${parentId}'`);
   console.time("addNode");
 
@@ -225,9 +230,17 @@ export const addNode = (nodeName: string, parentId: NodeID, graph: RawGraph): Ra
   // Create the new node - using createNodeID to maintain ID creation consistency
   const newNode: ElkGraphNode = {
     id: normalizedId,
-    labels: [{ text: nodeName }],
+    labels: [{ text: data?.label || nodeName }],
     children: []
   };
+  
+  // Add optional data properties
+  if (data) {
+    newNode.data = {
+      ...newNode.data,
+      ...data
+    };
+  }
   
   // Add to parent
   parentNode.children.push(newNode);

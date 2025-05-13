@@ -33,6 +33,11 @@ export interface ElkGraphNode {
   labels?: { text: string }[];
   children?: ElkGraphNode[];
   edges?: ElkGraphEdge[];
+  data?: {
+    label?: string;
+    icon?: string;
+    [key: string]: any;
+  };
 }
 
 export interface ElkGraphEdge {

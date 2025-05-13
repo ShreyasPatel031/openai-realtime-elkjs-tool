@@ -2,7 +2,7 @@
 import { FunctionCall, ClientEvent } from './types';
 
 interface MutationHelpers {
-  addNode: (nodeName: string, parentId: string, graph: any) => any;
+  addNode: (nodeName: string, parentId: string, graph: any, data?: { label?: string; icon?: string }) => any;
   deleteNode: (nodeId: string, graph: any) => any;
   moveNode: (nodeId: string, newParentId: string, graph: any) => any;
   addEdge: (edgeId: string, containerId: string | null, sourceId: string, targetId: string, graph: any) => any;
@@ -42,8 +42,8 @@ export function handleFunctionCall(
         break;
         
       case "add_node":
-        updated = mutations.addNode(args.nodename, args.parentId, graphCopy);
-        console.log(`🟢 Added node '${args.nodename}' to parent '${args.parentId}'`);
+        updated = mutations.addNode(args.nodename, args.parentId, graphCopy, args.data);
+        console.log(`🟢 Added node '${args.nodename}' to parent '${args.parentId}'${args.data ? ' with data' : ''}`);
         break;
         
       case "delete_node":

@@ -25,7 +25,7 @@ export const NON_ROOT_DEFAULT_OPTIONS = {
     "nodeLabels.placement": "INSIDE V_TOP H_LEFT",
     "algorithm": "layered",
     "elk.direction": "RIGHT",
-    "elk.padding": "[top=30.0,left=30.0,bottom=30.0,right=30.0]",
+    "elk.padding": "[top=60.0,left=30.0,bottom=30.0,right=30.0]",
     "elk.layered.nodePlacement.favorStraightEdges": true,
     "elk.layered.priority.shortness": 100, 
     "spacing.edgeNode": 30,

@@ -1,10 +1,39 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Handle, Position } from 'reactflow';
 import { baseHandleStyle } from './graph/handles';
+
+// Add type declaration for require.context
+declare const require: {
+  context: (
+    directory: string,
+    useSubdirectories: boolean,
+    regExp: RegExp
+  ) => {
+    keys: () => string[];
+    (id: string): any;
+  };
+};
+
+// Grab everything in /assets/canvas once at bundle-time
+const icons: Record<string, string> = {};
+const iconExtensions: Record<string, string> = {};
+
+try {
+  const req = require.context('../assets/canvas', false, /\.(svg|png|jpe?g)$/);
+  req.keys().forEach(key => {
+    const ext = key.match(/\.(svg|png|jpe?g)$/)?.[0] || '.svg';
+    const name = key.replace('./', '').replace(/\.(svg|png|jpe?g)$/, '');
+    icons[name] = req(key).default;
+    iconExtensions[name] = ext;
+  });
+} catch (e) {
+  console.warn('Error loading canvas icons:', e);
+}
 
 interface CustomNodeProps {
   data: {
     label: string;
+    icon?: string;
     width?: number;
     height?: number;
     leftHandles?: string[];
@@ -18,6 +47,52 @@ interface CustomNodeProps {
 
 const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
   const { leftHandles = [], rightHandles = [], topHandles = [], bottomHandles = [] } = data;
+  const [iconLoaded, setIconLoaded] = useState(false);
+  const [iconError, setIconError] = useState(false);
+  const [finalIconSrc, setFinalIconSrc] = useState<string | undefined>(undefined);
+  
+  // Use the icon from the data if it exists in our icons map
+  const iconName = data.icon || '';
+  
+  useEffect(() => {
+    // Reset states when icon changes
+    if (data.icon) {
+      setIconLoaded(false);
+      setIconError(false);
+      
+      // Try loading SVG first
+      const svgSrc = `/assets/canvas/${data.icon}.svg`;
+      const imgSvg = new Image();
+      imgSvg.onload = () => {
+        setFinalIconSrc(svgSrc);
+        setIconLoaded(true);
+      };
+      imgSvg.onerror = () => {
+        // Try PNG if SVG fails
+        const pngSrc = `/assets/canvas/${data.icon}.png`;
+        const imgPng = new Image();
+        imgPng.onload = () => {
+          setFinalIconSrc(pngSrc);
+          setIconLoaded(true);
+        };
+        imgPng.onerror = () => {
+          // If both fail, try JPEG
+          const jpgSrc = `/assets/canvas/${data.icon}.jpeg`;
+          const imgJpg = new Image();
+          imgJpg.onload = () => {
+            setFinalIconSrc(jpgSrc);
+            setIconLoaded(true);
+          };
+          imgJpg.onerror = () => {
+            setIconError(true);
+          };
+          imgJpg.src = jpgSrc;
+        };
+        imgPng.src = pngSrc;
+      };
+      imgSvg.src = svgSrc;
+    }
+  }, [data.icon]);
   
   const nodeStyle = {
     background: selected ? '#f8f9fa' : 'white',
@@ -150,20 +225,43 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
         height: '100%',
         position: 'relative'
       }}>
+        {/* Icon container */}
         <div style={{
           width: '60px',
           height: '60px',
-          borderRadius: '50%',
-          backgroundColor: 'transparent',
-          border: '2px solid black',
+          borderRadius: data.icon ? '8px' : '50%', 
+          backgroundColor: finalIconSrc && !iconError ? 'transparent' : '#f0f0f0',
+          border: finalIconSrc && !iconError ? 'none' : '2px solid #ddd',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: 'black',
+          color: '#333',
           fontWeight: 'bold',
           fontSize: '16px',
-          marginTop: '2px'
+          marginTop: '2px',
+          overflow: 'hidden'
         }}>
+          {/* If we have an icon and no error loading it, show the image */}
+          {finalIconSrc && !iconError && (
+            <img
+              src={finalIconSrc}
+              alt={data.label}
+              style={{ 
+                width: '100%', 
+                height: '100%', 
+                objectFit: 'contain'
+              }}
+              onError={() => {
+                console.warn(`Failed to load icon: ${finalIconSrc}`);
+                setIconError(true);
+              }}
+            />
+          )}
+          
+          {/* If we have an error loading the icon or no icon specified, show the first letter */}
+          {(!finalIconSrc || iconError) && (
+            <span>{data.label.charAt(0).toUpperCase()}</span>
+          )}
         </div>
         
         {/* Label at bottom */}

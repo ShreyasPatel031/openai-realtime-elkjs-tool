@@ -68,6 +68,7 @@ const edgeTypes = {
 export const elkGraphDescription = `You are a technical architecture diagram assistant. When requirements are provided always follow this logic:
 Group: logical part of architecture
 Node: component of architecture
+#impotant: only use these icons and exact names GCP services (app_engine, artifact_registry, batch, bigquery, bigtable, cloud_armor, cloud_build, cloud_cdn, cloud_dns, cloud_functions, cloud_interconnect, cloud_logging, cloud_monitoring, cloud_nat, cloud_run, cloud_router, cloud_scheduler, cloud_sql, cloud_storage, cloud_tasks, cloud_trace, cloud_vpn, compute_engine, data_catalog, dataflow, dataplex, dataproc, eventarc, firestore, gke_autopilot, iam, iot_core, kms, live_stream_api, memorystore_redis, media_cdn, network_intelligence_center, pubsub, pubsub_lite, secret_manager, security_command_center, spanner, stackdriver_profiler, stackdriver_debugger, tpu, transcoder_api, vertex_ai, vpc_network, workflows, workstations) and general architecture (admin_portal, analytics_service, api, api_graphql, api_rest, audit_log, auth, auto_scaler, backup_service, batch_job, billing_service, blue_green_deploy, browser_client, cache, cache_memcached, cache_redis, canary_deploy, cdn, circuit_breaker, config_service, container_registry, cron_scheduler, customer_support_chat, data_center, data_warehouse, database, dlq_queue, docker_engine, external_partner, etl_pipeline, feature_flag_service, firewall_generic, frontend, frontend_spa, git_repo, health_check, jenkins_ci, jwt_provider, kubernetes_cluster, load_balancer_generic, load_test_tool, logging, logging_elasticsearch, message_queue, microservice_generic, mobile_app, monitoring, monitoring_dashboard, monitoring_prometheus, notification_service, oauth_server, on_prem, opensearch, pagerduty_alerts, payment_gateway, rate_limiter, retry_queue, secrets_vault, service_bus, static_assets_bucket, third_party_api, vpn_gateway_generic, waf_generic, web_app, webhooks).
 Edge: relationship between group and node, node and node
 
 
@@ -75,7 +76,7 @@ Edge: relationship between group and node, node and node
 1. Take first logical part of architecture. This is the first group. ( eg: frontend, backend, api, auth, compute, cache, data_plane, control_plane, storage, messaging, observability, security, devops, third_party, networking, orchestration, database, eventing, ml_ops, cdn, load_balancing, identity, monitoring, tracing, logging, queueing, scheduler, workflow, etl_pipeline, feature_flags, rate_limiting, testing, ci_cd, secrets_management, configuration, analytics, billing, notifications. )
 
 
-#Important: Only add nodes to this group, Never add terminal nodes to the root, every node in root must be a group.
+#Important: Only add groups to the root, Never add nodes to the root, every node in root must be a group.
 
 
 2. Create a new node for this logical part. All next operations will be performed inside this node. 
@@ -87,7 +88,7 @@ Edge: relationship between group and node, node and node
 #Important: never add a node unless you have an edge to it. Always go edge by edge, never create a component which is not related to any other component inside the logical group ( add a relationship to other components or remove the node ).
 
 
-4. Make the source for this edge ( add node ) if doesn’t exist, make target ( add node ) for the edge if doesn’t exist. Then add edge to signify relationship between source and target.
+4. Make the source for this edge ( add node ) if doesn't exist, make target ( add node ) for the edge if doesn't exist. Then add edge to signify relationship between source and target.
 
 
 #Important: Always add the edge after source and target are added. Never move to next node until you have added all the and edges for the current group.
@@ -96,7 +97,8 @@ Edge: relationship between group and node, node and node
 5. Continue this until all the relationships are mapped out for the logical group. Every component added should me mapped to another based on its relationship.
 
 
-#Important: do not add a node which isn’t related to any other node inside the logical group ( add an edge to other component beforre adding another componet or remove the node )
+#Important: do not add a node which isn't related to any other node inside the logical group ( add an edge to other component beforre adding another componet or remove the node )
+
 
 6. If there are more that 3-4 components in the logical group, create a new group for them.
 
@@ -113,7 +115,8 @@ You can only interact with the system by calling the following functions:
 
 
 - display_elk_graph(title): Call this first to retrieve and visualize the current graph layout.
-- add_node(nodename, parentId): Add a component under a parent container. You cannot add a node if parentId does not exist.
+- add_node(nodename, parentId, { label: "Display Label", icon: "icon_name" }): Add a component under a parent container. You cannot add a node if parentId does not exist.
+  Available icons: GCP services (app_engine, artifact_registry, batch, bigquery, bigtable, cloud_armor, cloud_build, cloud_cdn, cloud_dns, cloud_functions, cloud_interconnect, cloud_logging, cloud_monitoring, cloud_nat, cloud_run, cloud_router, cloud_scheduler, cloud_sql, cloud_storage, cloud_tasks, cloud_trace, cloud_vpn, compute_engine, data_catalog, dataflow, dataplex, dataproc, eventarc, firestore, gke_autopilot, iam, iot_core, kms, live_stream_api, memorystore_redis, media_cdn, network_intelligence_center, pubsub, pubsub_lite, secret_manager, security_command_center, spanner, stackdriver_profiler, stackdriver_debugger, tpu, transcoder_api, vertex_ai, vpc_network, workflows, workstations) and general architecture (admin_portal, analytics_service, api_graphql, api_rest, audit_log, auto_scaler, backup_service, batch_job, billing_service, blue_green_deploy, browser_client, cache_memcached, cache_redis, canary_deploy, circuit_breaker, config_service, container_registry, cron_scheduler, customer_support_chat, data_center, data_warehouse, dlq_queue, docker_engine, external_partner, etl_pipeline, feature_flag_service, firewall_generic, frontend_spa, git_repo, health_check, jenkins_ci, jwt_provider, kubernetes_cluster, load_balancer_generic, load_test_tool, logging_elasticsearch, message_queue, microservice_generic, mobile_app, monitoring_dashboard, monitoring_prometheus, notification_service, oauth_server, on_prem, opensearch, pagerduty_alerts, payment_gateway, rate_limiter, retry_queue, secrets_vault, service_bus, static_assets_bucket, third_party_api, vpn_gateway_generic, waf_generic, web_app, webhooks).
 - delete_node(nodeId): Remove an existing node.
 - move_node(nodeId, newParentId): Move a node from one group/container to another parent.
 - add_edge(edgeId, sourceId, targetId): Connect two nodes with a directional link.
@@ -431,18 +434,31 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     const shiftX = (x: number) => x - minX + padding;
     const shiftY = (y: number) => y - minY + padding;
     
+    // Collect all unique icons used in nodes for embedding
+    const usedIcons = new Set<string>();
+    for (const node of nodes) {
+      let icon = node.data?.icon;
+      
+      // Special case for root node
+      if (node.id === 'root' && !icon) {
+        icon = 'root';
+      }
+      
+      if (icon) {
+        usedIcons.add(icon);
+      }
+    }
+    
     // Start building SVG
     let svg = `<svg width="${svgWidth}" height="${svgHeight}" xmlns="http://www.w3.org/2000/svg">`;
     
-    // Add defs for markers
-    svg += `
-      <defs>
-        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" 
-          markerWidth="6" markerHeight="6" orient="auto">
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d6bc4" />
-        </marker>
-      </defs>
-    `;
+    // Add defs for markers and icons
+    svg += `<defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" 
+        markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#2d6bc4" />
+      </marker>
+    </defs>`;
     
     // Draw nodes
     for (const node of nodes) {
@@ -453,6 +469,14 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       const isContainer = node.isContainer;
       const fill = isContainer ? "#f0f4f8" : "#d0e3ff";
       
+      // Debug icon data
+      console.log(`Node ${node.id} data:`, {
+        label: node.data?.label || (node.labels && node.labels[0]?.text) || node.id,
+        icon: node.data?.icon,
+        hasData: !!node.data,
+        hasIcon: !!node.data?.icon
+      });
+      
       svg += `
         <rect x="${x}" y="${y}" width="${width}" height="${height}" 
           fill="${fill}" stroke="#2d6bc4" stroke-width="2" rx="5" ry="5" />
@@ -460,19 +484,65 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       
       // Add label if it exists
       const label = node.data?.label || (node.labels && node.labels[0]?.text) || node.id;
+      
+      // Special handling - if it's the root node or if node has explicit icon in data
+      let icon = node.data?.icon;
+      
+      // If it's the root node and doesn't already have an icon, assign root icon
+      if (node.id === 'root' && !icon) {
+        icon = 'root';
+      }
+
       if (label) {
-        svg += `
-          <text x="${x + width/2}" y="${y + height/2}" 
-            text-anchor="middle" dominant-baseline="middle" 
-            font-size="14" font-weight="bold" fill="#2d6bc4">${label}</text>
-        `;
+        if (isContainer) {
+          // Group node - label at center
+          svg += `
+            <text x="${x + width/2}" y="${y + height/2}" 
+              text-anchor="middle" dominant-baseline="middle" 
+              font-size="14" font-weight="bold" fill="#2d6bc4">${label}</text>
+          `;
+          
+          // Add icon for container nodes too at the top
+          if (icon) {
+            // Direct image embedding approach
+            svg += `
+              <image x="${x + width/2 - 15}" y="${y + 10}" width="30" height="30" 
+                 href="/assets/canvas/${icon}.svg" />
+            `;
+          }
+        } else {
+          // Regular node - label at bottom
+          svg += `
+            <text x="${x + width/2}" y="${y + height - 10}" 
+              text-anchor="middle" dominant-baseline="middle" 
+              font-size="12" font-weight="bold" fill="#2d6bc4">${label}</text>
+          `;
+          
+          // Add icon if specified, otherwise use first letter
+          if (icon) {
+            // Direct image embedding approach
+            svg += `
+              <image x="${x + width/2 - 20}" y="${y + 10}" width="40" height="40"
+                href="/assets/canvas/${icon}.svg" />
+            `;
+          } else {
+            // Fallback to first letter in a circle
+            const iconLetter = label.charAt(0).toUpperCase();
+            svg += `
+              <circle cx="${x + width/2}" cy="${y + height/2 - 10}" r="15" fill="#2d6bc4" />
+              <text x="${x + width/2}" y="${y + height/2 - 6}" 
+                text-anchor="middle" dominant-baseline="middle" 
+                font-size="14" font-weight="bold" fill="white">${iconLetter}</text>
+            `;
+          }
+        }
       }
       
       // Add node ID as smaller text below
       svg += `
-        <text x="${x + width/2}" y="${y + height - 10}" 
-          text-anchor="middle" dominant-baseline="middle" 
-          font-size="10" fill="#666666">(${node.id})</text>
+        <text x="${x + width/2}" y="${y + height - 2}" 
+          text-anchor="middle" dominant-baseline="baseline" 
+          font-size="9" fill="#666666">(${node.id})</text>
       `;
     }
     

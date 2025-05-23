@@ -4,9 +4,15 @@ import { createServer as createViteServer } from "vite";
 import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
 import "dotenv/config";
+import cors from 'cors';
+import OpenAI from 'openai';
+// Import tools from catalog
+import { allTools } from "./client/realtime/toolCatalog.ts";
+// Import streaming route
+import streamRoute from "./streamRoute.ts";
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3001;
 const apiKey = process.env.OPENAI_API_KEY;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -14,6 +20,86 @@ if (!apiKey) {
   console.error("OPENAI_API_KEY is not set in .env file");
   process.exit(1);
 }
+
+// Initialize OpenAI client
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Mount streaming route
+app.use(streamRoute);
+
+// API route for chat completions - MUST be before Vite middleware
+app.post("/chat", async (req, res) => {
+  try {
+    console.log("Received chat request:", req.body);
+    const { messages } = req.body;
+
+    if (!messages || !Array.isArray(messages)) {
+      console.error("Invalid messages format:", messages);
+      return res.status(400).json({ error: "Messages must be an array" });
+    }
+
+    console.log("Calling OpenAI with messages:", messages);
+
+    // Use Chat Completions API with tools from catalog
+    const response = await client.chat.completions.create({
+      model: "o4-mini-2025-04-16",
+      messages: messages,
+      tools: allTools.map(tool => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters
+        }
+      })),
+      tool_choice: "auto"
+    });
+
+    console.log("OpenAI response received:", response);
+
+    // Convert Chat Completions response to match expected format
+    const output = [];
+    
+    if (response.choices?.[0]?.message?.tool_calls) {
+      // Handle new tools format
+      const toolCall = response.choices[0].message.tool_calls[0];
+      output.push({
+        type: "function_call",
+        function_call: {
+          name: toolCall.function.name,
+          arguments: toolCall.function.arguments
+        },
+        call_id: toolCall.id
+      });
+    } else if (response.choices?.[0]?.message?.content) {
+      output.push({
+        type: "message",
+        content: response.choices[0].message.content
+      });
+    }
+
+    // Return the response
+    return res.json({
+      output: output,
+      output_text: response.choices?.[0]?.message?.content || ""
+    });
+
+  } catch (error) {
+    console.error('OpenAI API error:', error);
+    console.error('Error details:', error.message);
+    console.error('Error stack:', error.stack);
+    return res.status(500).json({ 
+      error: 'Error calling OpenAI API',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
 
 // Configure Vite middleware for React client
 const vite = await createViteServer({
@@ -83,5 +169,5 @@ app.use("*", async (req, res, next) => {
 });
 
 app.listen(port, () => {
-  console.log(`Express server running on *:${port}`);
+  console.log(`Server running at http://localhost:${port}`);
 });

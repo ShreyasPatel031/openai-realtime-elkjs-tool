@@ -1,4 +1,4 @@
-import { chunkTools } from "../utils/splitTools";
+import { chunkTools } from "../utils/splitTools.js";
 
 export const allTools = [
   {

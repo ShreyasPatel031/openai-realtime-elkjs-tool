@@ -1,5 +1,6 @@
 // client/realtime/handleFunctionCall.ts
 import { FunctionCall, ClientEvent } from './types';
+import { process_user_requirements } from '../components/graph/userRequirements';
 
 interface MutationHelpers {
   addNode: (nodeName: string, parentId: string, graph: any, data?: { label?: string; icon?: string; style?: any }) => any;
@@ -24,7 +25,6 @@ interface MutationHelpers {
     label?: string;
     style?: any;
   }>, graph: any) => any;
-  process_user_requirements?: () => string;
 }
 
 interface FunctionCallHelpers {
@@ -98,38 +98,35 @@ export function handleFunctionCall(
         break;
         
       case "process_user_requirements":
-        if (mutations.process_user_requirements) {
-          console.group('📋 process_user_requirements Function Call');
-          console.log('Arguments from agent:', args);
-          console.log('Raw argument string:', argStr);
-          console.log('Call ID:', call_id);
-          
-          result = mutations.process_user_requirements();
-          console.log(`Function result: Array of ${Array.isArray(result) ? result.length : 0} strings`);
-          
-          // Format the array into a response object
-          const responseObject = { 
-            steps: result,
-            stepCount: Array.isArray(result) ? result.length : 0,
-            message: "Here are the steps to build the architecture diagram."
-          };
-          const responseJson = JSON.stringify(responseObject);
-          console.log(`Sending response as object with ${responseObject.stepCount} steps`);
-          
-          safeSend({
-            type: "conversation.item.create",
-            item: {
-              type: "function_call_output",
-              call_id: call_id,
-              output: responseJson
-            }
-          });
-          console.log('Sent response as structured object with steps array');
-          console.groupEnd();
-          safeSend({ type: "response.create" });
-          return; // Return early to prevent the graph update
-        }
-        break;
+        console.group('📋 process_user_requirements Function Call');
+        console.log('Arguments from agent:', args);
+        console.log('Raw argument string:', argStr);
+        console.log('Call ID:', call_id);
+        
+        result = process_user_requirements();
+        console.log(`Function result: Array of ${Array.isArray(result) ? result.length : 0} strings`);
+        
+        // Format the array into a response object
+        const responseObject = { 
+          steps: result,
+          stepCount: Array.isArray(result) ? result.length : 0,
+          message: "Here are the steps to build the architecture diagram."
+        };
+        const responseJson = JSON.stringify(responseObject);
+        console.log(`Sending response as object with ${responseObject.stepCount} steps`);
+        
+        safeSend({
+          type: "conversation.item.create",
+          item: {
+            type: "function_call_output",
+            call_id: call_id,
+            output: responseJson
+          }
+        });
+        console.log('Sent response as structured object with steps array');
+        console.groupEnd();
+        safeSend({ type: "response.create" });
+        return; // Return early to prevent the graph update
         
       default:
         console.warn(`⚠️ Unknown function call: ${name}`);

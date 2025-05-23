@@ -30,7 +30,8 @@ import { ChatBoxProps, Message as ChatMessage, ChatWindowProps, InteractiveCanva
 import { CustomNode, NodeData, EdgeData, ElkGraph, ElkGraphNode, ElkGraphEdge } from "../../types/graph"
 import { RawGraph } from "../graph/types/index"
 import { getInitialElkGraph } from "../graph/initialGraph"
-import { addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate, process_user_requirements } from "../graph/mutations"
+import { addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate } from "../graph/mutations"
+import { process_user_requirements } from "../graph/userRequirements"
 import { useElkToReactflowGraphConverter } from "../../hooks/useElkToReactflowGraphConverter"
 import { useChatSession } from '../../hooks/useChatSession'
 
@@ -40,6 +41,8 @@ import GroupNode from "../GroupNode"
 import StepEdge from "../StepEdge"
 import ConnectionStatus from "../ConnectionStatus"
 import DevPanel from "../DevPanel"
+import ChatTester from "../ChatTester"
+import StreamViewer from "../StreamViewer"
 
 import Chatbox from "./Chatbox"
 import ChatWindow from "./ChatWindow"
@@ -811,6 +814,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
         {/* Dev Panel Toggle Button and Visualization Toggle */}
         <div className="absolute top-4 right-4 z-[100] flex items-center gap-4">
+          <ChatTester elkGraph={rawGraph} setElkGraph={setRawGraph} />
+          <StreamViewer elkGraph={rawGraph} setElkGraph={setRawGraph} />
+          
           <button
             onClick={() => setShowDev((p) => !p)}
             className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"

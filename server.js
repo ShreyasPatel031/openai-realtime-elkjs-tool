@@ -12,7 +12,7 @@ import { allTools } from "./client/realtime/toolCatalog.ts";
 import streamRoute from "./streamRoute.ts";
 
 const app = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT | 3000;
 const apiKey = process.env.OPENAI_API_KEY;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -28,9 +28,10 @@ const client = new OpenAI({
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json());                     // for application/json
+app.use(express.urlencoded({ extended: false })); // for x-www-form-urlencoded
 
-// Mount streaming route
+// Mount streaming route BEFORE Vite middleware (mount order matters!)
 app.use(streamRoute);
 
 // API route for chat completions - MUST be before Vite middleware

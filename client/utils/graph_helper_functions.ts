@@ -341,7 +341,7 @@ export function groupNodes(
   
   // Only add the group if it has children
   if (groupNode.children && groupNode.children.length > 0) {
-    parent.children.push(groupNode);
+  parent.children.push(groupNode);
   } else {
     console.warn(`No nodes were moved to group ${groupId}`);
     return layout;

@@ -358,9 +358,10 @@ export const addEdge = (edgeId: EdgeID, containerId: NodeID | null, sourceId: No
     throw new Error(`Self-loop edges are not supported (source === target '${sourceId}')`);
   }
   
-  // Find the common ancestor for edge placement - KEY IMPROVEMENT
-  const commonAncestor = findCommonAncestor(graph, sourceId, targetId);
+  // Find the common ancestor for edge placement
+  let commonAncestor = findCommonAncestor(graph, sourceId, targetId);
   
+  // If no common ancestor found, or it's null, default to root
   if (!commonAncestor) {
     console.warn(`Common ancestor not found for nodes: ${sourceId}, ${targetId}. Attaching edge to root.`);
     // No common ancestor found, attach to root node instead

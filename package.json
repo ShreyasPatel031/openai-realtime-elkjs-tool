@@ -1,7 +1,7 @@
 {
   "type": "module",
   "scripts": {
-    "dev": "node server.js --dev",
+    "dev": "node --loader ts-node/esm server.js --dev",
     "start": "node server.js",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build --outDir dist/client --ssrManifest",
@@ -45,6 +45,7 @@
     "@swc/core": "^1.11.22",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
+    "@types/express": "^5.0.2",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.15.2",
     "@types/react": "^19.0.12",

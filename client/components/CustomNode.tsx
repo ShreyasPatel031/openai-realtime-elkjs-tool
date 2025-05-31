@@ -2,33 +2,21 @@ import React, { useEffect, useState } from 'react';
 import { Handle, Position } from 'reactflow';
 import { baseHandleStyle } from './graph/handles';
 
-// Add type declaration for require.context
-declare const require: {
-  context: (
-    directory: string,
-    useSubdirectories: boolean,
-    regExp: RegExp
-  ) => {
-    keys: () => string[];
-    (id: string): any;
-  };
-};
+// Use Vite's glob pattern to load all icons at build time
+const modules = (import.meta as any).glob('../assets/canvas/*.(svg|png|jpeg|jpg)', { eager: true });
 
-// Grab everything in /assets/canvas once at bundle-time
+// Create icons map from the glob results
 const icons: Record<string, string> = {};
 const iconExtensions: Record<string, string> = {};
 
-try {
-  const req = require.context('../assets/canvas', false, /\.(svg|png|jpe?g)$/);
-  req.keys().forEach(key => {
-    const ext = key.match(/\.(svg|png|jpe?g)$/)?.[0] || '.svg';
-    const name = key.replace('./', '').replace(/\.(svg|png|jpe?g)$/, '');
-    icons[name] = req(key).default;
-    iconExtensions[name] = ext;
-  });
-} catch (e) {
-  console.warn('Error loading canvas icons:', e);
-}
+Object.entries(modules).forEach(([path, module]: [string, any]) => {
+  const match = path.match(/\/([^/]+)\.(svg|png|jpeg|jpg)$/);
+  if (match) {
+    const [, name, ext] = match;
+    icons[name] = module.default;
+    iconExtensions[name] = `.${ext}`;
+  }
+});
 
 interface CustomNodeProps {
   data: {

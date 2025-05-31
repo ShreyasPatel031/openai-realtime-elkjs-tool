@@ -167,10 +167,9 @@ export const getInitialGraph = (): RawGraph => ({
     //     { id:"e_bigquery_compute",   sources:["bigquery"], targets:["compute_engine"],  labels:[{ text:"serve insights" }] }
     //   ]
     // }
-  ],
+  // ],
 
-  // /* ───────────────────────────── root-level edges ───────────────────────────── */
-  edges: [
+  // edges: [
     // {
     //   id     : "e_gateway_pubsub",
     //   sources: ["gateway"],

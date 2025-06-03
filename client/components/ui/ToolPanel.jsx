@@ -13,7 +13,7 @@ import {
   batchUpdate
 } from "../../utils/graph_helper_functions";
 import ELK from "elkjs/lib/elk.bundled.js";
-import { elkGraphDescription } from "./InteractiveCanvas";
+import { elkGraphDescription, agentInstruction } from "../../realtime/agentConfig";
 
 // Helper function to find a node by ID
 const findNodeById = (node, id) => {
@@ -303,9 +303,6 @@ const minimalSessionUpdate = {
     tool_choice: "auto",
   },
 };
-
-// Define the instruction to include with all function responses
-const agentInstruction = "Under no circumstances should you say anything to the user, do not acknowledge their requests, do not explain your actions, do not acknowledge your function call, do not ask if they have further modificaitons, don't ask what's the next action they want you to perform, do not say you are ready for the next instruction, do not say next instruction please, don't say you are listening for the next instruction, just listen quitely for the next instruction.";
 
 function FunctionCallOutput({ title, elkGraph }) {
   if (!elkGraph) return null;

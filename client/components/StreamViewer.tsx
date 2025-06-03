@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
-import { StreamExecutor, StreamExecutorOptions } from "./reasoning/StreamExecutor";
+import { StreamExecutor, StreamExecutorOptions } from "../reasoning/StreamExecutor";
 
 interface StreamViewerProps {
   elkGraph?: any;

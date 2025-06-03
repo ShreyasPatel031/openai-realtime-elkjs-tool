@@ -73,12 +73,37 @@ export const useChatSession = ({
   const messagesMap = useRef<Map<string, Message>>(new Map());
   const processed = useRef<Set<string>>(new Set());
   const initSent = useRef(false);
+  const [forceUpdate, setForceUpdate] = useState(0);
 
   // Derive messages array from Map
   const messages = useMemo(() => 
     Array.from(messagesMap.current.values()),
-    [messagesMap.current]
+    [forceUpdate]
   );
+
+  // Force update function to trigger re-render when messages change
+  const triggerUpdate = useCallback(() => {
+    setForceUpdate(prev => prev + 1);
+  }, []);
+
+  // Listen for custom chat events
+  useEffect(() => {
+    const handleAddChatMessage = (event: CustomEvent) => {
+      const { message } = event.detail;
+      console.log('📨 Received custom chat message event:', message);
+      
+      // Add message to the Map
+      messagesMap.current.set(message.id, message);
+      triggerUpdate();
+    };
+
+    // Add event listener for custom chat messages
+    document.addEventListener('addChatMessage', handleAddChatMessage as EventListener);
+
+    return () => {
+      document.removeEventListener('addChatMessage', handleAddChatMessage as EventListener);
+    };
+  }, [triggerUpdate]);
 
   // Safe wrapper for sending client events
   const safeSendClientEvent = useCallback((event: ClientEvent) => {
@@ -108,6 +133,7 @@ export const useChatSession = ({
           content: content.text!, // Non-null assertion since we know it's defined after type guard
           sender: 'assistant'
         });
+        triggerUpdate();
       }
     }
 
@@ -129,13 +155,27 @@ export const useChatSession = ({
           functionArgs = typeof functionArgsStr === 'string' ? JSON.parse(functionArgsStr) : functionArgsStr || {};
         } catch (e) {
           console.error(`❌ Failed to parse arguments for ${functionName}:`, e);
+          console.error(`❌ Raw function arguments string:`, functionArgsStr);
+          console.error(`❌ String length:`, typeof functionArgsStr === 'string' ? functionArgsStr.length : 'N/A');
+          
+          // Try to find the problematic part around position 508
+          if (typeof functionArgsStr === 'string' && functionArgsStr.length > 500) {
+            const start = Math.max(0, 500 - 50);
+            const end = Math.min(functionArgsStr.length, 520);
+            console.error(`❌ Problematic section (chars ${start}-${end}):`, functionArgsStr.substring(start, end));
+          }
+          
           if (sendClientEvent) {
             sendClientEvent({
               type: "conversation.item.create",
               item: {
                 type: "function_call_output",
                 call_id: call.call_id,
-                output: JSON.stringify({ error: "Failed to parse function arguments" })
+                output: JSON.stringify({ 
+                  error: "Failed to parse function arguments", 
+                  details: e instanceof Error ? e.message : 'Unknown parse error',
+                  raw_args: typeof functionArgsStr === 'string' ? functionArgsStr.substring(0, 200) + '...' : functionArgsStr
+                })
               }
             });
           }
@@ -166,7 +206,7 @@ export const useChatSession = ({
         }
       });
     }
-  }, [isSessionActive, events, elkGraph, setElkGraph, addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate, process_user_requirements, safeSendClientEvent]);
+  }, [isSessionActive, events, elkGraph, setElkGraph, addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate, process_user_requirements, safeSendClientEvent, triggerUpdate]);
 
   // Initialize session with tool definitions
   useEffect(() => {
@@ -222,6 +262,7 @@ export const useChatSession = ({
 
     // Add to Map
     messagesMap.current.set(messageId, newMessage);
+    triggerUpdate();
     
     // If there's a session, send the message to the AI
     if (isSessionActive && sendTextMessage) {
@@ -235,16 +276,18 @@ export const useChatSession = ({
           content: 'Failed to send message. Please try again.',
           sender: "assistant"
         });
+        triggerUpdate();
       }
     }
-  }, [isSessionActive, sendTextMessage]);
+  }, [isSessionActive, sendTextMessage, triggerUpdate]);
 
   // Clear messages when session becomes inactive
   useEffect(() => {
     if (!isSessionActive) {
       messagesMap.current.clear();
+      triggerUpdate();
     }
-  }, [isSessionActive]);
+  }, [isSessionActive, triggerUpdate]);
 
   return {
     messages,

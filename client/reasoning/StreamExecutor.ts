@@ -1,4 +1,4 @@
-import { elkGraphDescription } from "../architectureInstructions";
+import { elkGraphDescription } from "./agentConfig";
 import { createPostEventSource } from "./PostEventSource";
 import { createDeltaHandler, EventHandlerCallbacks, PendingCall } from "./EventHandlers";
 import { executeFunctionCall, GraphState } from "./FunctionExecutor";

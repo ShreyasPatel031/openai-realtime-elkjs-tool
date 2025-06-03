@@ -152,19 +152,32 @@ function updateEdgesForNode(nodeId: string, layout: ElkNode): ElkNode {
  * addNode(nodename, parentId)
  * Creates a new node and adds it under the given parent.
  */
-export function addNode(nodename: string, parentId: string, layout: ElkNode): ElkNode {
+export function addNode(
+  nodename: string, 
+  parentId: string, 
+  layout: ElkNode, 
+  data?: { label?: string; icon?: string; style?: any }
+): ElkNode {
   const parent = findNodeById(layout, parentId);
   if (!parent) {
     console.error(`Parent node not found: ${parentId}`);
     return layout;
   }
-  // Create new node: using nodename for both id and label.
+  
+  // Create new node: using data.label if provided, otherwise nodename
+  const label = data?.label || nodename;
   const newNode: ElkNode = {
     id: nodename,
-    labels: [{ text: nodename }],
+    labels: [{ text: label }],
     children: [],
     edges: []
   };
+  
+  // Add data properties if provided (for future compatibility)
+  if (data) {
+    (newNode as any).data = data;
+  }
+  
   if (!parent.children) parent.children = [];
   parent.children.push(newNode);
   return layout;
@@ -385,38 +398,41 @@ export function removeGroup(groupId: string, layout: ElkNode): ElkNode {
 /**
  * batchUpdate(operations)
  * Executes a series of graph operations in order.
- * Each operation must have a name and args matching the individual function signatures.
+ * Each operation can have parameters directly on the object or wrapped in args.
  */
 export function batchUpdate(
-  operations: Array<{name: string, args: any}>,
+  operations: Array<{name: string, args?: any, [key: string]: any}>,
   layout: ElkNode
 ): ElkNode {
   let updatedLayout = { ...layout };
   
   for (const operation of operations) {
-    const { name, args } = operation;
+    const { name } = operation;
+    
+    // Support both formats: {name, args: {...}} and {name, param1, param2, ...}
+    const params = operation.args || operation;
     
     switch (name) {
       case "add_node":
-        updatedLayout = addNode(args.nodename, args.parentId, updatedLayout);
+        updatedLayout = addNode(params.nodename, params.parentId, updatedLayout, params.data);
         break;
       case "delete_node":
-        updatedLayout = deleteNode(args.nodeId, updatedLayout);
+        updatedLayout = deleteNode(params.nodeId, updatedLayout);
         break;
       case "move_node":
-        updatedLayout = moveNode(args.nodeId, args.newParentId, updatedLayout);
+        updatedLayout = moveNode(params.nodeId, params.newParentId, updatedLayout);
         break;
       case "add_edge":
-        updatedLayout = addEdge(args.edgeId, null, args.sourceId, args.targetId, updatedLayout);
+        updatedLayout = addEdge(params.edgeId, null, params.sourceId, params.targetId, updatedLayout);
         break;
       case "delete_edge":
-        updatedLayout = deleteEdge(args.edgeId, updatedLayout);
+        updatedLayout = deleteEdge(params.edgeId, updatedLayout);
         break;
       case "group_nodes":
-        updatedLayout = groupNodes(args.nodeIds, args.parentId, args.groupId, updatedLayout);
+        updatedLayout = groupNodes(params.nodeIds, params.parentId, params.groupId, updatedLayout);
         break;
       case "remove_group":
-        updatedLayout = removeGroup(args.groupId, updatedLayout);
+        updatedLayout = removeGroup(params.groupId, updatedLayout);
         break;
       default:
         console.warn(`Unknown operation: ${name}`);

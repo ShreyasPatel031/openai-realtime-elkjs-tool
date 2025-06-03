@@ -13,6 +13,62 @@ export const allTools = [
   },
   {
     type: "function",
+    name: "add_user_decision",
+    description: "Add a bullet point to the decision history for tracking user requirements and decisions",
+    parameters: {
+      type: "object",
+      properties: {
+        decision: {
+          type: "string",
+          description: "The user decision or requirement to record as a bullet point (e.g., 'User requires real-time data processing with latency < 100ms')"
+        }
+      },
+      required: ["decision"]
+    }
+  },
+  {
+    type: "function",
+    name: "create_followup_questions",
+    description: "Generate 2-3 structured follow-up questions with options based on user requirements to gather more specific architectural details",
+    parameters: {
+      type: "object",
+      properties: {
+        questions: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              type: {
+                type: "string",
+                enum: ["select", "multiselect"],
+                description: "Question type - 'select' for single choice, 'multiselect' for multiple choices"
+              },
+              text: {
+                type: "string",
+                description: "The question text (keep concise, under 1 line)"
+              },
+              options: {
+                type: "array",
+                items: {
+                  type: "string"
+                },
+                description: "Array of 2-4 answer options for the question"
+              },
+              impact: {
+                type: "string",
+                description: "Brief explanation of how this question affects the architecture design"
+              }
+            },
+            required: ["type", "text", "options", "impact"]
+          },
+          description: "Array of 2-3 structured question objects to gather more specific requirements"
+        }
+      },
+      required: ["questions"]
+    }
+  },
+  {
+    type: "function",
     name: "add_node",
     description: "Creates a new node and adds it under the given parent",
     parameters: {

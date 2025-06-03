@@ -1,6 +1,7 @@
 // client/realtime/handleFunctionCall.ts
 import { FunctionCall, ClientEvent } from './types';
 import { process_user_requirements } from '../components/graph/userRequirements';
+import { addUserDecisionToChat, createFollowupQuestionsToChat } from '../utils/chatUtils';
 
 interface MutationHelpers {
   addNode: (nodeName: string, parentId: string, graph: any, data?: { label?: string; icon?: string; style?: any }) => any;
@@ -57,6 +58,67 @@ export function handleFunctionCall(
       case "display_elk_graph":
         // Nothing to change, just return a fresh copy so React sees a new object
         break;
+        
+      case "add_user_decision":
+        console.group('📝 add_user_decision Function Call');
+        console.log('Arguments from agent:', args);
+        console.log('Decision:', args.decision);
+        console.log('Call ID:', call_id);
+        
+        result = addUserDecisionToChat(args.decision);
+        console.log('Function result:', result);
+        
+        safeSend({
+          type: "conversation.item.create",
+          item: {
+            type: "function_call_output",
+            call_id: call_id,
+            output: JSON.stringify(result)
+          }
+        });
+        console.log('Sent response for add_user_decision');
+        console.groupEnd();
+        safeSend({ type: "response.create" });
+        return; // Return early to prevent graph update
+        
+      case "create_followup_questions":
+        console.group('❓ create_followup_questions Function Call');
+        console.log('Arguments from agent:', args);
+        console.log('Raw argStr:', argStr);
+        console.log('Questions:', args.questions);
+        console.log('Args keys:', Object.keys(args));
+        console.log('Args type:', typeof args);
+        console.log('Is args an array?', Array.isArray(args));
+        console.log('Call ID:', call_id);
+        
+        // Handle case where agent passes array directly instead of wrapping in questions property
+        let questionsArray;
+        if (Array.isArray(args)) {
+          console.log('🔧 Agent passed array directly, using as questions');
+          questionsArray = args;
+        } else if (args.questions) {
+          console.log('✅ Agent passed questions property correctly');
+          questionsArray = args.questions;
+        } else {
+          console.error('❌ No questions found in arguments');
+          questionsArray = null;
+        }
+        
+        result = createFollowupQuestionsToChat(questionsArray);
+        console.log('Function result:', result);
+        
+        safeSend({
+          type: "conversation.item.create",
+          item: {
+            type: "function_call_output",
+            call_id: call_id,
+            output: JSON.stringify(result)
+          }
+        });
+        console.log('Sent response for create_followup_questions');
+        console.groupEnd();
+        safeSend({ type: "response.create" });
+        return; // Return early to prevent graph update
         
       case "add_node":
         updated = mutations.addNode(args.nodename, args.parentId, graphCopy, args.data);

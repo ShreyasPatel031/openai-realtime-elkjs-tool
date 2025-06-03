@@ -1,5 +1,5 @@
-import { handleFunctionCall } from "../../realtime/handleFunctionCall";
-import { addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate } from "../graph/mutations";
+import { handleFunctionCall } from "../realtime/handleFunctionCall";
+import { addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate } from "../utils/graph_helper_functions";
 
 export interface FunctionExecutorCallbacks {
   addLine: (line: string) => void;

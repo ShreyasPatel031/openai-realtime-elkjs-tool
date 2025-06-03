@@ -9,7 +9,8 @@ import SessionControls from "./console/SessionControls";
 import ToolPanel from "./ui/ToolPanel";
 import ElkTestPage from "./test/ElkTestPage";
 import ErrorBoundary from "./console/ErrorBoundary";
-import InteractiveCanvas, { elkGraphDescription } from "./ui/InteractiveCanvas";
+import InteractiveCanvas from "./ui/InteractiveCanvas";
+import { elkGraphDescription, agentInstruction } from "../realtime/agentConfig";
 import { useChatSession } from "../hooks/useChatSession";
 import { RtcClient } from "../realtime/RtcClient";
 
@@ -74,7 +75,7 @@ export default function App() {
     elkGraph: null,
     setElkGraph: () => {},
     elkGraphDescription,
-    agentInstruction: ''
+    agentInstruction
   });
 
   /**

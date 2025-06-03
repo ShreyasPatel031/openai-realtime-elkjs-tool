@@ -1,6 +1,6 @@
 export const elkGraphDescription = `You are a technical architecture diagram assistant. You can only interact with the system by calling the following functions:
 
-- display_elk_graph(title): Call this first to retrieve and visualize the current graph layout.
+- display_elk_graph(): Call this first to retrieve and visualize the current graph layout.
 - add_node(nodename, parentId): Add a component under a parent container. You cannot add a node if parentId doesnt exist.
 - delete_node(nodeId): Remove an existing node.
 - move_node(nodeId, newParentId): Move a node from one group/container to another.

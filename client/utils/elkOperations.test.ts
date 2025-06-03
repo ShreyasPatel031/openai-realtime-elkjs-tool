@@ -194,7 +194,8 @@ describe("ELK JS Layout Operations", () => {
             const sourceParentId = "lambda";
             const targetParentId = "openai";
 
-            layout = moveNode(nodeId, sourceParentId, targetParentId, layout);
+            // move the node to the new parent
+            layout = moveNode(nodeId, targetParentId, layout);
             saveGraphToFile(layout, `move_${nodeId}_from_${sourceParentId}_to_${targetParentId}.json`);
             
             // Check node exists in target parent

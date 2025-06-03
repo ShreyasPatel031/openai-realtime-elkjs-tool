@@ -7,7 +7,7 @@ import "dotenv/config";
 import cors from 'cors';
 import OpenAI from 'openai';
 // Import tools from catalog
-import { allTools } from "./client/realtime/toolCatalog.ts";
+import { allTools } from "../client/realtime/toolCatalog.ts";
 // Import streaming route
 import streamRoute from "./streamRoute.ts";
 
@@ -106,8 +106,8 @@ app.post("/chat", async (req, res) => {
 const vite = await createViteServer({
   server: { middlewareMode: true },
   appType: "custom",
-  configFile: resolve(__dirname, "vite.config.js"),
-  root: resolve(__dirname, "client"),
+  configFile: resolve(__dirname, "../vite.config.js"),
+  root: resolve(__dirname, "../client"),
 });
 app.use(vite.middlewares);
 

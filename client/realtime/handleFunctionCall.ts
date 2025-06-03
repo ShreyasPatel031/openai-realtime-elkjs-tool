@@ -25,6 +25,7 @@ interface MutationHelpers {
     label?: string;
     style?: any;
   }>, graph: any) => any;
+  process_user_requirements?: () => string;
 }
 
 interface FunctionCallHelpers {
@@ -103,14 +104,14 @@ export function handleFunctionCall(
         console.log('Raw argument string:', argStr);
         console.log('Call ID:', call_id);
         
-        result = process_user_requirements();
+        result = process_user_requirements(elkGraph, setElkGraph);
         console.log(`Function result: Array of ${Array.isArray(result) ? result.length : 0} strings`);
         
         // Format the array into a response object
         const responseObject = { 
           steps: result,
           stepCount: Array.isArray(result) ? result.length : 0,
-          message: "Here are the steps to build the architecture diagram."
+          message: "Architecture building process initiated via StreamViewer (DOM trigger for UI output)."
         };
         const responseJson = JSON.stringify(responseObject);
         console.log(`Sending response as object with ${responseObject.stepCount} steps`);
@@ -123,7 +124,7 @@ export function handleFunctionCall(
             output: responseJson
           }
         });
-        console.log('Sent response as structured object with steps array');
+        console.log('Sent response as structured object with direct streaming execution');
         console.groupEnd();
         safeSend({ type: "response.create" });
         return; // Return early to prevent the graph update

@@ -10,15 +10,7 @@ import { Label } from "./label"
 import { Button } from "./button"
 import { Separator } from "./separator"
 import { cn } from "../../lib/utils"
-
-interface Message {
-  id: string
-  content: string
-  sender: "user" | "assistant" | "system"
-  type?: "text" | "radio-question" | "checkbox-question"
-  options?: { id: string; text: string }[]
-  question?: string
-}
+import { Message } from "../../types/chat"
 
 interface ChatWindowProps {
   messages: Message[]

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import OpenAI from "openai";
-import { allTools } from "./client/realtime/toolCatalog.ts";
+import { allTools } from "../client/realtime/toolCatalog.ts";
 
 const router = Router();
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });

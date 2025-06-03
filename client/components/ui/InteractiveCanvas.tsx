@@ -41,8 +41,7 @@ import GroupNode from "../GroupNode"
 import StepEdge from "../StepEdge"
 import ConnectionStatus from "../ConnectionStatus"
 import DevPanel from "../DevPanel"
-import ChatTester from "../ChatTester"
-import StreamViewer from "../StreamViewer"
+import StreamViewer, { StreamViewerHandle } from "../StreamViewer"
 
 import Chatbox from "./Chatbox"
 import ChatWindow from "./ChatWindow"
@@ -170,6 +169,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // State for DevPanel visibility
   const [showDev, setShowDev] = useState(false);
   
+  // State for StreamViewer visibility
+  const [showStreamViewer, setShowStreamViewer] = useState(false);
+  
   // State for visualization mode (ReactFlow vs SVG)
   const [useReactFlow, setUseReactFlow] = useState(true);
   
@@ -182,6 +184,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   
   // New state for showing debug information
   const [showElkDebug, setShowElkDebug] = useState(false);
+  
+  // Ref to access StreamViewer's start method directly
+  const streamViewerRef = useRef<StreamViewerHandle | null>(null);
   
   // Use the new ElkFlow hook instead of managing ELK state directly
   const {
@@ -683,6 +688,19 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   return (
     <div className="w-full h-full flex flex-col overflow-hidden bg-white dark:bg-black">
+      {/* Connection status indicator - moved to top-left */}
+      <div className="absolute top-4 left-4 z-[101]">
+        <ConnectionStatus 
+          isSessionActive={isSessionActive}
+          messageSendStatus={{
+            sending: false,
+            retrying: false,
+            retryCount: 0,
+            lastError: null
+          }}
+        />
+      </div>
+
       <div className="flex-1 relative min-h-0 overflow-hidden">
         {/* ReactFlow container - only show when in ReactFlow mode */}
         {useReactFlow && (
@@ -813,43 +831,60 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         </div>
 
         {/* Dev Panel Toggle Button and Visualization Toggle */}
-        <div className="absolute top-4 right-4 z-[100] flex items-center gap-4">
-          <ChatTester elkGraph={rawGraph} setElkGraph={setRawGraph} />
-          <StreamViewer elkGraph={rawGraph} setElkGraph={setRawGraph} />
-          
-          <button
-            onClick={() => setShowDev((p) => !p)}
-            className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"
-          >
-            {showDev ? 'Hide Dev Panel' : 'Show Dev Panel'}
-          </button>
-          
-          {/* Visualization Toggle */}
-          <div className="w-36 h-10 flex items-center bg-white rounded-md shadow-sm border border-gray-200 px-3 py-2">
-            <label className="inline-flex items-center cursor-pointer w-full">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  className="sr-only peer"
-                  checked={useReactFlow}
-                  onChange={() => handleToggleVisMode(!useReactFlow)}
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              </div>
-              <span className="ml-3 text-sm font-medium text-gray-900">
-                {useReactFlow ? 'ReactFlow' : 'SVG'}
-              </span>
-            </label>
+        <div className="absolute top-4 right-4 z-[100] flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowStreamViewer((p) => !p)}
+              className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"
+            >
+              {showStreamViewer ? 'Hide Stream' : 'Show Stream'}
+            </button>
+            
+            <button
+              onClick={() => setShowDev((p) => !p)}
+              className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"
+            >
+              {showDev ? 'Hide Dev Panel' : 'Show Dev Panel'}
+            </button>
           </div>
           
-          {/* Debug Output Toggle */}
-          <button
-            onClick={() => setShowElkDebug((prev) => !prev)}
-            className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"
-          >
-            {showElkDebug ? 'Hide ELK Data' : 'Show ELK Data'}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Visualization Toggle */}
+            <div className="w-36 h-10 flex items-center bg-white rounded-md shadow-sm border border-gray-200 px-3 py-2">
+              <label className="inline-flex items-center cursor-pointer w-full">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={useReactFlow}
+                    onChange={() => handleToggleVisMode(!useReactFlow)}
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </div>
+                <span className="ml-3 text-sm font-medium text-gray-900">
+                  {useReactFlow ? 'ReactFlow' : 'SVG'}
+                </span>
+              </label>
+            </div>
+            
+            {/* Debug Output Toggle */}
+            <button
+              onClick={() => setShowElkDebug((prev) => !prev)}
+              className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"
+            >
+              {showElkDebug ? 'Hide ELK Data' : 'Show ELK Data'}
+            </button>
+          </div>
         </div>
+        
+        {/* StreamViewer - moved outside the button group */}
+        <StreamViewer 
+          elkGraph={rawGraph} 
+          setElkGraph={setRawGraph} 
+          ref={streamViewerRef}
+          isVisible={showStreamViewer}
+          onToggleVisibility={() => setShowStreamViewer(p => !p)}
+        />
         
         {/* Debug panel to show raw ELK layout data */}
         {showElkDebug && (
@@ -892,18 +927,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           onStopSession={stopSession}
         />
       </div>
-      
-      {/* Connection status indicator */}
-      <ConnectionStatus 
-        isSessionActive={isSessionActive}
-        messageSendStatus={{
-          sending: false,
-          retrying: false,
-          retryCount: 0,
-          lastError: null
-        }}
-      />
-
     </div>
   )
 }

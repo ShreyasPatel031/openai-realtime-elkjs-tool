@@ -225,7 +225,6 @@ You can only interact with the system by calling the following functions:
 - remove_group(groupId): Disband a group and promote its children to the parent.
 - batch_update(operations): Apply a list of operations to the graph. If applying bath operations make sure that nodes to which you are applying exist.
 
-
 ## Example Architecture Build Process:
 ${exampleArchitectureBuild}
 

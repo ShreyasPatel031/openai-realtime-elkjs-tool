@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CloudLightning, CloudOff, MessageSquare } from "react-feather";
-import Button from "./Button";
+import { Button } from "../ui/button";
 
 function SessionStopped({ startSession }) {
   const [isActivating, setIsActivating] = useState(false);
@@ -16,9 +16,10 @@ function SessionStopped({ startSession }) {
     <div className="flex items-center justify-center w-full h-full">
       <Button
         onClick={handleStartSession}
-        className={isActivating ? "bg-gray-600" : "bg-red-600"}
-        icon={<CloudLightning height={16} />}
+        variant={isActivating ? "secondary" : "destructive"}
+        className="flex items-center gap-2"
       >
+        <CloudLightning className="h-4 w-4" />
         {isActivating ? "starting session..." : "start session"}
       </Button>
     </div>
@@ -53,12 +54,18 @@ function SessionActive({ stopSession, sendTextMessage }) {
             handleSendClientEvent();
           }
         }}
-        icon={<MessageSquare height={16} />}
-        className="bg-blue-400"
+        variant="default"
+        className="flex items-center gap-2"
       >
+        <MessageSquare className="h-4 w-4" />
         send text
       </Button>
-      <Button onClick={stopSession} icon={<CloudOff height={16} />}>
+      <Button 
+        onClick={stopSession} 
+        variant="outline"
+        className="flex items-center gap-2"
+      >
+        <CloudOff className="h-4 w-4" />
         disconnect
       </Button>
     </div>

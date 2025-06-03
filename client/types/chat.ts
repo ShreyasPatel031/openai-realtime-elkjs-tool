@@ -9,7 +9,9 @@ export interface Message {
   id: string;
   content: string;
   sender: "user" | "assistant" | "system";
-  type?: "text" | "radio-question" | "checkbox-question";
+  type?: "text" | "radio-question" | "checkbox-question" | string;
+  role?: string;
+  response?: any;
   options?: { id: string; text: string }[];
   question?: string;
 }
@@ -26,4 +28,10 @@ export interface InteractiveCanvasProps {
   sendTextMessage?: (message: string) => void;
   sendClientEvent?: (message: any) => void;
   events?: any[]; // Add events from the server
+}
+
+export interface ElkLabel {
+  text: string;
+  x?: number;
+  y?: number;
 } 

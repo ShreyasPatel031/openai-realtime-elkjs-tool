@@ -71,30 +71,18 @@ export function initSession(
     item: {
       type: "message",
       role: "user",
-      content: [content]
+      content: [{
+        type: "input_text",
+        text: `${languageInstruction}
+${elkGraphDescription}
+
+Please greet the user with exactly 'How can I help?' and nothing else. Do not add any additional text or explanation.`
+      }]
     }
   });
 
-  // Add automatic greeting so the agent says hello when ready
-  setTimeout(() => {
-    console.log("🤖 Triggering automatic greeting");
-    safeSend({
-      type: "conversation.item.create",
-      item: {
-        type: "message",
-        role: "user",
-        content: [{
-          type: "input_text",
-          text: "Please greet the user with exactly 'How can I help?' and nothing else. Do not add any additional text or explanation."
-        }]
-      }
-    });
-    
-    // Create response to trigger the greeting
-    safeSend({ type: "response.create" });
-  }, 1000); // Wait 1 second for session to be fully ready
-
-  // safeSend({ type: "response.create" });
+  // Create single response to trigger the greeting
+  safeSend({ type: "response.create" });
   
   return true;
 } 

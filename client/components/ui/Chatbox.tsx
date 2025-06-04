@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef } from "react"
+import React, { useState, useRef, useEffect } from "react"
 import { Input } from "./input"
 import { Button } from "./button"
 import { Send, Mic, X, Loader2 } from "lucide-react"
@@ -30,6 +30,14 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   const [showMic, setShowMic] = useState(true)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Auto-expand when agent is ready
+  useEffect(() => {
+    if (isAgentReady && !isExpanded && !isTransitioning) {
+      console.log('🤖 Agent is ready - auto-expanding chat');
+      toggleExpand();
+    }
+  }, [isAgentReady]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (message.trim()) {
@@ -39,6 +47,9 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   }
 
   const toggleExpand = () => {
+    // Don't toggle if already transitioning
+    if (isTransitioning) return;
+    
     setIsTransitioning(true)
 
     if (isExpanded) {
@@ -70,8 +81,8 @@ const ChatBox: React.FC<ChatBoxProps> = ({
     if (!isSessionActive && !isConnecting && onStartSession) {
       onStartSession();
     }
-    // Only expand if agent is ready or session is active
-    if (isAgentReady || isSessionActive) {
+    // Only expand if not already expanded and not transitioning
+    if (!isExpanded && !isTransitioning) {
       toggleExpand();
     }
   }

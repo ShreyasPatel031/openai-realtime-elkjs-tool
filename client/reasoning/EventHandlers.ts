@@ -11,11 +11,12 @@ export interface EventHandlerCallbacks {
   appendToArgsLine: (text: string) => void;
   pushCall: (pc: PendingCall) => void;
   setBusy: (busy: boolean) => void;
+  onComplete?: () => void; // Add completion callback
 }
 
 // Function to handle different delta types from the API response
 export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdRef: { current: string | null }) => {
-  const { addLine, appendToTextLine, appendToReasoningLine, appendToArgsLine, pushCall, setBusy } = callbacks;
+  const { addLine, appendToTextLine, appendToReasoningLine, appendToArgsLine, pushCall, setBusy, onComplete } = callbacks;
   
   return (delta: any, pendingCalls: Map<string, any>, handledCalls: Set<string>) => {
     // Handle [DONE] marker from server
@@ -158,6 +159,16 @@ export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdR
       
       // Leave the stream open; the server will send [DONE] when truly finished
       // The backend manages the conversation loop and will close when done
+    } else if (delta.type === "done" && delta.data === "[DONE]") {
+      // Handle the final completion message
+      addLine('🏁 Architecture generation completed - done signal received');
+      console.log('🏁 Architecture generation complete - done type received with [DONE] data');
+      setBusy(false);
+      // Trigger completion callback which adds the completion message and closes chat
+      if (onComplete) {
+        onComplete();
+      }
+      return 'close';
     } else {
       // Log unknown delta types for debugging
       console.log(`📡 Unknown delta type: ${delta.type}`, delta);

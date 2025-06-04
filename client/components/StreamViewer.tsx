@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import { StreamExecutor, StreamExecutorOptions } from "../reasoning/StreamExecutor";
+import { addReasoningMessage, addFunctionCallingMessage, addProcessCompleteMessage, updateStreamingMessage } from "../utils/chatUtils";
 
 interface StreamViewerProps {
   elkGraph?: any;
@@ -21,12 +22,59 @@ const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGra
   // Use ref to track current graph state and avoid stale closures
   const elkGraphRef = useRef(elkGraph);
   
+  // Track chat message IDs for streaming and accumulated content
+  const reasoningMessageIdRef = useRef<string | null>(null);
+  const currentFunctionMessageIdRef = useRef<string | null>(null);
+  const reasoningContentRef = useRef<string>("");
+  const currentFunctionContentRef = useRef<string>("");
+  const currentFunctionNameRef = useRef<string>("");
+
   useEffect(() => {
     elkGraphRef.current = elkGraph;
     console.log("🔄 StreamViewer elkGraphRef updated:", elkGraphRef.current);
   }, [elkGraph]);
 
-  const addLine = (line: string) => setLines(ls => [...ls, line]);
+  const addLine = (line: string) => {
+    setLines(ls => [...ls, line]);
+    
+    // Check if this is a function call line - extract actual function name
+    if (line.includes('🔄 Loop') && line.includes('Processing:')) {
+      // Extract function name from "Processing: function_name"
+      const functionMatch = line.match(/Processing:\s+(\w+)/);
+      if (functionMatch) {
+        const functionName = functionMatch[1];
+        
+        // Complete previous function if different
+        if (currentFunctionNameRef.current && currentFunctionNameRef.current !== functionName) {
+          if (currentFunctionMessageIdRef.current) {
+            updateStreamingMessage(currentFunctionMessageIdRef.current, currentFunctionContentRef.current, true, currentFunctionNameRef.current);
+          }
+          // Reset for new function
+          currentFunctionMessageIdRef.current = null;
+          currentFunctionContentRef.current = "";
+        }
+        
+        // Create new function message if needed
+        if (!currentFunctionMessageIdRef.current) {
+          currentFunctionMessageIdRef.current = addFunctionCallingMessage();
+          currentFunctionContentRef.current = "";
+        }
+        
+        currentFunctionNameRef.current = functionName;
+        
+        // Add the processing line to the function content
+        currentFunctionContentRef.current += line + '\n';
+        updateStreamingMessage(currentFunctionMessageIdRef.current, currentFunctionContentRef.current, false, currentFunctionNameRef.current);
+      }
+    }
+    // Check for other function-related lines
+    else if (line.includes('🟢') || line.includes('🔴') || line.includes('➡️') || line.includes('🔧')) {
+      if (currentFunctionMessageIdRef.current) {
+        currentFunctionContentRef.current += line + '\n';
+        updateStreamingMessage(currentFunctionMessageIdRef.current, currentFunctionContentRef.current, false, currentFunctionNameRef.current);
+      }
+    }
+  };
 
   const appendToReasoningLine = (text: string) => {
     setLines(ls => {
@@ -41,6 +89,16 @@ const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGra
       }
       return newLines;
     });
+    
+    // Stream to chat reasoning message - properly accumulate content
+    if (!reasoningMessageIdRef.current) {
+      reasoningMessageIdRef.current = addReasoningMessage();
+      reasoningContentRef.current = "";
+    }
+    
+    // Accumulate reasoning content as sentences, not individual tokens
+    reasoningContentRef.current += text;
+    updateStreamingMessage(reasoningMessageIdRef.current, reasoningContentRef.current, false);
   };
 
   const appendToArgsLine = (text: string) => {
@@ -56,6 +114,13 @@ const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGra
       }
       return newLines;
     });
+    
+    // This is function argument building - add to current function message
+    if (currentFunctionMessageIdRef.current) {
+      // Don't show "building_args" as function name, keep the actual function name
+      currentFunctionContentRef.current += text;
+      updateStreamingMessage(currentFunctionMessageIdRef.current, currentFunctionContentRef.current, false, currentFunctionNameRef.current);
+    }
   };
 
   const appendToTextLine = (text: string) => {
@@ -71,6 +136,16 @@ const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGra
       }
       return newLines;
     });
+    
+    // Stream to chat reasoning message - properly accumulate content
+    if (!reasoningMessageIdRef.current) {
+      reasoningMessageIdRef.current = addReasoningMessage();
+      reasoningContentRef.current = "";
+    }
+    
+    // Accumulate reasoning content as sentences, not individual tokens
+    reasoningContentRef.current += text;
+    updateStreamingMessage(reasoningMessageIdRef.current, reasoningContentRef.current, false);
   };
 
   const start = async () => {
@@ -83,6 +158,13 @@ const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGra
     setLoopCount(0);
     setErrorCount(0);
     
+    // Reset chat message refs and content
+    reasoningMessageIdRef.current = null;
+    currentFunctionMessageIdRef.current = null;
+    reasoningContentRef.current = "";
+    currentFunctionContentRef.current = "";
+    currentFunctionNameRef.current = "";
+    
     const options: StreamExecutorOptions = {
       elkGraph: elkGraphRef.current,
       setElkGraph: setElkGraph,
@@ -92,10 +174,29 @@ const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGra
       appendToArgsLine,
       setBusy,
       onComplete: () => {
-        addLine("🎯 Stream execution completed!");
+        // Simple completion - just log it, no fancy UI stuff
+        addLine("✅ Architecture generation completed!");
+        console.log('✅ StreamViewer: Architecture generation finished');
+        
+        // Complete any remaining streaming messages
+        if (reasoningMessageIdRef.current) {
+          updateStreamingMessage(reasoningMessageIdRef.current, reasoningContentRef.current, true);
+        }
+        if (currentFunctionMessageIdRef.current) {
+          updateStreamingMessage(currentFunctionMessageIdRef.current, currentFunctionContentRef.current, true, currentFunctionNameRef.current);
+        }
       },
       onError: (error) => {
         addLine(`❌ Stream execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.error('❌ StreamViewer onError called:', error);
+        
+        // Mark streaming as complete even on error
+        if (reasoningMessageIdRef.current) {
+          updateStreamingMessage(reasoningMessageIdRef.current, reasoningContentRef.current, true);
+        }
+        if (currentFunctionMessageIdRef.current) {
+          updateStreamingMessage(currentFunctionMessageIdRef.current, currentFunctionContentRef.current, true, currentFunctionNameRef.current);
+        }
       }
     };
 
@@ -105,7 +206,7 @@ const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGra
     } catch (error) {
       console.error('StreamViewer start error:', error);
       addLine(`❌ Failed to start stream: ${error instanceof Error ? error.message : 'Unknown error'}`);
-          setBusy(false);
+      setBusy(false);
     }
   };
 

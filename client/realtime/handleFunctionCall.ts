@@ -1,6 +1,5 @@
 // client/realtime/handleFunctionCall.ts
 import { FunctionCall, ClientEvent } from './types';
-import { process_user_requirements } from '../components/graph/userRequirements';
 import { addUserDecisionToChat, createFollowupQuestionsToChat } from '../utils/chatUtils';
 
 interface MutationHelpers {
@@ -26,7 +25,6 @@ interface MutationHelpers {
     label?: string;
     style?: any;
   }>, graph: any) => any;
-  process_user_requirements?: () => string;
 }
 
 interface FunctionCallHelpers {
@@ -59,52 +57,33 @@ export function handleFunctionCall(
         // Nothing to change, just return a fresh copy so React sees a new object
         break;
         
-      case "add_user_decision":
-        console.group('📝 add_user_decision Function Call');
+      case "log_requirements_and_generate_questions":
+        console.group('📝❓ log_requirements_and_generate_questions Function Call');
         console.log('Arguments from agent:', args);
-        console.log('Decision:', args.decision);
-        console.log('Call ID:', call_id);
-        
-        result = addUserDecisionToChat(args.decision);
-        console.log('Function result:', result);
-        
-        safeSend({
-          type: "conversation.item.create",
-          item: {
-            type: "function_call_output",
-            call_id: call_id,
-            output: JSON.stringify(result)
-          }
-        });
-        console.log('Sent response for add_user_decision');
-        console.groupEnd();
-        safeSend({ type: "response.create" });
-        return; // Return early to prevent graph update
-        
-      case "create_followup_questions":
-        console.group('❓ create_followup_questions Function Call');
-        console.log('Arguments from agent:', args);
-        console.log('Raw argStr:', argStr);
+        console.log('Requirements:', args.requirements);
         console.log('Questions:', args.questions);
-        console.log('Args keys:', Object.keys(args));
-        console.log('Args type:', typeof args);
-        console.log('Is args an array?', Array.isArray(args));
         console.log('Call ID:', call_id);
         
-        // Handle case where agent passes array directly instead of wrapping in questions property
-        let questionsArray;
-        if (Array.isArray(args)) {
-          console.log('🔧 Agent passed array directly, using as questions');
-          questionsArray = args;
-        } else if (args.questions) {
-          console.log('✅ Agent passed questions property correctly');
-          questionsArray = args.questions;
+        // Validate both requirements and questions
+        if (!args.requirements || !Array.isArray(args.requirements) || args.requirements.length === 0) {
+          console.error('❌ Invalid or empty requirements array');
+          result = { success: false, message: 'Error: requirements must be a non-empty array' };
+        } else if (!args.questions || !Array.isArray(args.questions) || args.questions.length === 0) {
+          console.error('❌ Invalid or empty questions array');
+          result = { success: false, message: 'Error: questions must be a non-empty array' };
         } else {
-          console.error('❌ No questions found in arguments');
-          questionsArray = null;
+          // Log each requirement
+          console.log('📝 Logging requirements...');
+          for (const requirement of args.requirements) {
+            const reqResult = addUserDecisionToChat(requirement);
+            console.log(`Logged requirement: ${requirement}`, reqResult);
+          }
+          
+          // Generate follow-up questions
+          console.log('❓ Generating follow-up questions...');
+          result = createFollowupQuestionsToChat(args.questions);
         }
         
-        result = createFollowupQuestionsToChat(questionsArray);
         console.log('Function result:', result);
         
         safeSend({
@@ -115,7 +94,7 @@ export function handleFunctionCall(
             output: JSON.stringify(result)
           }
         });
-        console.log('Sent response for create_followup_questions');
+        console.log('Sent response for log_requirements_and_generate_questions');
         console.groupEnd();
         safeSend({ type: "response.create" });
         return; // Return early to prevent graph update
@@ -159,37 +138,6 @@ export function handleFunctionCall(
         updated = mutations.batchUpdate(args.operations, graphCopy);
         console.log(`🔄 Batch updated graph with ${args.operations.length} operations`);
         break;
-        
-      case "process_user_requirements":
-        console.group('📋 process_user_requirements Function Call');
-        console.log('Arguments from agent:', args);
-        console.log('Raw argument string:', argStr);
-        console.log('Call ID:', call_id);
-        
-        result = process_user_requirements(elkGraph, setElkGraph);
-        console.log(`Function result: Array of ${Array.isArray(result) ? result.length : 0} strings`);
-        
-        // Format the array into a response object
-        const responseObject = { 
-          steps: result,
-          stepCount: Array.isArray(result) ? result.length : 0,
-          message: "Architecture building process initiated via StreamViewer (DOM trigger for UI output)."
-        };
-        const responseJson = JSON.stringify(responseObject);
-        console.log(`Sending response as object with ${responseObject.stepCount} steps`);
-        
-        safeSend({
-          type: "conversation.item.create",
-          item: {
-            type: "function_call_output",
-            call_id: call_id,
-            output: responseJson
-          }
-        });
-        console.log('Sent response as structured object with direct streaming execution');
-        console.groupEnd();
-        safeSend({ type: "response.create" });
-        return; // Return early to prevent the graph update
         
       default:
         console.warn(`⚠️ Unknown function call: ${name}`);

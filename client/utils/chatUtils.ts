@@ -25,6 +25,17 @@ export const makeChatVisible = () => {
   }
 };
 
+// Function to auto-close chat window
+export const closeChatWindow = () => {
+  console.log('🔧 Auto-closing chat window');
+  
+  if (setChatVisible) {
+    setChatVisible(false);
+  } else {
+    console.warn('Chat visibility setter not registered');
+  }
+};
+
 // Function to add a user decision to the chat
 export const addUserDecisionToChat = (decision: string): { success: boolean; message: string } => {
   try {
@@ -152,4 +163,128 @@ export const getFollowupQuestions = (): any[] => {
 export const clearChatData = (): void => {
   userDecisions.length = 0;
   followupQuestions.length = 0;
+};
+
+// Function to add reasoning message with streaming
+export const addReasoningMessage = (initialContent: string = ""): string => {
+  const messageId = crypto.randomUUID();
+  const reasoningMessage: Message = {
+    id: messageId,
+    content: initialContent,
+    sender: 'system',
+    type: 'reasoning',
+    isStreaming: true,
+    streamedContent: "",
+    isDropdownOpen: true,
+    animationType: 'reasoning'
+  };
+  
+  // Make chat visible
+  makeChatVisible();
+  
+  // Add message to chat
+  const addMessageEvent = new CustomEvent('addChatMessage', {
+    detail: { message: reasoningMessage }
+  });
+  document.dispatchEvent(addMessageEvent);
+  
+  console.log('🧠 Added reasoning message:', messageId);
+  return messageId;
+};
+
+// Function to update streaming content for reasoning/function messages
+export const updateStreamingMessage = (messageId: string, newContent: string, isComplete: boolean = false, currentFunction?: string): void => {
+  const updateEvent = new CustomEvent('updateStreamingMessage', {
+    detail: { 
+      messageId, 
+      streamedContent: newContent,
+      isStreaming: !isComplete,
+      currentFunction
+    }
+  });
+  document.dispatchEvent(updateEvent);
+  
+  // Auto-scroll to bottom when content updates - target the specific message container
+  setTimeout(() => {
+    // First try to scroll the specific message content
+    const messageElement = document.querySelector(`[data-message-id="${messageId}"] .overflow-y-auto`);
+    if (messageElement) {
+      messageElement.scrollTop = messageElement.scrollHeight;
+    }
+    
+    // Also scroll the main chat container to bottom
+    const messagesContainer = document.querySelector('[data-chat-window] .overflow-y-auto');
+    if (messagesContainer) {
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+  }, 10);
+};
+
+// Function to add function calling message
+export const addFunctionCallingMessage = (initialContent: string = ""): string => {
+  const messageId = crypto.randomUUID();
+  const functionMessage: Message = {
+    id: messageId,
+    content: initialContent,
+    sender: 'system',
+    type: 'function-calling',
+    isStreaming: true,
+    streamedContent: "",
+    isDropdownOpen: false,
+    animationType: 'function-calling'
+  };
+  
+  // Make chat visible
+  makeChatVisible();
+  
+  // Add message to chat
+  const addMessageEvent = new CustomEvent('addChatMessage', {
+    detail: { message: functionMessage }
+  });
+  document.dispatchEvent(addMessageEvent);
+  
+  console.log('⚙️ Added function calling message:', messageId);
+  return messageId;
+};
+
+// Function to add process complete message
+export const addProcessCompleteMessage = (): void => {
+  const messageId = crypto.randomUUID();
+  const completeMessage: Message = {
+    id: messageId,
+    content: "Architecture processing complete! Chat will close automatically in 3 seconds.",
+    sender: 'system',
+    type: 'process-complete'
+  };
+  
+  // Make chat visible
+  makeChatVisible();
+  
+  // Add message to chat
+  const addMessageEvent = new CustomEvent('addChatMessage', {
+    detail: { message: completeMessage }
+  });
+  document.dispatchEvent(addMessageEvent);
+  
+  console.log('✅ Added process complete message - chat will auto-close');
+  
+  // Auto-close chat after 3 seconds
+  setTimeout(() => {
+    closeChatWindow();
+  }, 3000);
+};
+
+// Function to simulate token-by-token streaming (for testing)
+export const simulateTokenStreaming = (messageId: string, fullText: string, speed: number = 50): void => {
+  let currentIndex = 0;
+  const streamInterval = setInterval(() => {
+    if (currentIndex < fullText.length) {
+      const chunk = fullText.slice(0, currentIndex + 1);
+      updateStreamingMessage(messageId, chunk, false);
+      currentIndex++;
+    } else {
+      updateStreamingMessage(messageId, fullText, true);
+      clearInterval(streamInterval);
+    }
+  }, speed);
 }; 

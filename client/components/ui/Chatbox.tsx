@@ -3,19 +3,23 @@
 import React, { useState, useRef } from "react"
 import { Input } from "./input"
 import { Button } from "./button"
-import { Send, Mic, X } from "lucide-react"
+import { Send, Mic, X, Loader2 } from "lucide-react"
 import { cn } from "../../lib/utils"
 
 interface ChatBoxProps {
   onSubmit: (message: string) => void;
   isSessionActive?: boolean;
+  isConnecting?: boolean;
+  isAgentReady?: boolean;
   onStartSession?: () => void;
   onStopSession?: () => void;
 }
 
 const ChatBox: React.FC<ChatBoxProps> = ({ 
   onSubmit, 
-  isSessionActive = false, 
+  isSessionActive = false,
+  isConnecting = false,
+  isAgentReady = false,
   onStartSession, 
   onStopSession 
 }) => {
@@ -62,12 +66,14 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   }
 
   const handleMicClick = () => {
-    // Start session when mic is clicked if not active
-    if (!isSessionActive && onStartSession) {
+    // Start session when mic is clicked if not active and not connecting
+    if (!isSessionActive && !isConnecting && onStartSession) {
       onStartSession();
     }
-    // Then expand the chat input
-    toggleExpand();
+    // Only expand if agent is ready or session is active
+    if (isAgentReady || isSessionActive) {
+      toggleExpand();
+    }
   }
 
   const handleCancelClick = () => {
@@ -78,6 +84,45 @@ const ChatBox: React.FC<ChatBoxProps> = ({
     // Then collapse the chat input
     toggleExpand();
   }
+
+  // Determine button appearance based on connection state
+  const getButtonState = () => {
+    if (isConnecting) {
+      return {
+        color: "#f59e0b", // yellow-500
+        borderColor: "border-yellow-500",
+        hoverColor: "hover:bg-yellow-600",
+        icon: <Loader2 className="h-6 w-6 text-white animate-spin" />,
+        disabled: true
+      };
+    } else if (isAgentReady) {
+      return {
+        color: "#22c55e", // green-500
+        borderColor: "border-green-500",
+        hoverColor: "hover:bg-green-600",
+        icon: <Mic className="h-6 w-6 text-white" />,
+        disabled: false
+      };
+    } else if (isSessionActive) {
+      return {
+        color: "#3b82f6", // blue-500
+        borderColor: "border-blue-500",
+        hoverColor: "hover:bg-blue-600",
+        icon: <Mic className="h-6 w-6 text-white" />,
+        disabled: true
+      };
+    } else {
+      return {
+        color: "#ef4444", // red-500
+        borderColor: "border-red-500",
+        hoverColor: "hover:bg-red-600",
+        icon: <Mic className="h-6 w-6 text-white" />,
+        disabled: false
+      };
+    }
+  };
+
+  const buttonState = getButtonState();
 
   return (
     <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-50 pointer-events-auto">
@@ -112,7 +157,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
               ref={inputRef}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Type a message..."
+              placeholder={isAgentReady ? "Speak or type a message..." : "Type a message..."}
               style={{
                 transition: "opacity 300ms cubic-bezier(0, 0, 0.2, 1)",
               }}
@@ -139,19 +184,20 @@ const ChatBox: React.FC<ChatBoxProps> = ({
           <Button
             onClick={handleMicClick}
             type="button"
+            disabled={buttonState.disabled}
             style={{
               transition: "all 300ms cubic-bezier(0, 0, 0.2, 1)",
-              background: isSessionActive ? "#22c55e" : "#ef4444",
+              background: buttonState.color,
             }}
             className={cn(
               "h-14 w-14 rounded-full border-2 flex-grow flex items-center justify-center p-0",
-              isSessionActive 
-                ? "border-green-500 hover:bg-green-600" 
-                : "border-red-500 hover:bg-red-600",
+              buttonState.borderColor,
+              buttonState.hoverColor,
               showMic ? "opacity-100" : "opacity-0",
+              buttonState.disabled && "cursor-not-allowed opacity-75"
             )}
           >
-            <Mic className="h-6 w-6 text-white" />
+            {buttonState.icon}
           </Button>
         )}
       </form>

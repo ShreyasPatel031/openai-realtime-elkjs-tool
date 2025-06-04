@@ -60,6 +60,8 @@ function MainContent({ events, isSessionActive, startSession, stopSession, sendC
 export default function App() {
   // State management
   const [isSessionActive, setIsSessionActive] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isAgentReady, setIsAgentReady] = useState(false);
   const [events, setEvents] = useState([]);
   const [showNewUI, setShowNewUI] = useState(true);
 
@@ -78,28 +80,62 @@ export default function App() {
     agentInstruction
   });
 
+  // Monitor events to detect when agent is ready to listen
+  useEffect(() => {
+    if (!events.length) return;
+    
+    const latestEvent = events[0]; // Events are in reverse chronological order
+    
+    // Check for session.created or session.update events indicating agent is ready
+    if (latestEvent.type === 'session.created' || 
+        (latestEvent.type === 'session.updated' && latestEvent.session)) {
+      console.log('🤖 Agent is ready to listen');
+      setIsAgentReady(true);
+      setIsConnecting(false);
+    }
+    
+    // Check for session.update with input_audio_transcription events (means agent heard something)
+    if (latestEvent.type === 'input_audio_buffer.speech_started' || 
+        latestEvent.type === 'conversation.item.input_audio_transcription.completed') {
+      console.log('🎤 Agent is actively listening');
+      setIsAgentReady(true);
+    }
+  }, [events]);
+
   /**
    * Initiates a new WebRTC session with OpenAI's Realtime API
    */
   async function startSession() {
-    // Get a session token for OpenAI Realtime API
-    const tokenResponse = await fetch("/token");
-    const data = await tokenResponse.json();
-    const EPHEMERAL_KEY = data.client_secret.value;
-
-    // Create RTC client or reuse existing one
-    if (!rtc.current) {
-      rtc.current = new RtcClient(event => {
-        if (!event.timestamp) {
-          event.timestamp = new Date().toLocaleTimeString();
-        }
-        setEvents(prev => [event, ...prev]);
-      });
-    }
+    setIsConnecting(true);
+    setIsAgentReady(false);
     
-    // Connect the client with model configuration
-    await rtc.current.connect(EPHEMERAL_KEY);
-    setIsSessionActive(true);
+    try {
+      // Get a session token for OpenAI Realtime API
+      const tokenResponse = await fetch("/token");
+      const data = await tokenResponse.json();
+      const EPHEMERAL_KEY = data.client_secret.value;
+
+      // Create RTC client or reuse existing one
+      if (!rtc.current) {
+        rtc.current = new RtcClient(event => {
+          if (!event.timestamp) {
+            event.timestamp = new Date().toLocaleTimeString();
+          }
+          setEvents(prev => [event, ...prev]);
+        });
+      }
+      
+      // Connect the client with model configuration
+      await rtc.current.connect(EPHEMERAL_KEY);
+      setIsSessionActive(true);
+      
+      // Note: isConnecting will be set to false when we receive session.created event
+    } catch (error) {
+      console.error('Failed to start session:', error);
+      setIsConnecting(false);
+      setIsSessionActive(false);
+      setIsAgentReady(false);
+    }
   }
 
   /**
@@ -131,6 +167,8 @@ export default function App() {
     
     // Update state
     setIsSessionActive(false);
+    setIsConnecting(false);
+    setIsAgentReady(false);
   }
 
   /**
@@ -209,8 +247,24 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${isSessionActive ? "bg-green-500" : "bg-red-500"}`}></span>
-            <span className="text-sm">{isSessionActive ? "Connected" : "Disconnected"}</span>
+            <span className={`w-2 h-2 rounded-full ${
+              isConnecting 
+                ? "bg-yellow-500 animate-pulse" 
+                : isAgentReady 
+                  ? "bg-green-500" 
+                  : isSessionActive 
+                    ? "bg-blue-500" 
+                    : "bg-red-500"
+            }`}></span>
+            <span className="text-sm">
+              {isConnecting 
+                ? "Connecting..." 
+                : isAgentReady 
+                  ? "Ready to Listen" 
+                  : isSessionActive 
+                    ? "Connected" 
+                    : "Disconnected"}
+            </span>
           </div>
         </div>
       </header>
@@ -221,6 +275,8 @@ export default function App() {
           <ErrorBoundary>
             <InteractiveCanvas 
               isSessionActive={isSessionActive}
+              isConnecting={isConnecting}
+              isAgentReady={isAgentReady}
               startSession={startSession}
               stopSession={stopSession}
               sendTextMessage={sendTextMessage}

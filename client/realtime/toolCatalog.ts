@@ -3,68 +3,60 @@ import { chunkTools } from "../utils/splitTools.js";
 export const allTools = [
   {
     type: "function",
-    name: "display_elk_graph",
-    description: "Function to display and return the current ELK graph layout",
-    parameters: {
-      type: "object",
-      properties: {},
-      required: []
-    }
-  },
-  {
-    type: "function",
-    name: "add_user_decision",
-    description: "Add a bullet point to the decision history for tracking user requirements and decisions",
+    name: "log_requirements_and_generate_questions",
+    description: "Log user requirements and generate 3-4 contextual follow-up questions",
     parameters: {
       type: "object",
       properties: {
-        decision: {
-          type: "string",
-          description: "The user decision or requirement to record as a bullet point (e.g., 'User requires real-time data processing with latency < 100ms')"
-        }
-      },
-      required: ["decision"]
-    }
-  },
-  {
-    type: "function",
-    name: "create_followup_questions",
-    description: "Generate 2-3 structured follow-up questions with options based on user requirements to gather more specific architectural details",
-    parameters: {
-      type: "object",
-      properties: {
+        requirements: {
+          type: "array",
+          description: "Array of user requirements/decisions/constraints",
+          items: {
+            type: "string"
+          }
+        },
         questions: {
           type: "array",
+          description: "Array of 3-4 follow-up question objects",
           items: {
             type: "object",
             properties: {
               type: {
                 type: "string",
                 enum: ["select", "multiselect"],
-                description: "Question type - 'select' for single choice, 'multiselect' for multiple choices"
+                description: "Type of question - select for single choice, multiselect for multiple choices"
               },
               text: {
                 type: "string",
-                description: "The question text (keep concise, under 1 line)"
+                description: "The question text (keep concise)"
               },
               options: {
                 type: "array",
+                description: "Array of answer options",
                 items: {
                   type: "string"
-                },
-                description: "Array of 2-4 answer options for the question"
+                }
               },
               impact: {
                 type: "string",
-                description: "Brief explanation of how this question affects the architecture design"
+                description: "How this question affects the architecture decisions"
               }
             },
             required: ["type", "text", "options", "impact"]
-          },
-          description: "Array of 2-3 structured question objects to gather more specific requirements"
+          }
         }
       },
-      required: ["questions"]
+      required: ["requirements", "questions"]
+    }
+  },
+  {
+    type: "function",
+    name: "display_elk_graph",
+    description: "Update and display the ELK graph visualization",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: []
     }
   },
   {

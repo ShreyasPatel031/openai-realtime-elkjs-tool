@@ -2,6 +2,7 @@ import { elkGraphDescription } from "./agentConfig";
 import { createPostEventSource } from "./PostEventSource";
 import { createDeltaHandler, EventHandlerCallbacks, PendingCall } from "./EventHandlers";
 import { executeFunctionCall, GraphState } from "./FunctionExecutor";
+import { addProcessCompleteMessage, closeChatWindow } from "../utils/chatUtils";
 
 export interface StreamExecutorOptions {
   elkGraph: any;
@@ -56,15 +57,27 @@ export class StreamExecutor {
       // Update elkGraphRef to current state
       this.elkGraphRef.current = this.options.elkGraph;
       
-      // Full payload with complete instructions
-      const fullPayload = JSON.stringify([
-        { 
-          role: "system", 
-          content: elkGraphDescription
-        },
-        { 
-          role: "user", 
-          content: `Build a complete e-commerce microservices architecture following this exact structure:
+      // Get conversation data if available
+      const conversationData = (window as any).chatConversationData || "";
+      
+      // Build payload with conversation data or default architecture
+      let userContent = "";
+      if (conversationData.trim()) {
+        userContent = `${conversationData}
+
+Build a complete architecture following these requirements. Use appropriate groups and styling:
+- Groups: "frontend", "api_gateway", "services", "data", "infrastructure" 
+- Styles: "GREEN", "PURPLE", "BLUE", "TEAL", "GREY"
+
+EXECUTION STEPS:
+1. First call display_elk_graph() to see current state
+2. Use batch_update to create each group with ALL its nodes based on the requirements
+3. After creating all groups, add edges between components using batch_update
+4. Each batch_update should be complete - include all nodes for a group or all edges in one call
+
+Remember: Do NOT acknowledge or explain. Just execute the functions.`;
+      } else {
+        userContent = `Build a complete e-commerce microservices architecture following this exact structure:
 
 IMPORTANT: Call display_elk_graph() first to see the current state, then build the architecture step by step.
 
@@ -111,12 +124,24 @@ Example edge relationships:
 - Business Services → Data Layer
 - All components → Infrastructure services
 
-Remember: Do NOT acknowledge or explain. Just execute the functions.` 
+Remember: Do NOT acknowledge or explain. Just execute the functions.`;
+      }
+      
+      // Full payload with complete instructions
+      const fullPayload = JSON.stringify([
+        { 
+          role: "system", 
+          content: elkGraphDescription
+        },
+        { 
+          role: "user", 
+          content: userContent
         }
       ]);
 
       const fullEncodedLength = encodeURIComponent(fullPayload).length;
       addLine(`📦 Full payload (${fullEncodedLength} chars), using POST...`);
+      addLine(`📝 Using ${conversationData.trim() ? 'conversation requirements' : 'default e-commerce architecture'}`);
       
       await this.createMainStream(fullPayload);
       
@@ -152,7 +177,15 @@ Remember: Do NOT acknowledge or explain. Just execute the functions.`
         appendToReasoningLine: this.options.appendToReasoningLine,
         appendToArgsLine: this.options.appendToArgsLine,
         pushCall: (pc: PendingCall) => this.pushCall(pc),
-        setBusy: this.options.setBusy
+        setBusy: this.options.setBusy,
+        onComplete: () => {
+          // Trigger completion when EventHandlers detects the done signal
+          this.options.onComplete?.();
+          // Add the single completion message
+          setTimeout(() => {
+            addProcessCompleteMessage();
+          }, 500);
+        }
       };
 
       const handleDelta = createDeltaHandler(callbacks, responseIdRef);
@@ -162,9 +195,15 @@ Remember: Do NOT acknowledge or explain. Just execute the functions.`
         
         if (e.data === '[DONE]') {
           addLine('🏁 Stream finished - [DONE] received');
+          console.log('🏁 Architecture generation complete - [DONE] marker received');
           ev.close();
           setBusy(false);
+          // ONLY trigger completion here when [DONE] is received
           this.options.onComplete?.();
+          // Add the single completion message
+          setTimeout(() => {
+            addProcessCompleteMessage();
+          }, 500);
           resolve();
           return;
         }
@@ -174,7 +213,6 @@ Remember: Do NOT acknowledge or explain. Just execute the functions.`
         if (result === 'close') {
           ev.close();
           setBusy(false);
-          this.options.onComplete?.();
           resolve();
         }
       };
@@ -299,12 +337,15 @@ Remember: Do NOT acknowledge or explain. Just execute the functions.`
     this.cleanupCall(callId);
     this.isProcessingRef.current = false;
     
+    // Continue processing queue if more items exist - DO NOT trigger completion here
     if (this.queueRef.current.length === 0) {
-      this.options.addLine(`🎯 All function calls completed - ready to finish`);
+      this.options.addLine(`🎯 All function calls completed - ${this.loopRef.current} steps processed`);
       this.options.setBusy(false);
+      // REMOVED: No completion trigger here - only [DONE] marker should trigger completion
+    } else {
+      // Still have work to do
+      this.processQueue();
     }
-    
-    this.processQueue();
   }
 
   private async openFollowUpStream(responseId: string, callId: string, result: string): Promise<void> {
@@ -348,7 +389,11 @@ Remember: Do NOT acknowledge or explain. Just execute the functions.`
         appendToReasoningLine: this.options.appendToReasoningLine,
         appendToArgsLine: this.options.appendToArgsLine,
         pushCall: (pc: PendingCall) => this.pushCall(pc),
-        setBusy: this.options.setBusy
+        setBusy: this.options.setBusy,
+        onComplete: () => {
+          // Follow-up streams should not trigger completion
+          console.log('⚠️ Follow-up stream tried to trigger completion - ignoring');
+        }
       };
 
       const handleDelta = createDeltaHandler(callbacks, responseIdRef);
@@ -357,9 +402,10 @@ Remember: Do NOT acknowledge or explain. Just execute the functions.`
         const delta = JSON.parse(e.data);
         
         if (e.data === '[DONE]') {
-          this.options.addLine('🏁 Stream finished - [DONE] received');
+          this.options.addLine('🏁 Follow-up stream finished - [DONE] received');
           ev.close();
           this.options.setBusy(false);
+          // DO NOT trigger completion here - only main stream should trigger completion
           resolve();
           return;
         }

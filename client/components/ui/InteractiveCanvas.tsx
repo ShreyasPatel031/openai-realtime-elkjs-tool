@@ -68,6 +68,8 @@ const edgeTypes = {
 
 const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   isSessionActive = false,
+  isConnecting = false,
+  isAgentReady = false,
   startSession = () => {},
   stopSession = () => {},
   sendTextMessage = () => {},
@@ -600,11 +602,13 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       <div className="absolute top-4 left-4 z-[101]">
         <ConnectionStatus 
           isSessionActive={isSessionActive}
+          isConnecting={isConnecting}
+          isAgentReady={isAgentReady}
           messageSendStatus={{
-            sending: false,
+            sending: isSending,
             retrying: false,
             retryCount: 0,
-            lastError: null
+            lastError: undefined
           }}
         />
       </div>
@@ -831,6 +835,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         <ChatBox 
           onSubmit={handleChatSubmit} 
           isSessionActive={isSessionActive}
+          isConnecting={isConnecting}
+          isAgentReady={isAgentReady}
           onStartSession={startSession}
           onStopSession={stopSession}
         />

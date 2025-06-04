@@ -1,6 +1,8 @@
 export interface ChatBoxProps {
   onSubmit: (message: string) => void;
   isSessionActive?: boolean;
+  isConnecting?: boolean;
+  isAgentReady?: boolean;
   onStartSession?: () => void;
   onStopSession?: () => void;
 }
@@ -8,12 +10,18 @@ export interface ChatBoxProps {
 export interface Message {
   id: string;
   content: string;
-  sender: "user" | "assistant" | "system";
-  type?: "text" | "radio-question" | "checkbox-question" | string;
-  role?: string;
-  response?: any;
-  options?: { id: string; text: string }[];
+  sender: 'user' | 'assistant' | 'system';
+  type?: 'radio-question' | 'checkbox-question' | 'reasoning' | 'function-calling' | 'process-complete';
   question?: string;
+  options?: Array<{
+    id: string;
+    text: string;
+  }>;
+  // New fields for streaming messages
+  isStreaming?: boolean;
+  streamedContent?: string;
+  isDropdownOpen?: boolean;
+  animationType?: 'reasoning' | 'function-calling';
 }
 
 export interface ChatWindowProps {
@@ -23,6 +31,8 @@ export interface ChatWindowProps {
 
 export interface InteractiveCanvasProps {
   isSessionActive?: boolean;
+  isConnecting?: boolean;
+  isAgentReady?: boolean;
   startSession?: () => void;
   stopSession?: () => void;
   sendTextMessage?: (message: string) => void;

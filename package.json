@@ -3,8 +3,8 @@
   "scripts": {
     "dev": "node --loader ts-node/esm server/server.js --dev",
     "start": "node server/server.js",
-    "build": "npm run generate-icons && npm run build:client",
-    "build:full": "npm run generate-icons && npm run build:client && npm run build:server",
+    "build": "npm run generate-icons && npm run generate-dynamic-lists && npm run build:client",
+    "build:full": "npm run generate-icons && npm run generate-dynamic-lists && npm run build:client && npm run build:server",
     "build:client": "vite build --outDir dist/client --ssrManifest",
     "build:server": "vite build --outDir dist/server --ssr ../server/server.js",
     "devinstall": "zx ../../devinstall.mjs -- node server.js --dev",
@@ -12,7 +12,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "generate-icons": "tsx client/scripts/generateIconList.ts"
+    "generate-icons": "tsx client/scripts/generateIconList.ts",
+    "generate-dynamic-lists": "node scripts/generateDynamicLists.cjs"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "0.17.3",

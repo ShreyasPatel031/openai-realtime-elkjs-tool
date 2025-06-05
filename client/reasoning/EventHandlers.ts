@@ -37,6 +37,11 @@ export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdR
       if (delta.delta?.content) {
         appendToTextLine(delta.delta.content);
       }
+    } else if (delta.type === "response.output_text.delta") {
+      // Handle text output deltas (common type)
+      if (delta.delta) {
+        appendToTextLine(delta.delta);
+      }
     } else if (delta.type === "reasoning.delta") {
       // Reasoning text
       if (delta.delta) {
@@ -169,13 +174,13 @@ export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdR
         onComplete();
       }
       return 'close';
+    } else if (delta.type?.includes('.done') || delta.type?.includes('.delta')) {
+      // Silently handle common .done and .delta types that don't need processing
+      // This prevents log spam for response.output_text.done, response.content_part.done, etc.
     } else {
-      // Log unknown delta types for debugging
-      console.log(`📡 Unknown delta type: ${delta.type}`, delta);
-      
-      // Still show in UI but with more detail
-      if (delta.type) {
-        addLine(`📡 ${delta.type}`);
+      // Only log truly unknown/unexpected delta types
+      if (delta.type && !delta.type.startsWith('response.')) {
+        console.log(`📡 Unknown delta type: ${delta.type}`);
       }
     }
   };

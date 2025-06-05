@@ -253,13 +253,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
                   </div>
                 ) : (
                   <>
-                    {messages.map((message) => (
-                      <div key={message.id} className="flex items-start gap-3">
-                        {message.sender === "user" ? (
-                          <User className="w-6 h-6 mt-1 text-black" />
-                        ) : message.sender === "assistant" ? (
-                          <Bot className="w-6 h-6 mt-1 text-black" />
-                        ) : (
+                {messages.map((message) => (
+                  <div key={message.id} className="flex items-start gap-3">
+                    {message.sender === "user" ? (
+                      <User className="w-6 h-6 mt-1 text-black" />
+                    ) : message.sender === "assistant" ? (
+                      <Bot className="w-6 h-6 mt-1 text-black" />
+                    ) : (
                           <User className="w-6 h-6 mt-1 text-blue-500" />
                         )}
 
@@ -346,62 +346,62 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
                             </p>
                           </div>
                         ) : message.type === "radio-question" ? (
-                          <div className="rounded-lg px-4 py-3 bg-white border border-gray-200 max-w-[80%] w-full">
-                            <p className="text-sm mb-2">{message.question}</p>
-                            <Separator className="my-2" />
-                            <RadioGroup
-                              value={selectedOptions[message.id] as string}
-                              onValueChange={(value) => handleRadioChange(message.id, value)}
-                              className="mt-3"
-                            >
-                              {message.options?.map((option) => (
-                                <div key={option.id} className="flex items-center space-x-2 mb-2">
-                                  <RadioGroupItem value={option.id} id={option.id} />
-                                  <Label htmlFor={option.id} className="text-sm">
-                                    {option.text}
-                                  </Label>
-                                </div>
-                              ))}
-                            </RadioGroup>
-                          </div>
-                        ) : message.type === "checkbox-question" ? (
-                          <div className="rounded-lg px-4 py-3 bg-white border border-gray-200 max-w-[80%] w-full">
-                            <p className="text-sm mb-2">{message.question}</p>
-                            <Separator className="my-2" />
-                            <div className="mt-3">
-                              {message.options?.map((option) => (
-                                <div key={option.id} className="flex items-center space-x-2 mb-2">
-                                  <Checkbox
-                                    id={option.id}
-                                    checked={((selectedOptions[message.id] as string[]) || []).includes(option.id)}
-                                    onCheckedChange={(checked) =>
-                                      handleCheckboxChange(message.id, option.id, checked as boolean)
-                                    }
-                                  />
-                                  <Label htmlFor={option.id} className="text-sm">
-                                    {option.text}
-                                  </Label>
-                                </div>
-                              ))}
+                      <div className="rounded-lg px-4 py-3 bg-white border border-gray-200 max-w-[80%] w-full">
+                        <p className="text-sm mb-2">{message.question}</p>
+                        <Separator className="my-2" />
+                        <RadioGroup
+                          value={selectedOptions[message.id] as string}
+                          onValueChange={(value) => handleRadioChange(message.id, value)}
+                          className="mt-3"
+                        >
+                          {message.options?.map((option) => (
+                            <div key={option.id} className="flex items-center space-x-2 mb-2">
+                              <RadioGroupItem value={option.id} id={option.id} />
+                              <Label htmlFor={option.id} className="text-sm">
+                                {option.text}
+                              </Label>
                             </div>
-                          </div>
-                        ) : (
-                          <div className={cn(
-                            "rounded-lg px-4 py-3 border max-w-[80%]",
-                            message.sender === "system" 
-                              ? "bg-blue-50 border-blue-200 text-xs font-mono" 
-                              : "bg-white border-gray-200"
-                          )}>
-                            <p className={cn(
-                              "text-sm", 
-                              message.sender === "system" && "whitespace-pre-wrap"
-                            )}>
-                              {message.content}
-                            </p>
-                          </div>
-                        )}
+                          ))}
+                        </RadioGroup>
                       </div>
-                    ))}
+                    ) : message.type === "checkbox-question" ? (
+                      <div className="rounded-lg px-4 py-3 bg-white border border-gray-200 max-w-[80%] w-full">
+                        <p className="text-sm mb-2">{message.question}</p>
+                        <Separator className="my-2" />
+                        <div className="mt-3">
+                          {message.options?.map((option) => (
+                            <div key={option.id} className="flex items-center space-x-2 mb-2">
+                              <Checkbox
+                                id={option.id}
+                                checked={((selectedOptions[message.id] as string[]) || []).includes(option.id)}
+                                onCheckedChange={(checked) =>
+                                  handleCheckboxChange(message.id, option.id, checked as boolean)
+                                }
+                              />
+                              <Label htmlFor={option.id} className="text-sm">
+                                {option.text}
+                              </Label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={cn(
+                        "rounded-lg px-4 py-3 border max-w-[80%]",
+                        message.sender === "system" 
+                          ? "bg-blue-50 border-blue-200 text-xs font-mono" 
+                          : "bg-white border-gray-200"
+                      )}>
+                        <p className={cn(
+                          "text-sm", 
+                          message.sender === "system" && "whitespace-pre-wrap"
+                        )}>
+                          {message.content}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ))}
                     {/* Invisible element to scroll to */}
                     <div ref={messagesEndRef} />
                   </>

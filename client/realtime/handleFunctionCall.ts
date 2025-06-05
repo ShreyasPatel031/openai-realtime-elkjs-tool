@@ -8,7 +8,7 @@ interface Mutations {
   moveNode: (nodeId: string, newParentId: string, graph: any) => any;
   addEdge: (edgeId: string, sourceId: string, targetId: string, graph: any, label?: string) => any;
   deleteEdge: (edgeId: string, graph: any) => any;
-  groupNodes: (nodeIds: string[], parentId: string, groupId: string, graph: any, style?: any) => any;
+  groupNodes: (nodeIds: string[], parentId: string, groupId: string, graph: any, style?: any, groupIconName?: string) => any;
   removeGroup: (groupId: string, graph: any) => any;
   batchUpdate: (operations: any[], graph: any) => any;
   process_user_requirements?: () => string;
@@ -124,9 +124,12 @@ export function handleFunctionCall(
         if (!args.groupId || typeof args.groupId !== 'string') {
           throw new Error(`group_nodes requires 'groupId' as a string, got: ${JSON.stringify(args.groupId)}`);
         }
+        if (!args.groupIconName || typeof args.groupIconName !== 'string') {
+          throw new Error(`group_nodes requires 'groupIconName' as a string for proper cloud provider styling, got: ${JSON.stringify(args.groupIconName)}`);
+        }
         
-        updated = mutations.groupNodes(args.nodeIds, args.parentId, args.groupId, graphCopy, args.style);
-        console.log(`📦 Grouped nodes [${args.nodeIds.join(', ')}] into '${args.groupId}' under '${args.parentId}'`);
+        updated = mutations.groupNodes(args.nodeIds, args.parentId, args.groupId, graphCopy, undefined, args.groupIconName);
+        console.log(`📦 Grouped nodes [${args.nodeIds.join(', ')}] into '${args.groupId}' under '${args.parentId}' with group icon: ${args.groupIconName}`);
         break;
         
       case "remove_group":
@@ -135,6 +138,18 @@ export function handleFunctionCall(
         break;
         
       case "batch_update":
+        console.log('🔍 batch_update arguments received:', args);
+        console.log('🔍 args.operations type:', typeof args.operations);
+        console.log('🔍 args.operations value:', args.operations);
+        console.log('🔍 Is operations an array?', Array.isArray(args.operations));
+        
+        if (!args.operations) {
+          throw new Error(`batch_update requires 'operations' parameter, got: ${JSON.stringify(args)}`);
+        }
+        if (!Array.isArray(args.operations)) {
+          throw new Error(`batch_update requires 'operations' to be an array, got: ${typeof args.operations} - ${JSON.stringify(args.operations)}`);
+        }
+        
         updated = mutations.batchUpdate(args.operations, graphCopy);
         console.log(`🔄 Batch updated graph with ${args.operations.length} operations`);
         break;

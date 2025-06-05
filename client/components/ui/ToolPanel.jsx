@@ -234,7 +234,7 @@ const minimalSessionUpdate = {
       {
         type: "function",
         name: "group_nodes",
-        description: "Creates a new group node and moves specified nodes into it",
+        description: "Creates a new group node and moves specified nodes into it with optional group icon styling",
         parameters: {
           type: "object",
           properties: {
@@ -250,6 +250,14 @@ const minimalSessionUpdate = {
             groupId: {
               type: "string",
               description: "ID/name for the new group node"
+            },
+            style: {
+              type: "string",
+              description: "Optional style color scheme for the group"
+            },
+            groupIconName: {
+              type: "string",
+              description: "Optional group icon name for visual theming and background colors"
             }
           },
           required: ["nodeIds", "parentId", "groupId"]
@@ -737,7 +745,21 @@ export default function ToolPanel({
                 
               case "group_nodes":
                 try {
-                  updatedGraph = groupNodes(args.nodeIds, args.parentId, args.groupId, elkGraph);
+                  // Validate required parameters
+                  if (!args.nodeIds || !Array.isArray(args.nodeIds) || args.nodeIds.length === 0) {
+                    throw new Error(`group_nodes requires 'nodeIds' as a non-empty array, got: ${JSON.stringify(args.nodeIds)}`);
+                  }
+                  if (!args.parentId || typeof args.parentId !== 'string') {
+                    throw new Error(`group_nodes requires 'parentId' as a string, got: ${JSON.stringify(args.parentId)}`);
+                  }
+                  if (!args.groupId || typeof args.groupId !== 'string') {
+                    throw new Error(`group_nodes requires 'groupId' as a string, got: ${JSON.stringify(args.groupId)}`);
+                  }
+                  if (!args.groupIconName || typeof args.groupIconName !== 'string') {
+                    throw new Error(`group_nodes requires 'groupIconName' as a string for proper cloud provider styling, got: ${JSON.stringify(args.groupIconName)}`);
+                  }
+                  
+                  updatedGraph = groupNodes(args.nodeIds, args.parentId, args.groupId, elkGraph, undefined, args.groupIconName);
                   console.log("Updated graph after group_nodes:", updatedGraph);
                   setElkGraph(updatedGraph);
                   
@@ -923,7 +945,7 @@ export default function ToolPanel({
                               throw new Error(`Node '${nodeId}' not found for group_nodes operation`);
                             }
                           }
-                          updatedGraph = groupNodes(opArgs.nodeIds, opArgs.parentId, opArgs.groupId, updatedGraph);
+                          updatedGraph = groupNodes(opArgs.nodeIds, opArgs.parentId, opArgs.groupId, updatedGraph, undefined, opArgs.groupIconName);
                           results.push({ operation: i, name, status: "success" });
                           break;
                           

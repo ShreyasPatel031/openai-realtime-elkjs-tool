@@ -5,9 +5,9 @@ export const exampleArchitectureBuild = `/* ───────── 1. root 
 batch_update({
   operations: [
     { name:"add_node", nodename:"users", parentId:"root",
-      data:{ label:"End-Users", icon:"browser_client", style:"GREEN" } },
+      data:{ label:"End-Users", icon:"browser_client", groupIcon:"gcp_user_default" } },
     { name:"add_node", nodename:"gcp", parentId:"root",
-      data:{ label:"Google Cloud Platform", icon:"gcp_logo", style:"BLUE" } }
+      data:{ label:"Google Cloud Platform", icon:"gcp_logo", groupIcon:"gcp_system" } }
   ]
 })
 
@@ -15,9 +15,9 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"web_user",   parentId:"users",
-      data:{ label:"Web",    icon:"browser_client", style:"GREEN" } },
+      data:{ label:"Web",    icon:"browser_client", groupIcon:"gcp_user_default" } },
     { name:"add_node", nodename:"mobile_user",parentId:"users",
-      data:{ label:"Mobile", icon:"mobile_app",     style:"GREEN" } }
+      data:{ label:"Mobile", icon:"mobile_app",     groupIcon:"gcp_user_default" } }
   ]
 })
 
@@ -25,13 +25,13 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"edge", parentId:"gcp",
-      data:{ label:"Edge & CDN", icon:"gcp_cloud_cdn", style:"YELLOW" } },
+      data:{ label:"Edge & CDN", icon:"gcp_cloud_cdn", groupIcon:"gcp_external_infrastructure_1st_party" } },
     { name:"add_node", nodename:"cloud_cdn", parentId:"edge",
-      data:{ label:"Cloud CDN", icon:"gcp_cloud_cdn", style:"YELLOW" } },
+      data:{ label:"Cloud CDN", icon:"gcp_cloud_cdn", groupIcon:"gcp_external_infrastructure_1st_party" } },
     { name:"add_node", nodename:"lb_https", parentId:"edge",
-      data:{ label:"HTTPS LB", icon:"load_balancer_generic", style:"YELLOW" } },
+      data:{ label:"HTTPS LB", icon:"load_balancer_generic", groupIcon:"gcp_external_infrastructure_1st_party" } },
     { name:"add_node", nodename:"cloud_armor", parentId:"edge",
-      data:{ label:"Cloud Armor", icon:"gcp_cloud_armor", style:"YELLOW" } }
+      data:{ label:"Cloud Armor", icon:"gcp_cloud_armor", groupIcon:"gcp_external_infrastructure_1st_party" } }
   ]
 })
 
@@ -49,11 +49,11 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"api", parentId:"gcp",
-      data:{ label:"API Gateway + Auth", icon:"api_gateway", style:"PURPLE" } },
+      data:{ label:"API Gateway + Auth", icon:"api_gateway", groupIcon:"gcp_infrastructure_system" } },
     { name:"add_node", nodename:"idp", parentId:"api",
-      data:{ label:"Identity Plat.", icon:"gcp_iam", style:"PURPLE" } },
+      data:{ label:"Identity Plat.", icon:"gcp_iam", groupIcon:"gcp_infrastructure_system" } },
     { name:"add_node", nodename:"api_gw", parentId:"api",
-      data:{ label:"API Gateway", icon:"api_gateway", style:"PURPLE" } },
+      data:{ label:"API Gateway", icon:"api_gateway", groupIcon:"gcp_infrastructure_system" } },
     { name:"add_edge", edgeId:"e_idp_gw", sourceId:"idp",     targetId:"api_gw", label:"JWT"   },
     { name:"add_edge", edgeId:"e_lb_api", sourceId:"lb_https", targetId:"api_gw", label:"HTTPS" }
   ]
@@ -63,13 +63,13 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"backend", parentId:"gcp",
-      data:{ label:"Backend Svcs", icon:"gcp_cloud_run", style:"GREY" } },
+      data:{ label:"Backend Svcs", icon:"gcp_cloud_run", groupIcon:"gcp_logical_grouping_services_instances" } },
     { name:"add_node", nodename:"order_svc",  parentId:"backend",
-      data:{ label:"Order",   icon:"gcp_cloud_run", style:"GREY" } },
+      data:{ label:"Order",   icon:"gcp_cloud_run", groupIcon:"gcp_logical_grouping_services_instances" } },
     { name:"add_node", nodename:"risk_svc",   parentId:"backend",
-      data:{ label:"Risk",    icon:"gcp_cloud_run", style:"GREY" } },
+      data:{ label:"Risk",    icon:"gcp_cloud_run", groupIcon:"gcp_logical_grouping_services_instances" } },
     { name:"add_node", nodename:"catalog_svc",parentId:"backend",
-      data:{ label:"Catalog", icon:"gcp_cloud_run", style:"GREY" } }
+      data:{ label:"Catalog", icon:"gcp_cloud_run", groupIcon:"gcp_logical_grouping_services_instances" } }
   ]
 })
 
@@ -86,9 +86,9 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"cache", parentId:"gcp",
-      data:{ label:"Redis Cache", icon:"cache_redis", style:"GREEN" } },
+      data:{ label:"Redis Cache", icon:"cache_redis", groupIcon:"gcp_infrastructure_system" } },
     { name:"add_node", nodename:"redis", parentId:"cache",
-      data:{ label:"Memorystore", icon:"cache_redis", style:"GREEN" } },
+      data:{ label:"Memorystore", icon:"cache_redis", groupIcon:"gcp_infrastructure_system" } },
     { name:"add_edge", edgeId:"e_order_cache", sourceId:"order_svc", targetId:"redis", label:"session" }
   ]
 })
@@ -97,11 +97,11 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"data", parentId:"gcp",
-      data:{ label:"Data Stores", icon:"gcp_spanner", style:"GREEN" } },
+      data:{ label:"Data Stores", icon:"gcp_spanner", groupIcon:"gcp_infrastructure_system" } },
     { name:"add_node", nodename:"spanner", parentId:"data",
-      data:{ label:"Spanner", icon:"gcp_spanner", style:"GREEN" } },
+      data:{ label:"Spanner", icon:"gcp_spanner", groupIcon:"gcp_infrastructure_system" } },
     { name:"add_node", nodename:"firestore", parentId:"data",
-      data:{ label:"Firestore", icon:"gcp_firestore", style:"GREEN" } }
+      data:{ label:"Firestore", icon:"gcp_firestore", groupIcon:"gcp_infrastructure_system" } }
   ]
 })
 
@@ -119,13 +119,13 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"orchestration", parentId:"gcp",
-      data:{ label:"Workflows", icon:"gcp_workflows", style:"PURPLE" } },
+      data:{ label:"Workflows", icon:"gcp_workflows", groupIcon:"gcp_infrastructure_system" } },
     { name:"add_node", nodename:"workflows", parentId:"orchestration",
-      data:{ label:"Workflows", icon:"gcp_workflows", style:"PURPLE" } },
+      data:{ label:"Workflows", icon:"gcp_workflows", groupIcon:"gcp_infrastructure_system" } },
     { name:"add_node", nodename:"eventarc", parentId:"orchestration",
-      data:{ label:"Eventarc", icon:"gcp_eventarc", style:"PURPLE" } },
+      data:{ label:"Eventarc", icon:"gcp_eventarc", groupIcon:"gcp_infrastructure_system" } },
     { name:"add_node", nodename:"cloud_tasks", parentId:"orchestration",
-      data:{ label:"Cloud Tasks", icon:"gcp_cloud_tasks", style:"PURPLE" } },
+      data:{ label:"Cloud Tasks", icon:"gcp_cloud_tasks", groupIcon:"gcp_infrastructure_system" } },
     { name:"add_edge", edgeId:"e_order_flow", sourceId:"order_svc", targetId:"workflows", label:"invoke" },
     { name:"add_edge", edgeId:"e_flow_risk",  sourceId:"workflows", targetId:"risk_svc",  label:"branch" }
   ]
@@ -135,11 +135,11 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"messaging", parentId:"gcp",
-      data:{ label:"Pub/Sub", icon:"gcp_pubsub", style:"YELLOW" } },
+      data:{ label:"Pub/Sub", icon:"gcp_pubsub", groupIcon:"gcp_external_infrastructure_1st_party" } },
     { name:"add_node", nodename:"order_topic", parentId:"messaging",
-      data:{ label:"order-topic", icon:"gcp_pubsub", style:"YELLOW" } },
+      data:{ label:"order-topic", icon:"gcp_pubsub", groupIcon:"gcp_external_infrastructure_1st_party" } },
     { name:"add_node", nodename:"dlq_topic", parentId:"messaging",
-      data:{ label:"DLQ", icon:"message_queue", style:"YELLOW" } }
+      data:{ label:"DLQ", icon:"message_queue", groupIcon:"gcp_external_infrastructure_1st_party" } }
   ]
 })
 
@@ -155,15 +155,15 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"monitoring", parentId:"gcp",
-      data:{ label:"Monitoring", icon:"gcp_cloud_monitoring", style:"GREY" } },
+      data:{ label:"Monitoring", icon:"gcp_cloud_monitoring", groupIcon:"gcp_logical_grouping_services_instances" } },
     { name:"add_node", nodename:"cloud_monitoring", parentId:"monitoring",
-      data:{ label:"Monitoring", icon:"gcp_cloud_monitoring", style:"GREY" } },
+      data:{ label:"Monitoring", icon:"gcp_cloud_monitoring", groupIcon:"gcp_logical_grouping_services_instances" } },
     { name:"add_node", nodename:"cloud_logging", parentId:"monitoring",
-      data:{ label:"Logging", icon:"gcp_cloud_logging", style:"GREY" } },
+      data:{ label:"Logging", icon:"gcp_cloud_logging", groupIcon:"gcp_logical_grouping_services_instances" } },
     { name:"add_node", nodename:"cloud_trace", parentId:"monitoring",
-      data:{ label:"Trace", icon:"gcp_cloud_trace", style:"GREY" } },
+      data:{ label:"Trace", icon:"gcp_cloud_trace", groupIcon:"gcp_logical_grouping_services_instances" } },
     { name:"add_node", nodename:"profiler", parentId:"monitoring",
-      data:{ label:"Profiler", icon:"gcp_stackdriver_profiler", style:"GREY" } }
+      data:{ label:"Profiler", icon:"gcp_stackdriver_profiler", groupIcon:"gcp_logical_grouping_services_instances" } }
   ]
 })
 
@@ -171,11 +171,11 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"external", parentId:"root",
-      data:{ label:"External APIs", icon:"third_party_api", style:"GREY" } },
+      data:{ label:"External APIs", icon:"third_party_api", groupIcon:"gcp_external_saas_providers" } },
     { name:"add_node", nodename:"payment_gateway", parentId:"external",
-      data:{ label:"Payment GW", icon:"payment_gateway", style:"GREY" } },
+      data:{ label:"Payment GW", icon:"payment_gateway", groupIcon:"gcp_external_saas_providers" } },
     { name:"add_node", nodename:"email_svc", parentId:"external",
-      data:{ label:"Email", icon:"notification_service", style:"GREY" } },
+      data:{ label:"Email", icon:"notification_service", groupIcon:"gcp_external_saas_providers" } },
     { name:"add_edge", edgeId:"e_payment", sourceId:"order_svc", targetId:"payment_gateway", label:"charge" },
     { name:"add_edge", edgeId:"e_email",   sourceId:"workflows", targetId:"email_svc",      label:"notify" }
   ]
@@ -213,7 +213,7 @@ ARCHITECTURE BUILDING PROCESS:
 STEP 1: Create first logical group using batch_update with ALL nodes and edges for that group
 STEP 2: Create second logical group using batch_update with ALL nodes and edges for that group  
 STEP 3: Continue until ALL requirements are satisfied - each logical group complete in one batch_update
-STEP 4: **FINAL VALIDATION** - Call display_elk_graph() to show completed architecture, verify all requirements are met and all connections are done, then close
+STEP 4: * can you call*FINAL VALIDATION** - Call display_elk_graph() to show completed architecture, verify all requirements are met and all connections are done, then close
 
 LOGICAL GROUPS: frontend, backend, api, auth, compute, cache, data_plane, control_plane, storage, messaging, observability, security, devops, third_party, networking, orchestration, database, eventing, ml_ops, cdn, load_balancing, identity, monitoring, tracing, logging, queueing, scheduler, workflow, etl_pipeline, feature_flags, rate_limiting, testing, ci_cd, secrets_management, configuration, analytics, billing, notifications
 
@@ -244,6 +244,54 @@ You can only interact with the system by calling the following functions:
 
 ## Example Architecture Build Process:
 ${exampleArchitectureBuild}
+`;
+
+export const agentInstruction = `
+ARCHITECTURE DESIGN GUIDELINES:
+
+## GROUP ICON STYLING SYSTEM
+Use group icons instead of old color styles for proper cloud provider theming:
+
+### AWS Group Icons (Border-only styling):
+- aws_vpc: Purple borders for VPC containers
+- aws_region: Teal borders for AWS regions and data stores
+- aws_account: Pink borders for AWS accounts
+- aws_auto_scaling_group: Orange borders for scaling groups
+
+### GCP Group Icons (Filled backgrounds):
+- gcp_system: Light gray for general system grouping (NEUTRAL DEFAULT)
+- gcp_user_default: White backgrounds for user-facing components
+- gcp_infrastructure_system: Light green for infrastructure services (APIs, workflows)
+- gcp_logical_grouping_services_instances: Pink for service groupings (microservices, monitoring)
+- gcp_external_saas_providers: Purple for external SaaS integrations
+- gcp_external_infrastructure_1st_party: Yellow for CDN/edge services and messaging
+
+### Azure Group Icons (Both filled and border variants):
+- azure_subscription_filled: Light blue backgrounds
+- azure_resource_group_filled: Gray backgrounds
+- azure_virtual_network_filled: Light blue for networks
+
+## ARCHITECTURE RULES
+1. **Group Containers**: Use group_nodes with required groupIconName for logical organization
+   Example: groupIconName: "gcp_system" - this will apply light gray background for neutral grouping.
+
+2. **Cloud Provider Alignment**: Match group icons to the cloud provider being used
+   - AWS architectures: Use aws_* group icons
+   - GCP architectures: Use gcp_* group icons  
+   - Azure architectures: Use azure_* group icons
+
+3. **Logical Hierarchy**: Structure as Frontend → API Gateway → Services → Data → Infrastructure
+
+FUNCTION USAGE:
+- add_node(nodename, parentId, { label: "Display Label", icon: "icon_name", groupIcon: "gcp_system" }): Add a component under a parent container. You cannot add a node if parentId does not exist.
+- delete_node(nodeId): Remove a node and its connections.
+- move_node(nodeId, newParentId): Move a node to a different parent. If moving into a leaf node, auto-creates neutral group with gcp_system.
+- add_edge(edgeId, sourceId, targetId, label): Connect two nodes with optional label.
+- delete_edge(edgeId): Remove a connection.
+- group_nodes(nodeIds, parentId, groupId, groupIconName): Create a new container with group icon and move specified nodes into it. groupIconName is REQUIRED.
+- remove_group(groupId): Dissolve a group and move children to parent.
+
+CRITICAL: Always use groupIconName parameter for group_nodes - it's required for proper visual theming!
 `;
 
 export { availableIconsPrefixed as availableIcons }; 

@@ -58,16 +58,30 @@ export class StreamExecutor {
       this.elkGraphRef.current = this.options.elkGraph;
       
       // Get conversation data if available
-      const conversationData = (window as any).chatConversationData || "";
+      let conversationData = (window as any).chatConversationData || "";
+      
+      // Debug what conversation data we're using
+      console.log("🔍 DEBUG: Retrieved conversation data:", conversationData);
+      console.log("🔍 DEBUG: Conversation data length:", conversationData.length);
+      
+      // Clear any potentially cached fake data
+      if (conversationData.includes('Which GCP services do you plan to use') || 
+          conversationData.includes('Dataflow. Cloud Storage. Web applications')) {
+        console.warn("⚠️ Detected fake/cached conversation data, clearing it");
+        (window as any).chatConversationData = "";
+        conversationData = "";
+      }
       
       // Build payload with conversation data or default architecture
       let userContent = "";
       if (conversationData.trim()) {
         userContent = `${conversationData}
 
-Build a complete architecture following these requirements. Use appropriate groups and styling:
-- Groups: "frontend", "api_gateway", "services", "data", "infrastructure" 
-- Styles: "GREEN", "PURPLE", "BLUE", "TEAL", "GREY"
+Build a complete architecture following these requirements using proper group icon theming:
+- Available Group Icons: Use groupIconName parameter for all group_nodes operations
+- AWS: aws_vpc, aws_region, aws_account for AWS-based architectures
+- GCP: gcp_system (neutral), gcp_user_default (frontend), gcp_infrastructure_system (APIs), gcp_logical_grouping_services_instances (services), gcp_external_saas_providers (external)
+- Azure: azure_subscription_filled, azure_resource_group_filled for Azure architectures
 
 EXECUTION STEPS:
 1. First call display_elk_graph() to see current state
@@ -81,37 +95,6 @@ Remember: Do NOT acknowledge or explain. Just execute the functions.`;
 
 IMPORTANT: Call display_elk_graph() first to see the current state, then build the architecture step by step.
 
-Required Architecture Components:
-
-1. Frontend Layer (group: "frontend", style: "GREEN")
-   - web_app: React Web Application
-   - mobile_app: Mobile Application
-   - admin_portal: Admin Dashboard
-
-2. API Gateway Layer (group: "api_gateway", style: "PURPLE")
-   - api_gw: Main API Gateway
-   - auth_service: Authentication Service
-   - rate_limiter: Rate Limiting Service
-   
-3. Business Services (group: "services", style: "BLUE")
-   - order_service: Order Management
-   - product_service: Product Catalog
-   - user_service: User Management
-   - payment_service: Payment Processing
-   - inventory_service: Inventory Management
-
-4. Data Layer (group: "data", style: "TEAL")
-   - postgres_orders: PostgreSQL for Orders
-   - mongodb_products: MongoDB for Products
-   - redis_cache: Redis Cache
-   - elasticsearch: Search Index
-
-5. Infrastructure (group: "infrastructure", style: "GREY")
-   - load_balancer: Load Balancer
-   - cdn: Content Delivery Network
-   - message_queue: RabbitMQ/Kafka
-   - monitoring: Monitoring Service
-
 EXECUTION STEPS:
 1. First call display_elk_graph() to see current state
 2. Use batch_update to create each group with ALL its nodes
@@ -123,6 +106,8 @@ Example edge relationships:
 - API Gateway → Business Services
 - Business Services → Data Layer
 - All components → Infrastructure services
+
+CRITICAL: Always specify groupIconName parameter for group_nodes operations - it's required for proper visual theming!
 
 Remember: Do NOT acknowledge or explain. Just execute the functions.`;
       }

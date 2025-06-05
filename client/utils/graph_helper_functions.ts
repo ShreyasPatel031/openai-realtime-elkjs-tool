@@ -312,7 +312,9 @@ export function groupNodes(
   nodeIds: string[],
   parentId: string,
   groupId: string,
-  layout: ElkNode
+  layout: ElkNode,
+  style?: any,
+  groupIconName?: string
 ): ElkNode {
   const parent = findNodeById(layout, parentId);
   if (!parent || !parent.children) {
@@ -325,6 +327,16 @@ export function groupNodes(
     labels: [{ text: groupId }],
     children: [],
     edges: []
+  };
+  
+  // Always add group icon data - use provided groupIconName or fallback to neutral
+  const finalGroupIconName = groupIconName || 'gcp_system'; // Default to neutral gray
+  
+  (groupNode as any).data = {
+    label: groupId,
+    groupIcon: finalGroupIconName,
+    // Only include legacy style if no group icon provided (backward compatibility)
+    ...(style && !groupIconName && { style })
   };
   
   // Find and move the specified nodes into the new group
@@ -403,6 +415,18 @@ export function batchUpdate(
   operations: Array<{name: string, args?: any, [key: string]: any}>,
   layout: ElkNode
 ): ElkNode {
+  // Validate operations parameter
+  if (!operations) {
+    throw new Error(`batchUpdate requires 'operations' parameter, got: ${operations}`);
+  }
+  if (!Array.isArray(operations)) {
+    throw new Error(`batchUpdate requires 'operations' to be an array, got: ${typeof operations} - ${JSON.stringify(operations)}`);
+  }
+  if (operations.length === 0) {
+    console.warn(`batchUpdate called with empty operations array`);
+    return layout;
+  }
+  
   let updatedLayout = { ...layout };
   
   for (const operation of operations) {
@@ -471,7 +495,10 @@ export function batchUpdate(
         if (!params.groupId || typeof params.groupId !== 'string') {
           throw new Error(`group_nodes requires 'groupId' as a string, got: ${JSON.stringify(params.groupId)}`);
         }
-        updatedLayout = groupNodes(params.nodeIds, params.parentId, params.groupId, updatedLayout);
+        if (!params.groupIconName || typeof params.groupIconName !== 'string') {
+          throw new Error(`group_nodes requires 'groupIconName' as a string for proper cloud provider styling, got: ${JSON.stringify(params.groupIconName)}`);
+        }
+        updatedLayout = groupNodes(params.nodeIds, params.parentId, params.groupId, updatedLayout, undefined, params.groupIconName);
         break;
         
       case "remove_group":

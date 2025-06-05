@@ -1,5 +1,11 @@
 import { chunkTools } from "../utils/splitTools.js";
 
+// Import dynamic agent resources generated at build time
+import { 
+  availableGroupIcons, 
+  groupIconInstructions 
+} from "../generated/dynamicAgentResources";
+
 export const allTools = [
   {
     type: "function",
@@ -86,30 +92,10 @@ export const allTools = [
               type: "string",
               description: "Icon name to display for the node (e.g., 'browser_client', 'mobile_app', 'cloud_cdn', etc.)"
             },
-            style: {
-              type: ["object", "string"],
-              description: "Style for the node. Can be a predefined style name (GREEN, BLUE, YELLOW, PURPLE, TEAL, GREY) or a custom style object.",
-              oneOf: [
-                {
-                  type: "string",
-                  enum: ["GREEN", "BLUE", "YELLOW", "PURPLE", "TEAL", "GREY"],
-                  description: "Predefined style name"
-                },
-                {
-                  type: "object",
-                  properties: {
-                    bg: {
-                      type: "string",
-                      description: "Background color"
-                    },
-                    border: {
-                      type: "string",
-                      description: "Border color"
-                    }
-                  },
-                  description: "Custom style object"
-                }
-              ]
+            groupIcon: {
+              type: "string",
+              description: "Group icon name for visual theming with proper cloud provider colors. Use group icons for logical containers.",
+              enum: availableGroupIcons
             }
           }
         }
@@ -135,7 +121,7 @@ export const allTools = [
   {
     type: "function",
     name: "move_node",
-    description: "Moves a node from one parent to another and updates edge attachments",
+    description: "Moves a node from one parent to another and updates edge attachments. IMPORTANT: When moving a node into a leaf node (node with no children), an automatic neutral group will be created containing both nodes using 'gcp_system' group icon.",
     parameters: {
       type: "object",
       properties: {
@@ -196,7 +182,7 @@ export const allTools = [
   {
     type: "function",
     name: "group_nodes",
-    description: "Creates a new group node and moves specified nodes into it",
+    description: `Creates a new group node and moves specified nodes into it with group icon styling for proper cloud provider theming. ${groupIconInstructions}`,
     parameters: {
       type: "object",
       properties: {
@@ -213,13 +199,13 @@ export const allTools = [
           type: "string",
           description: "ID/name for the new group node"
         },
-        style: {
+        groupIconName: {
           type: "string",
-          description: "Style color scheme for the group (e.g., 'GREEN', 'BLUE', 'YELLOW', 'PURPLE', 'TEAL', 'GREY'). These correspond to predefined color schemes in the application.",
-          enum: ["GREEN", "BLUE", "YELLOW", "PURPLE", "TEAL", "GREY"]
+          description: "Group icon name for visual theming and background colors. REQUIRED for proper cloud provider styling. Choose appropriate provider icon (aws_, gcp_, azure_).",
+          enum: availableGroupIcons
         }
       },
-      required: ["nodeIds", "parentId", "groupId"]
+      required: ["nodeIds", "parentId", "groupId", "groupIconName"]
     }
   },
   {
@@ -293,53 +279,18 @@ export const allTools = [
                 type: "string",
                 description: "For group_nodes or remove_group: ID of the group"
               },
-              label: {
+              groupIconName: {
                 type: "string",
-                description: "For add_edge: Optional descriptive label for the edge"
-              },
-              style: {
-                type: "string",
-                description: "For group_nodes: Style color scheme for the group (GREEN, BLUE, YELLOW, PURPLE, TEAL, GREY). These correspond to predefined color schemes in the application.",
-                enum: ["GREEN", "BLUE", "YELLOW", "PURPLE", "TEAL", "GREY"]
+                description: "For group_nodes: REQUIRED group icon name for proper cloud provider styling",
+                enum: availableGroupIcons
               },
               data: {
                 type: "object",
-                description: "For add_node: Additional data for the node",
-                properties: {
-                  label: {
-                    type: "string",
-                    description: "Display label for the node (defaults to nodename if not provided)"
-                  },
-                  icon: {
-                    type: "string",
-                    description: "Icon name to display for the node (e.g., 'browser_client', 'mobile_app', 'cloud_cdn', etc.)"
-                  },
-                  style: {
-                    type: ["object", "string"],
-                    description: "Style for the node. Can be a predefined style name (GREEN, BLUE, YELLOW, PURPLE, TEAL, GREY) or a custom style object.",
-                    oneOf: [
-                      {
-                        type: "string",
-                        enum: ["GREEN", "BLUE", "YELLOW", "PURPLE", "TEAL", "GREY"],
-                        description: "Predefined style name"
-                      },
-                      {
-                        type: "object",
-                        properties: {
-                          bg: {
-                            type: "string",
-                            description: "Background color"
-                          },
-                          border: {
-                            type: "string",
-                            description: "Border color"
-                          }
-                        },
-                        description: "Custom style object"
-                      }
-                    ]
-                  }
-                }
+                description: "For add_node: Additional node data including groupIcon"
+              },
+              label: {
+                type: "string",
+                description: "For add_edge: Optional edge label"
               }
             },
             required: ["name"]

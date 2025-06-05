@@ -8,6 +8,16 @@ let globalChatMessages: any[] = [];
 let globalSelectedOptions: Record<string, string | string[]> = {};
 
 /**
+ * Clear all cached conversation data and reset global variables
+ */
+export const clearCachedConversationData = () => {
+  globalChatMessages = [];
+  globalSelectedOptions = {};
+  (window as any).chatConversationData = "";
+  console.log("🧹 Cleared all cached conversation data");
+};
+
+/**
  * Store chat messages and selected options for use by StreamExecutor
  */
 export const storeChatData = (messages: any[], selectedOptions: Record<string, string | string[]>) => {
@@ -35,6 +45,10 @@ export const process_user_requirements = (elkGraph?: any, setElkGraph?: (graph: 
     const questions: string[] = [];
     const answers: string[] = [];
     
+    // Debug: Show what we're starting with
+    console.log("🔍 DEBUG: Global chat messages:", globalChatMessages.length, globalChatMessages);
+    console.log("🔍 DEBUG: Global selected options:", Object.keys(globalSelectedOptions).length, globalSelectedOptions);
+    
     // Process stored messages
     globalChatMessages.forEach(message => {
       if (message.sender === 'user' || message.sender === 'assistant') {
@@ -61,6 +75,11 @@ export const process_user_requirements = (elkGraph?: any, setElkGraph?: (graph: 
         }
       }
     });
+    
+    // Debug: Show what we collected
+    console.log("🔍 DEBUG: Collected requirements:", requirements);
+    console.log("🔍 DEBUG: Collected questions:", questions);
+    console.log("🔍 DEBUG: Collected answers:", answers);
     
     // Build conversation summary
     if (requirements.length > 0 || questions.length > 0 || answers.length > 0) {

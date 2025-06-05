@@ -2,11 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { Handle, Position } from 'reactflow';
 import { baseHandleStyle } from './graph/handles';
 import { getStyle } from './graph/styles';
+import { getGroupIconHex, allGroupIcons } from '../generated/groupIconColors';
 
 interface GroupNodeProps {
   data: {
     label: string;
     icon?: string;
+    groupIcon?: string;  // Add group icon support
     style?: string | {
       bg?: string;
       border?: string;
@@ -70,10 +72,61 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
     }
   }, [data.icon]);
 
-  // Get custom styling using the shared getStyle helper
+  // Get group icon colors if specified
+  const groupIconHex = data.groupIcon ? getGroupIconHex(data.groupIcon) : null;
+  
+  // Debug logging for group icon styling
+  console.log(`🎨 GroupNode ${id} - groupIcon: ${data.groupIcon}, hex: ${groupIconHex}`);
+  
+  // Get custom styling using the shared getStyle helper, but override with group icon colors
   const resolvedStyle = getStyle(data.style);
-  const customBgColor = resolvedStyle.bg || 'rgba(240, 240, 240, 0.6)';
-  const customBorderColor = resolvedStyle.border || (selected ? '#6c757d' : '#999');
+  
+  // Default colors for better visibility
+  const defaultColors = {
+    gcp: '#4285f4',     // Google Blue
+    aws: '#ff9900',     // AWS Orange  
+    azure: '#0078d4',   // Azure Blue
+    neutral: '#6c757d'  // Gray
+  };
+  
+  // Determine cloud provider based on group icon or node id
+  const getCloudProvider = () => {
+    if (data.groupIcon?.startsWith('gcp_')) return 'gcp';
+    if (data.groupIcon?.startsWith('aws_')) return 'aws';
+    if (data.groupIcon?.startsWith('azure_')) return 'azure';
+    if (id.includes('gcp') || id.includes('google')) return 'gcp';
+    if (id.includes('aws') || id.includes('amazon')) return 'aws';
+    if (id.includes('azure') || id.includes('microsoft')) return 'azure';
+    return 'neutral';
+  };
+  
+  const cloudProvider = getCloudProvider();
+  const fallbackColor = defaultColors[cloudProvider];
+  
+  // If we have a group icon, use its color as the background
+  let customBgColor = resolvedStyle.bg || 'rgba(240, 240, 240, 0.6)';
+  let customBorderColor = resolvedStyle.border || (selected ? '#6c757d' : fallbackColor);
+  
+  if (groupIconHex && data.groupIcon) {
+    // Find the group icon data to check if it's filled
+    const groupIconData = allGroupIcons.find(icon => icon.name === data.groupIcon);
+    
+    console.log(`🎨 GroupNode ${id} - found groupIconData:`, groupIconData);
+    
+    if (groupIconData && groupIconData.fill) {
+      // For filled group icons, use the hex color as background with transparency
+      customBgColor = `${groupIconHex}80`; // 50% opacity
+      customBorderColor = groupIconHex;
+      console.log(`🎨 GroupNode ${id} - applying FILLED styling: bg=${customBgColor}, border=${customBorderColor}`);
+    } else {
+      // For border-only group icons, use the hex color as border only
+      customBgColor = 'rgba(255, 255, 255, 0.1)'; // Very light background
+      customBorderColor = groupIconHex;
+      console.log(`🎨 GroupNode ${id} - applying BORDER styling: bg=${customBgColor}, border=${customBorderColor}`);
+    }
+  } else {
+    console.log(`🎨 GroupNode ${id} - no group icon styling applied (hex: ${groupIconHex}, groupIcon: ${data.groupIcon})`);
+  }
   
   // Create a more saturated background color for the header based on the group's background
   const headerBgColor = customBgColor.replace(/rgba?\(([^)]+)\)/, (match, values) => {

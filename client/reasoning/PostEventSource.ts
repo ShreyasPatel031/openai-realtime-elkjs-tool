@@ -37,15 +37,13 @@ export const createPostEventSource = (payload: string, prevId?: string): PostEve
   // Start the fetch request
   const startFetch = async () => {
     try {
-      console.log('🔄 Attempting POST request to /stream...');
-      
       // Use JSON format for cleaner API
       const requestBody = JSON.stringify({
         payload: payload,
         ...(prevId && { previous_response_id: prevId })
       });
       
-      console.log('📦 POST body format: JSON, length:', requestBody.length);
+      console.log('🔄 Starting stream...', prevId ? '(follow-up)' : '(initial)');
       
       const response = await fetch('/stream', {
         method: 'POST',
@@ -57,17 +55,8 @@ export const createPostEventSource = (payload: string, prevId?: string): PostEve
         signal: controller.signal,
       });
       
-      console.log(`📡 POST response status: ${response.status} ${response.statusText}`);
-      console.log(`📡 Response headers:`, Object.fromEntries(response.headers.entries()));
-      
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      // Check if response is actually SSE
-      const responseContentType = response.headers.get('content-type');
-      if (!responseContentType?.includes('text/event-stream')) {
-        console.warn(`⚠️ Unexpected content-type: ${responseContentType}`);
       }
       
       source.readyState = 1; // OPEN
@@ -89,13 +78,12 @@ export const createPostEventSource = (payload: string, prevId?: string): PostEve
         const { done, value } = await reader.read();
         
         if (done) {
-          console.log(`📡 Stream ended after ${messageCount} messages`);
+          console.log(`📡 Stream ended (${messageCount} messages)`);
           source.readyState = 2; // CLOSED
           break;
         }
         
         const chunk = decoder.decode(value, { stream: true });
-        console.log(`📡 Raw chunk received (${chunk.length} chars):`, chunk.substring(0, 200) + '...');
         buffer += chunk;
         
         // Process complete SSE messages
@@ -105,37 +93,43 @@ export const createPostEventSource = (payload: string, prevId?: string): PostEve
         for (const line of lines) {
           if (line.trim() === '') continue; // Skip empty lines
           
-          console.log(`📡 Processing line: "${line}"`);
-          
           if (line.startsWith('data: ')) {
             const data = line.slice(6);
             if (data === '[DONE]') {
-              console.log('📡 Received [DONE] marker');
+              console.log('📡 [DONE] marker received');
               continue;
             }
             
             messageCount++;
-            console.log(`📨 Received message ${messageCount}:`, data.substring(0, 100) + '...');
+            
+            // Only log function calls and important events, not every message
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.type === 'response.function_call_delta' && parsed.delta?.name) {
+                console.log(`🔧 Function call: ${parsed.delta.name}`);
+              } else if (parsed.type === 'response.done') {
+                console.log('✅ Response completed');
+              } else if (parsed.type === 'error') {
+                console.log('❌ Error:', parsed.error?.message || 'Unknown error');
+              }
+            } catch (e) {
+              // Not JSON or not important, skip logging
+            }
             
             // Dispatch message event
             const messageEvent = new MessageEvent('message', { data });
             source.dispatchEvent(messageEvent);
             if (source.onmessage) source.onmessage.call(source as any, messageEvent);
-          } else if (line.startsWith('event: ') || line.startsWith('id: ') || line.startsWith('retry: ')) {
-            console.log(`📡 SSE metadata: ${line}`);
-          } else {
-            console.log(`📡 Unexpected line format: "${line}"`);
           }
         }
       }
       
     } catch (error) {
-      console.error('❌ POST EventSource error:', error);
+      console.error('❌ Stream error:', error.message || error);
       source.readyState = 2; // CLOSED
       
       // Don't treat AbortError as a real error - it's expected when we close the stream
       if (error.name === 'AbortError') {
-        console.log('📡 Stream closed normally (AbortError expected)');
         return; // Don't dispatch error event for normal closure
       }
       
@@ -158,6 +152,6 @@ export const createGetEventSource = (payload: string, prevId?: string): EventSou
   if (prevId) {
     url += `&previous_response_id=${encodeURIComponent(prevId)}`;
   }
-  console.log(`🔄 Falling back to GET request, URL length: ${url.length}`);
+  console.log(`🔄 Using GET fallback (${url.length} chars)`);
   return new EventSource(url);
 }; 

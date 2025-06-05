@@ -100,7 +100,7 @@ const DevPanel: React.FC<DevPanelProps> = ({
     const updatedGraph = JSON.parse(JSON.stringify(elkGraph));
     
     // Use the mutation function from the imported file
-    const mutatedGraph = addEdge(edgeId, null, sourceId, targetId, updatedGraph);
+    const mutatedGraph = addEdge(edgeId, sourceId, targetId, updatedGraph);
     
     // Pass the updated graph back to the parent
     console.group("[DevPanel] onGraphChange");

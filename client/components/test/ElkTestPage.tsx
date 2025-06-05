@@ -83,8 +83,8 @@ const DEFAULT_GRAPH_DATA: LayoutElkNode = {
       "edges": [
         { "id": "e1", "sources": [ "api" ], "targets": ["lambda" ] },
         { "id": "e2", "sources": [ "query" ], "targets": ["vector" ] },
-        { "id": "e3", "sources": [ "pdf" ], "targets": ["vector" ] },
-        { "id": "e4", "sources": [ "pdf" ], "targets": ["storage" ] },
+        { "id": "e3", "sources": [ "pdf" ], "targets":["vector" ] },
+        { "id": "e4", "sources": [ "pdf" ], "targets":["storage" ] },
         { "id": "e5", "sources": [ "fetch" ], "targets":["storage" ] }
       ]
     },
@@ -262,7 +262,6 @@ export default function ElkTestPage() {
         case 'add':
           updatedGraph = addEdge(
             edgeOperation.edgeId,
-            null,
             edgeOperation.sourceId,
             edgeOperation.targetId,
             currentGraph

@@ -345,7 +345,7 @@ export const moveNode = (nodeId: NodeID, newParentId: NodeID, graph: RawGraph): 
 /**
  * Add an edge between nodes at the common ancestor level
  */
-export const addEdge = (edgeId: EdgeID, containerId: NodeID | null, sourceId: NodeID, targetId: NodeID, graph: RawGraph, label?: string): RawGraph => {
+export const addEdge = (edgeId: EdgeID, sourceId: NodeID, targetId: NodeID, graph: RawGraph, label?: string): RawGraph => {
   console.group(`[mutation] addEdge '${edgeId}' (${sourceId} → ${targetId})${label ? ` with label "${label}"` : ''}`);
   console.time("addEdge");
   
@@ -610,33 +610,74 @@ export const batchUpdate = (operations: Array<{
   for (const operation of operations) {
     const { name, ...args } = operation;
     
+    console.log(`🔍 Processing batch operation '${name}' with args:`, args);
+    
     switch (name) {
       case "add_node":
-        updatedGraph = addNode(args.nodename!, args.parentId!, updatedGraph, args.data);
+        if (!args.nodename || typeof args.nodename !== 'string') {
+          throw new Error(`add_node requires 'nodename' as a string, got: ${JSON.stringify(args.nodename)}`);
+        }
+        if (!args.parentId || typeof args.parentId !== 'string') {
+          throw new Error(`add_node requires 'parentId' as a string, got: ${JSON.stringify(args.parentId)}`);
+        }
+        updatedGraph = addNode(args.nodename, args.parentId, updatedGraph, args.data);
         break;
         
       case "delete_node":
-        updatedGraph = deleteNode(args.nodeId!, updatedGraph);
+        if (!args.nodeId || typeof args.nodeId !== 'string') {
+          throw new Error(`delete_node requires 'nodeId' as a string, got: ${JSON.stringify(args.nodeId)}`);
+        }
+        updatedGraph = deleteNode(args.nodeId, updatedGraph);
         break;
         
       case "move_node":
-        updatedGraph = moveNode(args.nodeId!, args.newParentId!, updatedGraph);
+        if (!args.nodeId || typeof args.nodeId !== 'string') {
+          throw new Error(`move_node requires 'nodeId' as a string, got: ${JSON.stringify(args.nodeId)}`);
+        }
+        if (!args.newParentId || typeof args.newParentId !== 'string') {
+          throw new Error(`move_node requires 'newParentId' as a string, got: ${JSON.stringify(args.newParentId)}`);
+        }
+        updatedGraph = moveNode(args.nodeId, args.newParentId, updatedGraph);
         break;
         
       case "add_edge":
-        updatedGraph = addEdge(args.edgeId!, null, args.sourceId!, args.targetId!, updatedGraph, args.label);
+        if (!args.edgeId || typeof args.edgeId !== 'string') {
+          throw new Error(`add_edge requires 'edgeId' as a string, got: ${JSON.stringify(args.edgeId)}`);
+        }
+        if (!args.sourceId || typeof args.sourceId !== 'string') {
+          throw new Error(`add_edge requires 'sourceId' as a string, got: ${JSON.stringify(args.sourceId)}`);
+        }
+        if (!args.targetId || typeof args.targetId !== 'string') {
+          throw new Error(`add_edge requires 'targetId' as a string, got: ${JSON.stringify(args.targetId)}`);
+        }
+        updatedGraph = addEdge(args.edgeId, args.sourceId, args.targetId, updatedGraph, args.label);
         break;
         
       case "delete_edge":
-        updatedGraph = deleteEdge(args.edgeId!, updatedGraph);
+        if (!args.edgeId || typeof args.edgeId !== 'string') {
+          throw new Error(`delete_edge requires 'edgeId' as a string, got: ${JSON.stringify(args.edgeId)}`);
+        }
+        updatedGraph = deleteEdge(args.edgeId, updatedGraph);
         break;
         
       case "group_nodes":
-        updatedGraph = groupNodes(args.nodeIds!, args.parentId!, args.groupId!, updatedGraph, args.style || args.data?.style);
+        if (!args.nodeIds || !Array.isArray(args.nodeIds) || args.nodeIds.length === 0) {
+          throw new Error(`group_nodes requires 'nodeIds' as a non-empty array, got: ${JSON.stringify(args.nodeIds)}`);
+        }
+        if (!args.parentId || typeof args.parentId !== 'string') {
+          throw new Error(`group_nodes requires 'parentId' as a string, got: ${JSON.stringify(args.parentId)}`);
+        }
+        if (!args.groupId || typeof args.groupId !== 'string') {
+          throw new Error(`group_nodes requires 'groupId' as a string, got: ${JSON.stringify(args.groupId)}`);
+        }
+        updatedGraph = groupNodes(args.nodeIds, args.parentId, args.groupId, updatedGraph, args.style || args.data?.style);
         break;
         
       case "remove_group":
-        updatedGraph = removeGroup(args.groupId!, updatedGraph);
+        if (!args.groupId || typeof args.groupId !== 'string') {
+          throw new Error(`remove_group requires 'groupId' as a string, got: ${JSON.stringify(args.groupId)}`);
+        }
+        updatedGraph = removeGroup(args.groupId, updatedGraph);
         break;
         
       default:

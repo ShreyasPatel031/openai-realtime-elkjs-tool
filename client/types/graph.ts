@@ -3,7 +3,13 @@ import { Node } from "reactflow";
 export type NodeID = string;
 export type EdgeID = string;
 
-export const createNodeID = (name: string): NodeID => name.toLowerCase().replace(/\s+/g, '_');
+export const createNodeID = (name: string): NodeID => {
+  if (typeof name !== 'string' || name === undefined || name === null) {
+    throw new Error(`createNodeID requires a valid string, got: ${typeof name} - ${JSON.stringify(name)}`);
+  }
+  return name.toLowerCase().replace(/\s+/g, '_');
+};
+
 export const createEdgeID = (source: NodeID, target: NodeID): EdgeID => `edge_${source}_to_${target}`;
 
 export interface CustomNode extends Node {

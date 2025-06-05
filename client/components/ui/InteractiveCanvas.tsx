@@ -751,41 +751,41 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             >
               {showStreamViewer ? 'Hide Stream' : 'Show Stream'}
             </button>
-            
-            <button
-              onClick={() => setShowDev((p) => !p)}
-              className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"
-            >
-              {showDev ? 'Hide Dev Panel' : 'Show Dev Panel'}
-            </button>
+          
+          <button
+            onClick={() => setShowDev((p) => !p)}
+            className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"
+          >
+            {showDev ? 'Hide Dev Panel' : 'Show Dev Panel'}
+          </button>
           </div>
           
           <div className="flex items-center gap-2">
-            {/* Visualization Toggle */}
-            <div className="w-36 h-10 flex items-center bg-white rounded-md shadow-sm border border-gray-200 px-3 py-2">
-              <label className="inline-flex items-center cursor-pointer w-full">
-                <div className="relative">
-                  <input
-                    type="checkbox"
-                    className="sr-only peer"
-                    checked={useReactFlow}
-                    onChange={() => handleToggleVisMode(!useReactFlow)}
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                </div>
-                <span className="ml-3 text-sm font-medium text-gray-900">
-                  {useReactFlow ? 'ReactFlow' : 'SVG'}
-                </span>
-              </label>
-            </div>
-            
-            {/* Debug Output Toggle */}
-            <button
-              onClick={() => setShowElkDebug((prev) => !prev)}
-              className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"
-            >
-              {showElkDebug ? 'Hide ELK Data' : 'Show ELK Data'}
-            </button>
+          {/* Visualization Toggle */}
+          <div className="w-36 h-10 flex items-center bg-white rounded-md shadow-sm border border-gray-200 px-3 py-2">
+            <label className="inline-flex items-center cursor-pointer w-full">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={useReactFlow}
+                  onChange={() => handleToggleVisMode(!useReactFlow)}
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </div>
+              <span className="ml-3 text-sm font-medium text-gray-900">
+                {useReactFlow ? 'ReactFlow' : 'SVG'}
+              </span>
+            </label>
+          </div>
+          
+          {/* Debug Output Toggle */}
+          <button
+            onClick={() => setShowElkDebug((prev) => !prev)}
+            className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"
+          >
+            {showElkDebug ? 'Hide ELK Data' : 'Show ELK Data'}
+          </button>
           </div>
         </div>
         

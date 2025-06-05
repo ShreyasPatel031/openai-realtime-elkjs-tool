@@ -110,24 +110,24 @@ export default function App() {
     setIsAgentReady(false);
     
     try {
-      // Get a session token for OpenAI Realtime API
-      const tokenResponse = await fetch("/token");
-      const data = await tokenResponse.json();
-      const EPHEMERAL_KEY = data.client_secret.value;
+    // Get a session token for OpenAI Realtime API
+    const tokenResponse = await fetch("/token");
+    const data = await tokenResponse.json();
+    const EPHEMERAL_KEY = data.client_secret.value;
 
-      // Create RTC client or reuse existing one
-      if (!rtc.current) {
-        rtc.current = new RtcClient(event => {
-          if (!event.timestamp) {
-            event.timestamp = new Date().toLocaleTimeString();
-          }
-          setEvents(prev => [event, ...prev]);
-        });
-      }
-      
-      // Connect the client with model configuration
-      await rtc.current.connect(EPHEMERAL_KEY);
-      setIsSessionActive(true);
+    // Create RTC client or reuse existing one
+    if (!rtc.current) {
+      rtc.current = new RtcClient(event => {
+        if (!event.timestamp) {
+          event.timestamp = new Date().toLocaleTimeString();
+        }
+        setEvents(prev => [event, ...prev]);
+      });
+    }
+    
+    // Connect the client with model configuration
+    await rtc.current.connect(EPHEMERAL_KEY);
+    setIsSessionActive(true);
       
       // Note: isConnecting will be set to false when we receive session.created event
     } catch (error) {

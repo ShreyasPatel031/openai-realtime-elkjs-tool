@@ -194,7 +194,7 @@ describe("ELK JS Layout Operations", () => {
             const sourceParentId = "lambda";
             const targetParentId = "openai";
 
-            layout = moveNode(nodeId, sourceParentId, targetParentId, layout);
+            layout = moveNode(nodeId, targetParentId, layout);
             saveGraphToFile(layout, `move_${nodeId}_from_${sourceParentId}_to_${targetParentId}.json`);
             
             // Check node exists in target parent
@@ -211,7 +211,7 @@ describe("ELK JS Layout Operations", () => {
 
     describe("Edge Operations", () => {
         test("addEdge should create a new edge at the common ancestor", () => {
-            layout = addEdge("newEdge", null, "webapp", "chat_api", layout);
+            layout = addEdge("newEdge", "webapp", "chat_api", layout);
             saveGraphToFile(layout, "add_edge_result.json");
             const edge = findEdgeById(layout, "newEdge");
             expect(edge).not.toBeNull();

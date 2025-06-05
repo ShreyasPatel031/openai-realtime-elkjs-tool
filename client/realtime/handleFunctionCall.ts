@@ -2,35 +2,22 @@
 import { FunctionCall, ClientEvent } from './types';
 import { addUserDecisionToChat, createFollowupQuestionsToChat } from '../utils/chatUtils';
 
-interface MutationHelpers {
+interface Mutations {
   addNode: (nodeName: string, parentId: string, graph: any, data?: { label?: string; icon?: string; style?: any }) => any;
   deleteNode: (nodeId: string, graph: any) => any;
   moveNode: (nodeId: string, newParentId: string, graph: any) => any;
-  addEdge: (edgeId: string, containerId: string | null, sourceId: string, targetId: string, graph: any, label?: string) => any;
+  addEdge: (edgeId: string, sourceId: string, targetId: string, graph: any, label?: string) => any;
   deleteEdge: (edgeId: string, graph: any) => any;
   groupNodes: (nodeIds: string[], parentId: string, groupId: string, graph: any, style?: any) => any;
   removeGroup: (groupId: string, graph: any) => any;
-  batchUpdate: (operations: Array<{
-    name: string;
-    nodename?: string;
-    parentId?: string;
-    nodeId?: string;
-    newParentId?: string;
-    edgeId?: string;
-    sourceId?: string;
-    targetId?: string;
-    nodeIds?: string[];
-    groupId?: string;
-    data?: { label?: string; icon?: string; style?: any };
-    label?: string;
-    style?: any;
-  }>, graph: any) => any;
+  batchUpdate: (operations: any[], graph: any) => any;
+  process_user_requirements?: () => string;
 }
 
 interface FunctionCallHelpers {
   elkGraph: any;
   setElkGraph: (g: any) => void;
-  mutations: MutationHelpers;
+  mutations: Mutations;
   safeSend: (e: ClientEvent) => void;
 }
 
@@ -115,7 +102,7 @@ export function handleFunctionCall(
         break;
         
       case "add_edge":
-        updated = mutations.addEdge(args.edgeId, null, args.sourceId, args.targetId, graphCopy, args.label);
+        updated = mutations.addEdge(args.edgeId, args.sourceId, args.targetId, graphCopy, args.label);
         console.log(`➡️ Added edge '${args.edgeId}' from '${args.sourceId}' to '${args.targetId}'`);
         break;
         
@@ -125,6 +112,19 @@ export function handleFunctionCall(
         break;
         
       case "group_nodes":
+        console.log('🔍 group_nodes arguments received:', args);
+        
+        // Validate required parameters before calling the function
+        if (!args.nodeIds || !Array.isArray(args.nodeIds) || args.nodeIds.length === 0) {
+          throw new Error(`group_nodes requires 'nodeIds' as a non-empty array, got: ${JSON.stringify(args.nodeIds)}`);
+        }
+        if (!args.parentId || typeof args.parentId !== 'string') {
+          throw new Error(`group_nodes requires 'parentId' as a string, got: ${JSON.stringify(args.parentId)}`);
+        }
+        if (!args.groupId || typeof args.groupId !== 'string') {
+          throw new Error(`group_nodes requires 'groupId' as a string, got: ${JSON.stringify(args.groupId)}`);
+        }
+        
         updated = mutations.groupNodes(args.nodeIds, args.parentId, args.groupId, graphCopy, args.style);
         console.log(`📦 Grouped nodes [${args.nodeIds.join(', ')}] into '${args.groupId}' under '${args.parentId}'`);
         break;

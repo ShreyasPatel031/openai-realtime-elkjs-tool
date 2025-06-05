@@ -254,13 +254,12 @@ export function moveNode(
 //
 
 /**
- * addEdge(edgeId, parentId, sourceId, targetId)
+ * addEdge(edgeId, sourceId, targetId)
  * Adds a new edge between two nodes.
  * The edge will be attached at the common ancestor.
  */
 export function addEdge(
   edgeId: string,
-  parentId: string | null,  // kept for interface consistency, not used directly
   sourceId: string,
   targetId: string,
   layout: ElkNode
@@ -412,28 +411,76 @@ export function batchUpdate(
     // Support both formats: {name, args: {...}} and {name, param1, param2, ...}
     const params = operation.args || operation;
     
+    console.log(`🔍 Processing helper batch operation '${name}' with params:`, params);
+    
     switch (name) {
       case "add_node":
+        if (!params.nodename || typeof params.nodename !== 'string') {
+          throw new Error(`add_node requires 'nodename' as a string, got: ${JSON.stringify(params.nodename)}`);
+        }
+        if (!params.parentId || typeof params.parentId !== 'string') {
+          throw new Error(`add_node requires 'parentId' as a string, got: ${JSON.stringify(params.parentId)}`);
+        }
         updatedLayout = addNode(params.nodename, params.parentId, updatedLayout, params.data);
         break;
+        
       case "delete_node":
+        if (!params.nodeId || typeof params.nodeId !== 'string') {
+          throw new Error(`delete_node requires 'nodeId' as a string, got: ${JSON.stringify(params.nodeId)}`);
+        }
         updatedLayout = deleteNode(params.nodeId, updatedLayout);
         break;
+        
       case "move_node":
+        if (!params.nodeId || typeof params.nodeId !== 'string') {
+          throw new Error(`move_node requires 'nodeId' as a string, got: ${JSON.stringify(params.nodeId)}`);
+        }
+        if (!params.newParentId || typeof params.newParentId !== 'string') {
+          throw new Error(`move_node requires 'newParentId' as a string, got: ${JSON.stringify(params.newParentId)}`);
+        }
         updatedLayout = moveNode(params.nodeId, params.newParentId, updatedLayout);
         break;
+        
       case "add_edge":
-        updatedLayout = addEdge(params.edgeId, null, params.sourceId, params.targetId, updatedLayout);
+        if (!params.edgeId || typeof params.edgeId !== 'string') {
+          throw new Error(`add_edge requires 'edgeId' as a string, got: ${JSON.stringify(params.edgeId)}`);
+        }
+        if (!params.sourceId || typeof params.sourceId !== 'string') {
+          throw new Error(`add_edge requires 'sourceId' as a string, got: ${JSON.stringify(params.sourceId)}`);
+        }
+        if (!params.targetId || typeof params.targetId !== 'string') {
+          throw new Error(`add_edge requires 'targetId' as a string, got: ${JSON.stringify(params.targetId)}`);
+        }
+        updatedLayout = addEdge(params.edgeId, params.sourceId, params.targetId, updatedLayout);
         break;
+        
       case "delete_edge":
+        if (!params.edgeId || typeof params.edgeId !== 'string') {
+          throw new Error(`delete_edge requires 'edgeId' as a string, got: ${JSON.stringify(params.edgeId)}`);
+        }
         updatedLayout = deleteEdge(params.edgeId, updatedLayout);
         break;
+        
       case "group_nodes":
+        if (!params.nodeIds || !Array.isArray(params.nodeIds) || params.nodeIds.length === 0) {
+          throw new Error(`group_nodes requires 'nodeIds' as a non-empty array, got: ${JSON.stringify(params.nodeIds)}`);
+        }
+        if (!params.parentId || typeof params.parentId !== 'string') {
+          throw new Error(`group_nodes requires 'parentId' as a string, got: ${JSON.stringify(params.parentId)}`);
+        }
+        if (!params.groupId || typeof params.groupId !== 'string') {
+          throw new Error(`group_nodes requires 'groupId' as a string, got: ${JSON.stringify(params.groupId)}`);
+        }
         updatedLayout = groupNodes(params.nodeIds, params.parentId, params.groupId, updatedLayout);
         break;
+        
       case "remove_group":
+        if (!params.groupId || typeof params.groupId !== 'string') {
+          throw new Error(`remove_group requires 'groupId' as a string, got: ${JSON.stringify(params.groupId)}`);
+        }
         updatedLayout = removeGroup(params.groupId, updatedLayout);
         break;
+        
       default:
         console.warn(`Unknown operation: ${name}`);
     }

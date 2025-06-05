@@ -2,22 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { Handle, Position } from 'reactflow';
 import { baseHandleStyle } from './graph/handles';
 
-// Use Vite's glob pattern to load all icons at build time
-const modules = (import.meta as any).glob('../assets/canvas/*.(svg|png|jpeg|jpg)', { eager: true });
-
-// Create icons map from the glob results
-const icons: Record<string, string> = {};
-const iconExtensions: Record<string, string> = {};
-
-Object.entries(modules).forEach(([path, module]: [string, any]) => {
-  const match = path.match(/\/([^/]+)\.(svg|png|jpeg|jpg)$/);
-  if (match) {
-    const [, name, ext] = match;
-    icons[name] = module.default;
-    iconExtensions[name] = `.${ext}`;
-  }
-});
-
 interface CustomNodeProps {
   data: {
     label: string;
@@ -39,46 +23,101 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
   const [iconError, setIconError] = useState(false);
   const [finalIconSrc, setFinalIconSrc] = useState<string | undefined>(undefined);
   
-  // Use the icon from the data if it exists in our icons map
-  const iconName = data.icon || '';
-  
   useEffect(() => {
     // Reset states when icon changes
     if (data.icon) {
       setIconLoaded(false);
       setIconError(false);
       
-      // Try loading SVG first
-      const svgSrc = `/assets/canvas/${data.icon}.svg`;
-      const imgSvg = new Image();
-      imgSvg.onload = () => {
-        setFinalIconSrc(svgSrc);
-        setIconLoaded(true);
+      // Function to try loading an icon from different providers and return first successful one
+      const tryLoadIcon = async (iconName: string) => {
+        const providers = ['aws', 'gcp', 'azure'];
+        const categories = [
+          'ai_ml', 'analytics', 'business_apps', 'compute', 'containers', 
+          'database', 'developer_tools', 'end_user_computing', 'iot', 
+          'management', 'networking', 'security', 'storage', 'integration', 
+          'monitoring'
+        ];
+        
+        // Check if icon has provider prefix (e.g., 'aws_lambda')
+        const prefixMatch = iconName.match(/^(aws|gcp|azure)_(.+)$/);
+        if (prefixMatch) {
+          const [, provider, actualIconName] = prefixMatch;
+          // Try the specific provider first
+          for (const category of categories) {
+            const iconPath = `/icons/${provider}/${category}/${actualIconName}.png`;
+            try {
+              const img = new Image();
+              const promise = new Promise((resolve, reject) => {
+                img.onload = () => resolve(iconPath);
+                img.onerror = reject;
+                img.src = iconPath;
+              });
+              const result = await promise;
+              return result as string;
+            } catch {
+              // Continue to next category
+            }
+          }
+        }
+        
+        // Get the actual icon name (remove provider prefix if present)
+        const actualIconName = prefixMatch ? prefixMatch[2] : iconName;
+        
+        // First try legacy path for backward compatibility
+        const legacyPaths = [
+          `/assets/canvas/${actualIconName}.svg`,
+          `/assets/canvas/${actualIconName}.png`,
+          `/assets/canvas/${actualIconName}.jpeg`
+        ];
+        
+        for (const legacyPath of legacyPaths) {
+          try {
+            const legacyImg = new Image();
+            const legacyPromise = new Promise((resolve, reject) => {
+              legacyImg.onload = () => resolve(legacyPath);
+              legacyImg.onerror = reject;
+              legacyImg.src = legacyPath;
+            });
+            const result = await legacyPromise;
+            return result as string;
+          } catch {
+            // Continue to next path
+          }
+        }
+        
+        // Try organized structure (all providers if no prefix, or remaining providers if prefix didn't work)
+        for (const provider of providers) {
+          for (const category of categories) {
+            const iconPath = `/icons/${provider}/${category}/${actualIconName}.png`;
+            try {
+              const img = new Image();
+              const promise = new Promise((resolve, reject) => {
+                img.onload = () => resolve(iconPath);
+                img.onerror = reject;
+                img.src = iconPath;
+              });
+              const result = await promise;
+              return result as string;
+            } catch {
+              // Continue to next path
+            }
+          }
+        }
+        
+        throw new Error(`Icon not found: ${iconName}`);
       };
-      imgSvg.onerror = () => {
-        // Try PNG if SVG fails
-        const pngSrc = `/assets/canvas/${data.icon}.png`;
-        const imgPng = new Image();
-        imgPng.onload = () => {
-          setFinalIconSrc(pngSrc);
+      
+      // Try to load the icon
+      tryLoadIcon(data.icon)
+        .then((path) => {
+          setFinalIconSrc(path);
           setIconLoaded(true);
-        };
-        imgPng.onerror = () => {
-          // If both fail, try JPEG
-          const jpgSrc = `/assets/canvas/${data.icon}.jpeg`;
-          const imgJpg = new Image();
-          imgJpg.onload = () => {
-            setFinalIconSrc(jpgSrc);
-            setIconLoaded(true);
-          };
-          imgJpg.onerror = () => {
-            setIconError(true);
-          };
-          imgJpg.src = jpgSrc;
-        };
-        imgPng.src = pngSrc;
-      };
-      imgSvg.src = svgSrc;
+        })
+        .catch(() => {
+          console.warn(`Failed to load icon: ${data.icon}`);
+          setIconError(true);
+        });
     }
   }, [data.icon]);
   

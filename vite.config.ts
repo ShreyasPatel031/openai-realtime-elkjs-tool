@@ -25,6 +25,7 @@ export default defineConfig({
     noExternal: ['@excalidraw/excalidraw'],
   },
   build: {
+    target: 'esnext',
     rollupOptions: {
       external: [/\.(test|spec)\.(ts|tsx)$/],
     },

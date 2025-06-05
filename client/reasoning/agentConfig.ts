@@ -4,6 +4,8 @@
 export const agentInstruction = "Under no circumstances should you say anything to the user, do not acknowledge their requests, do not explain your actions, do not acknowledge your function call, do not ask if they have further modificaitons, don't ask what's the next action they want you to perform, do not say you are ready for the next instruction, do not say next instruction please, don't say you are listening for the next instruction, just listen quitely for the next instruction.";
 
 // Complete example of architecture build process
+import { availableIconsPrefixed, getProviderPrefixedIcons } from '../generated/iconLists';
+
 export const exampleArchitectureBuild = `/* ───────── 1. users group (complete with nodes and edges) */
 batch_update({
   operations: [
@@ -22,13 +24,13 @@ batch_update({
     { name:"add_node", nodename:"gcp", parentId:"root",
       data:{ label:"Google Cloud Platform", icon:"gcp_logo", style:"BLUE" } },
     { name:"add_node", nodename:"edge", parentId:"gcp",
-      data:{ label:"Edge & CDN", icon:"cloud_cdn", style:"YELLOW" } },
+      data:{ label:"Edge & CDN", icon:"gcp_cloud_cdn", style:"YELLOW" } },
     { name:"add_node", nodename:"cloud_cdn", parentId:"edge",
-      data:{ label:"Cloud CDN", icon:"cloud_cdn", style:"YELLOW" } },
+      data:{ label:"Cloud CDN", icon:"gcp_cloud_cdn", style:"YELLOW" } },
     { name:"add_node", nodename:"lb_https", parentId:"edge",
       data:{ label:"HTTPS LB", icon:"load_balancer_generic", style:"YELLOW" } },
     { name:"add_node", nodename:"cloud_armor", parentId:"edge",
-      data:{ label:"Cloud Armor", icon:"cloud_armor", style:"YELLOW" } },
+      data:{ label:"Cloud Armor", icon:"gcp_cloud_armor", style:"YELLOW" } },
     { name:"add_edge", edgeId:"e_cdn_lb", sourceId:"cloud_cdn", targetId:"lb_https", label:"route" },
     { name:"add_edge", edgeId:"e_waf_lb", sourceId:"cloud_armor", targetId:"lb_https", label:"protect" },
     { name:"add_edge", edgeId:"e_web_edge", sourceId:"web_user", targetId:"cloud_cdn", label:"HTTPS" },
@@ -42,7 +44,7 @@ batch_update({
     { name:"add_node", nodename:"api", parentId:"gcp",
       data:{ label:"API Gateway + Auth", icon:"api_gateway", style:"PURPLE" } },
     { name:"add_node", nodename:"idp", parentId:"api",
-      data:{ label:"Identity Plat.", icon:"iam", style:"PURPLE" } },
+      data:{ label:"Identity Plat.", icon:"gcp_iam", style:"PURPLE" } },
     { name:"add_node", nodename:"api_gw", parentId:"api",
       data:{ label:"API Gateway", icon:"api_gateway", style:"PURPLE" } },
     { name:"add_edge", edgeId:"e_idp_gw", sourceId:"idp", targetId:"api_gw", label:"JWT" },
@@ -54,13 +56,13 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"backend", parentId:"gcp",
-      data:{ label:"Backend Svcs", icon:"cloud_run", style:"GREY" } },
+      data:{ label:"Backend Svcs", icon:"gcp_cloud_run", style:"GREY" } },
     { name:"add_node", nodename:"order_svc", parentId:"backend",
-      data:{ label:"Order", icon:"cloud_run", style:"GREY" } },
+      data:{ label:"Order", icon:"gcp_cloud_run", style:"GREY" } },
     { name:"add_node", nodename:"risk_svc", parentId:"backend",
-      data:{ label:"Risk", icon:"cloud_run", style:"GREY" } },
+      data:{ label:"Risk", icon:"gcp_cloud_run", style:"GREY" } },
     { name:"add_node", nodename:"catalog_svc", parentId:"backend",
-      data:{ label:"Catalog", icon:"cloud_run", style:"GREY" } },
+      data:{ label:"Catalog", icon:"gcp_cloud_run", style:"GREY" } },
     { name:"add_edge", edgeId:"e_order_risk", sourceId:"order_svc", targetId:"risk_svc", label:"score" },
     { name:"add_edge", edgeId:"e_api_order", sourceId:"api_gw", targetId:"order_svc", label:"REST" },
     { name:"add_edge", edgeId:"e_api_catalog", sourceId:"api_gw", targetId:"catalog_svc", label:"REST" }
@@ -82,11 +84,11 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"data", parentId:"gcp",
-      data:{ label:"Data Stores", icon:"spanner", style:"GREEN" } },
+      data:{ label:"Data Stores", icon:"gcp_spanner", style:"GREEN" } },
     { name:"add_node", nodename:"spanner", parentId:"data",
-      data:{ label:"Spanner", icon:"spanner", style:"GREEN" } },
+      data:{ label:"Spanner", icon:"gcp_spanner", style:"GREEN" } },
     { name:"add_node", nodename:"firestore", parentId:"data",
-      data:{ label:"Firestore", icon:"firestore", style:"GREEN" } },
+      data:{ label:"Firestore", icon:"gcp_firestore", style:"GREEN" } },
     { name:"add_edge", edgeId:"e_catalog_db", sourceId:"catalog_svc", targetId:"spanner", label:"read" },
     { name:"add_edge", edgeId:"e_order_db", sourceId:"order_svc", targetId:"spanner", label:"write" },
     { name:"add_edge", edgeId:"e_risk_db", sourceId:"risk_svc", targetId:"spanner", label:"read" },
@@ -98,13 +100,13 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"orchestration", parentId:"gcp",
-      data:{ label:"Workflows", icon:"workflows", style:"PURPLE" } },
+      data:{ label:"Workflows", icon:"gcp_workflows", style:"PURPLE" } },
     { name:"add_node", nodename:"workflows", parentId:"orchestration",
-      data:{ label:"Workflows", icon:"workflows", style:"PURPLE" } },
+      data:{ label:"Workflows", icon:"gcp_workflows", style:"PURPLE" } },
     { name:"add_node", nodename:"eventarc", parentId:"orchestration",
-      data:{ label:"Eventarc", icon:"eventarc", style:"PURPLE" } },
+      data:{ label:"Eventarc", icon:"gcp_eventarc", style:"PURPLE" } },
     { name:"add_node", nodename:"cloud_tasks", parentId:"orchestration",
-      data:{ label:"Cloud Tasks", icon:"cloud_tasks", style:"PURPLE" } },
+      data:{ label:"Cloud Tasks", icon:"gcp_cloud_tasks", style:"PURPLE" } },
     { name:"add_edge", edgeId:"e_order_flow", sourceId:"order_svc", targetId:"workflows", label:"invoke" },
     { name:"add_edge", edgeId:"e_flow_risk", sourceId:"workflows", targetId:"risk_svc", label:"branch" }
   ]
@@ -114,9 +116,9 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"messaging", parentId:"gcp",
-      data:{ label:"Pub/Sub", icon:"pubsub", style:"YELLOW" } },
+      data:{ label:"Pub/Sub", icon:"gcp_pubsub", style:"YELLOW" } },
     { name:"add_node", nodename:"order_topic", parentId:"messaging",
-      data:{ label:"order-topic", icon:"pubsub", style:"YELLOW" } },
+      data:{ label:"order-topic", icon:"gcp_pubsub", style:"YELLOW" } },
     { name:"add_node", nodename:"dlq_topic", parentId:"messaging",
       data:{ label:"DLQ", icon:"message_queue", style:"YELLOW" } },
     { name:"add_edge", edgeId:"e_flow_topic", sourceId:"workflows", targetId:"order_topic", label:"publish" },
@@ -128,15 +130,15 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"monitoring", parentId:"gcp",
-      data:{ label:"Monitoring", icon:"cloud_monitoring", style:"GREY" } },
+      data:{ label:"Monitoring", icon:"gcp_cloud_monitoring", style:"GREY" } },
     { name:"add_node", nodename:"cloud_monitoring", parentId:"monitoring",
-      data:{ label:"Monitoring", icon:"cloud_monitoring", style:"GREY" } },
+      data:{ label:"Monitoring", icon:"gcp_cloud_monitoring", style:"GREY" } },
     { name:"add_node", nodename:"cloud_logging", parentId:"monitoring",
-      data:{ label:"Logging", icon:"cloud_logging", style:"GREY" } },
+      data:{ label:"Logging", icon:"gcp_cloud_logging", style:"GREY" } },
     { name:"add_node", nodename:"cloud_trace", parentId:"monitoring",
-      data:{ label:"Trace", icon:"cloud_trace", style:"GREY" } },
+      data:{ label:"Trace", icon:"gcp_cloud_trace", style:"GREY" } },
     { name:"add_node", nodename:"profiler", parentId:"monitoring",
-      data:{ label:"Profiler", icon:"stackdriver_profiler", style:"GREY" } }
+      data:{ label:"Profiler", icon:"gcp_stackdriver_profiler", style:"GREY" } }
   ]
 })
 
@@ -166,8 +168,14 @@ CRITICAL: Each batch_update call must include ALL nodes AND ALL edges for one co
 When requirements are provided always follow this logic:
 Group: logical part of architecture
 Node: component of architecture
-#impotant: only use these icons and exact names GCP services (app_engine, artifact_registry, batch, bigquery, bigtable, cloud_armor, cloud_build, cloud_cdn, cloud_dns, cloud_functions, cloud_interconnect, cloud_logging, cloud_monitoring, cloud_nat, cloud_run, cloud_router, cloud_scheduler, cloud_sql, cloud_storage, cloud_tasks, cloud_trace, cloud_vpn, compute_engine, data_catalog, dataflow, dataplex, dataproc, eventarc, firestore, gke_autopilot, iam, iot_core, kms, live_stream_api, memorystore_redis, media_cdn, network_intelligence_center, pubsub, pubsub_lite, secret_manager, security_command_center, spanner, stackdriver_profiler, stackdriver_debugger, tpu, transcoder_api, vertex_ai, vpc_network, workflows, workstations) and general architecture (admin_portal, analytics_service, api, api_graphql, api_rest, audit_log, auth, auto_scaler, backup_service, batch_job, billing_service, blue_green_deploy, browser_client, cache, cache_memcached, cache_redis, canary_deploy, cdn, circuit_breaker, config_service, container_registry, cron_scheduler, customer_support_chat, data_center, data_warehouse, database, dlq_queue, docker_engine, external_partner, etl_pipeline, feature_flag_service, firewall_generic, frontend, frontend_spa, git_repo, health_check, jenkins_ci, jwt_provider, kubernetes_cluster, load_balancer_generic, load_test_tool, logging, logging_elasticsearch, message_queue, microservice_generic, mobile_app, monitoring, monitoring_dashboard, monitoring_prometheus, notification_service, oauth_server, on_prem, opensearch, pagerduty_alerts, payment_gateway, rate_limiter, retry_queue, secrets_vault, service_bus, static_assets_bucket, third_party_api, vpn_gateway_generic, waf_generic, web_app, webhooks).
+#important: only use these provider-prefixed icons and exact names: ${availableIconsPrefixed.join(', ')}
 Edge: relationship between group and node, node and node
+
+#ICON USAGE RULES:
+- AWS icons: Use "aws_" prefix (e.g., "aws_lambda", "aws_s3", "aws_rds")
+- GCP icons: Use "gcp_" prefix (e.g., "gcp_cloud_functions", "gcp_cloud_storage", "gcp_cloud_sql")  
+- Azure icons: Use "azure_" prefix (e.g., "azure_functions", "azure_storage_accounts", "azure_sql_database")
+- Legacy icons: Some generic icons still available without prefix (e.g., "browser_client", "mobile_app", "third_party_api")
 
 #Styling:
 Groups should include a style property with one of these color schemes: GREEN, BLUE, YELLOW, PURPLE, TEAL, GREY
@@ -198,16 +206,19 @@ LOGICAL GROUPS: frontend, backend, api, auth, compute, cache, data_plane, contro
 You can only interact with the system by calling the following functions:
 
 - add_node(nodename, parentId, { label: "Display Label", icon: "icon_name", style: "GREEN" }): Add a component under a parent container. You cannot add a node if parentId does not exist.
-  Available icons: GCP services (app_engine, artifact_registry, batch, bigquery, bigtable, cloud_armor, cloud_build, cloud_cdn, cloud_dns, cloud_functions, cloud_interconnect, cloud_logging, cloud_monitoring, cloud_nat, cloud_run, cloud_router, cloud_scheduler, cloud_sql, cloud_storage, cloud_tasks, cloud_trace, cloud_vpn, compute_engine, data_catalog, dataflow, dataplex, dataproc, eventarc, firestore, gke_autopilot, iam, iot_core, kms, live_stream_api, memorystore_redis, media_cdn, network_intelligence_center, pubsub, pubsub_lite, secret_manager, security_command_center, spanner, stackdriver_profiler, stackdriver_debugger, tpu, transcoder_api, vertex_ai, vpc_network, workflows, workstations) and general architecture (admin_portal, analytics_service, api_graphql, api_rest, audit_log, auto_scaler, backup_service, batch_job, billing_service, blue_green_deploy, browser_client, cache_memcached, cache_redis, canary_deploy, circuit_breaker, config_service, container_registry, cron_scheduler, customer_support_chat, data_center, data_warehouse, dlq_queue, docker_engine, external_partner, etl_pipeline, feature_flag_service, firewall_generic, frontend_spa, git_repo, health_check, jenkins_ci, jwt_provider, kubernetes_cluster, load_balancer_generic, load_test_tool, logging_elasticsearch, message_queue, microservice_generic, mobile_app, monitoring_dashboard, monitoring_prometheus, notification_service, oauth_server, on_prem, opensearch, pagerduty_alerts, payment_gateway, rate_limiter, retry_queue, secrets_vault, service_bus, static_assets_bucket, third_party_api, vpn_gateway_generic, waf_generic, web_app, webhooks).
+  Available icons: ${availableIconsPrefixed.join(', ')}
 - delete_node(nodeId): Remove an existing node.
 - move_node(nodeId, newParentId): Move a node from one group/container to another parent.
 - add_edge(edgeId, sourceId, targetId, label): Connect two nodes with a directional link and optional label (e.g., "authenticates", "queries", "streams data").
+  IMPORTANT: edgeId is REQUIRED - use descriptive IDs like "edge_source_to_target"
 - delete_edge(edgeId): Remove an existing edge.
 - group_nodes(nodeIds, parentId, groupId, style): Create a new container with style ("GREEN", "BLUE", "YELLOW", etc.) and move specified nodes into it.
+  IMPORTANT: parentId is REQUIRED - specify where the group should be created
 - remove_group(groupId): Disband a group and promote its children to the parent.
-- batch_update(operations): Apply a list of operations to the graph. If applying bath operations make sure that nodes to which you are applying exist.
+- batch_update(operations): Apply a list of operations to the graph. If applying batch operations make sure that nodes to which you are applying exist.
+  IMPORTANT: Each operation must have a "name" field and the correct parameters for that operation type
 - display_elk_graph(): Display the current ELK graph visualization.
-- process_user_requirements(): ONLY call this function when the user specifically says "process user requirements". 
+- process_user_requirements(): ONLY call this function when the user specifically says "process user requirements".
 
 ## Example Architecture Build Process:
 ${exampleArchitectureBuild}
@@ -229,11 +240,13 @@ ${exampleArchitectureBuild}
 
 `;
 
+export { availableIconsPrefixed as availableIcons };
+
 // Model configurations for reasoning and streaming
 export const modelConfigs = {
   // Streaming model configuration
   streaming: {
-    model: "o3",
+    model: "o4-mini",
     temperature: 0.1,
     max_tokens: 4096,
     parallel_tool_calls: false,

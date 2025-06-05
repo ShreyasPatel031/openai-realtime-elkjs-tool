@@ -659,7 +659,7 @@ export default function ToolPanel({
                 
               case "add_edge":
                 try {
-                  updatedGraph = addEdge(args.edgeId, null, args.sourceId, args.targetId, elkGraph);
+                  updatedGraph = addEdge(args.edgeId, args.sourceId, args.targetId, elkGraph);
                   console.log("Updated graph after add_edge:", updatedGraph);
                   setElkGraph(updatedGraph);
                   
@@ -884,7 +884,7 @@ export default function ToolPanel({
                           if (!findNodeById(updatedGraph, opArgs.targetId)) {
                             throw new Error(`Target node '${opArgs.targetId}' not found for add_edge operation`);
                           }
-                          updatedGraph = addEdge(opArgs.edgeId, null, opArgs.sourceId, opArgs.targetId, updatedGraph);
+                          updatedGraph = addEdge(opArgs.edgeId, opArgs.sourceId, opArgs.targetId, updatedGraph);
                           results.push({ operation: i, name, status: "success" });
                           break;
                           

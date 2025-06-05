@@ -28,12 +28,12 @@ const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGra
   const reasoningContentRef = useRef<string>("");
   const currentFunctionContentRef = useRef<string>("");
   const currentFunctionNameRef = useRef<string>("");
-
+  
   useEffect(() => {
     elkGraphRef.current = elkGraph;
     console.log("🔄 StreamViewer elkGraphRef updated:", elkGraphRef.current);
   }, [elkGraph]);
-
+  
   const addLine = (line: string) => {
     setLines(ls => [...ls, line]);
     

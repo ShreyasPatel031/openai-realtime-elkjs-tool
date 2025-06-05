@@ -45,14 +45,6 @@
           ],
           "children": [
             {
-              "id": "query",
-              "labels": [
-                {
-                  "text": "Query"
-                }
-              ]
-            },
-            {
               "id": "pdf",
               "labels": [
                 {
@@ -90,14 +82,6 @@
           ]
         },
         {
-          "id": "vector",
-          "labels": [
-            {
-              "text": "Vector"
-            }
-          ]
-        },
-        {
           "id": "storage",
           "labels": [
             {
@@ -114,24 +98,6 @@
           ],
           "targets": [
             "lambda"
-          ]
-        },
-        {
-          "id": "e2",
-          "sources": [
-            "query"
-          ],
-          "targets": [
-            "vector"
-          ]
-        },
-        {
-          "id": "e3",
-          "sources": [
-            "pdf"
-          ],
-          "targets": [
-            "vector"
           ]
         },
         {
@@ -187,8 +153,35 @@
           "text": "dataStore"
         }
       ],
-      "children": [],
-      "edges": []
+      "children": [
+        {
+          "id": "vector",
+          "labels": [
+            {
+              "text": "Vector"
+            }
+          ]
+        },
+        {
+          "id": "query",
+          "labels": [
+            {
+              "text": "Query"
+            }
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "id": "e2",
+          "sources": [
+            "query"
+          ],
+          "targets": [
+            "vector"
+          ]
+        }
+      ]
     }
   ],
   "edges": [
@@ -226,6 +219,15 @@
       ],
       "targets": [
         "pdf"
+      ]
+    },
+    {
+      "id": "e3",
+      "sources": [
+        "pdf"
+      ],
+      "targets": [
+        "vector"
       ]
     }
   ]

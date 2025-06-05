@@ -28,25 +28,11 @@ interface UseChatSessionProps {
   addNode?: (nodeName: string, parentId: string, graph: any, data?: { label?: string; icon?: string }) => any;
   deleteNode?: (nodeId: string, graph: any) => any;
   moveNode?: (nodeId: string, newParentId: string, graph: any) => any;
-  addEdge?: (edgeId: string, containerId: string | null, sourceId: string, targetId: string, graph: any) => any;
+  addEdge?: (edgeId: string, sourceId: string, targetId: string, graph: any) => any;
   deleteEdge?: (edgeId: string, graph: any) => any;
-  groupNodes?: (nodeIds: string[], parentId: string, groupId: string, graph: any) => any;
+  groupNodes?: (nodeIds: string[], parentId: string, groupId: string, graph: any, style?: any) => any;
   removeGroup?: (groupId: string, graph: any) => any;
-  batchUpdate?: (operations: Array<{
-    name: string;
-    nodename?: string;
-    parentId?: string;
-    nodeId?: string;
-    newParentId?: string;
-    edgeId?: string;
-    sourceId?: string;
-    targetId?: string;
-    nodeIds?: string[];
-    groupId?: string;
-    data?: { label?: string; icon?: string; style?: any };
-    label?: string;
-    style?: any;
-  }>, graph: any) => any;
+  batchUpdate?: (operations: any[], graph: any) => any;
   process_user_requirements?: () => string;
 }
 

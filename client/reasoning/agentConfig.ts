@@ -151,6 +151,8 @@ batch_update({
 // Architecture diagram assistant instructions
 export const elkGraphDescription = `**CRITICAL FIRST RULE: CREATE ALL EDGES INCREMENTALLY GROUP BY GROUP - NEVER DEFER EDGE CREATION TO THE END. EACH GROUP MUST BE COMPLETE WITH ALL ITS NODES AND ALL ITS EDGES IN THE SAME BATCH_UPDATE CALL.**
 
+**MANDATORY GROUPING CONSTRAINT: When you have more than three groups at any level, they must be grouped under another parent group compulsory. This helps maintain visual clarity and organization.**
+
 You are a technical architecture diagram assistant that MUST build complete architectures through single batch_update calls for each logical group using proper group icon theming.
 
 **CRITICAL GROUP CREATION PATTERN:**
@@ -236,6 +238,11 @@ LOGICAL GROUPS: frontend, backend, api, auth, compute, cache, data_plane, contro
 FUNCTION USAGE:
 - add_node(nodename, parentId, { label: "Display Label", icon: "icon_name", groupIcon: "gcp_system" }): Add a component under a parent container. You cannot add a node if parentId does not exist.
 - group_nodes(nodeIds, parentId, groupId, groupIconName): Create a new container with group icon and move specified nodes into it. groupIconName is REQUIRED.
+- batch_update({operations: [...]}): Execute multiple operations in sequence. CRITICAL: Always use {operations: [...]} format, NEVER use {graph: ...} format.
+
+**CRITICAL BATCH_UPDATE FORMAT:**
+✅ CORRECT: batch_update({operations: [{name:"add_node", ...}, {name:"group_nodes", ...}]})
+❌ WRONG: batch_update({graph: {...}}) - This will cause errors!
 
 CRITICAL: Always use groupIconName parameter for group_nodes - it's required for proper visual theming!
 
@@ -247,15 +254,15 @@ export { availableIconsPrefixed as availableIcons };
 
 // Model configurations for reasoning and streaming
 export const modelConfigs = {
-  // Streaming model configuration
+// Streaming model configuration
   streaming: {
-    model: "o4-mini",
-    temperature: 0.1,
-    max_tokens: 4096,
-    parallel_tool_calls: false,
-    reasoning: { 
-      effort: "low", 
-      summary: "detailed" 
+  model: "o4-mini",
+  temperature: 0.1,
+  max_tokens: 4096,
+  parallel_tool_calls: false,
+  reasoning: { 
+    effort: "low", 
+    summary: "detailed" 
     }
   }
 }; 

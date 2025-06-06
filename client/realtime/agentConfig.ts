@@ -30,6 +30,8 @@ MANDATORY Conversation Flow:
    - ✅ Just call the function immediately and wait quietly
 
 2. After calling log_requirements_and_generate_questions():
+    -Always call log_requirements_and_generate_questions()
+    -The user will not be able to answer questions until you call the function.
    - Say ONLY: "Please select process when you have answered the questions"
    - Wait quietly for user responses
    - ❌ Do NOT ask additional questions manually

@@ -140,6 +140,41 @@ function updateEdgesForNode(nodeId: string, layout: ElkNode): ElkNode {
   return layout;
 }
 
+/**
+ * Validates graph structure to prevent circular references
+ */
+function validateGraphStructure(layout: ElkNode): boolean {
+  const visited = new Set<string>();
+  const recursionStack = new Set<string>();
+  
+  function hasCircularReference(node: ElkNode): boolean {
+    if (recursionStack.has(node.id)) {
+      console.error(`❌ Circular reference detected: ${node.id}`);
+      return true;
+    }
+    
+    if (visited.has(node.id)) {
+      return false;
+    }
+    
+    visited.add(node.id);
+    recursionStack.add(node.id);
+    
+    if (node.children) {
+      for (const child of node.children) {
+        if (hasCircularReference(child)) {
+          return true;
+        }
+      }
+    }
+    
+    recursionStack.delete(node.id);
+    return false;
+  }
+  
+  return !hasCircularReference(layout);
+}
+
 // ──────────────────────────────────────────────
 // PRIMITIVE OPERATIONS
 // ──────────────────────────────────────────────
@@ -427,6 +462,12 @@ export function batchUpdate(
     return layout;
   }
   
+  // Validate initial graph structure
+  if (!validateGraphStructure(layout)) {
+    console.error('❌ Graph contains circular references - aborting batch update');
+    throw new Error('Graph contains circular references which could cause infinite recursion');
+  }
+  
   let updatedLayout = { ...layout };
   
   for (const operation of operations) {
@@ -510,6 +551,12 @@ export function batchUpdate(
         
       default:
         console.warn(`Unknown operation: ${name}`);
+    }
+    
+    // Validate graph structure after each operation
+    if (!validateGraphStructure(updatedLayout)) {
+      console.error(`❌ Operation '${name}' created circular references - rolling back`);
+      throw new Error(`Operation '${name}' created circular references in the graph structure`);
     }
   }
   

@@ -19,9 +19,9 @@ export const functionCallEvents = (evts: ClientEvent[]): FunctionCall[] => {
       
       if (!functionCallMap.has(key)) {
         functionCallMap.set(key, {
-          id: delta.id,
-          call_id: delta.call_id,
-          name: delta.name,
+        id: delta.id,
+        call_id: delta.call_id,
+        name: delta.name,
           arguments: delta.arguments || ''
         });
       } else {
@@ -45,7 +45,7 @@ export const functionCallEvents = (evts: ClientEvent[]): FunctionCall[] => {
       );
     }
     return [];
-  });
+  }); 
   
   // Combine accumulated deltas with done events, preferring done events for complete data
   const result: FunctionCall[] = [];

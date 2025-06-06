@@ -67,6 +67,9 @@ export default function App() {
 
   // RTC client reference
   const rtc = useRef(null);
+  
+  // Track if we've already logged the communication setup
+  const hasLoggedSetup = useRef(false);
 
   // Get chat session refs
   const { initSentRef, processedCalls } = useChatSession({
@@ -87,20 +90,37 @@ export default function App() {
     const latestEvent = events[0]; // Events are in reverse chronological order
     
     // Check for session.created or session.update events indicating agent is ready
-    if (latestEvent.type === 'session.created' || 
-        (latestEvent.type === 'session.updated' && latestEvent.session)) {
+    if ((latestEvent.type === 'session.created' || 
+        (latestEvent.type === 'session.updated' && latestEvent.session)) && 
+        !isAgentReady) {  // Only log if state is changing
       console.log('🤖 Agent is ready to listen');
       setIsAgentReady(true);
       setIsConnecting(false);
     }
     
     // Check for session.update with input_audio_transcription events (means agent heard something)
-    if (latestEvent.type === 'input_audio_buffer.speech_started' || 
-        latestEvent.type === 'conversation.item.input_audio_transcription.completed') {
+    if ((latestEvent.type === 'input_audio_buffer.speech_started' || 
+        latestEvent.type === 'conversation.item.input_audio_transcription.completed') && 
+        !isAgentReady) {  // Only log if state is changing
       console.log('🎤 Agent is actively listening');
       setIsAgentReady(true);
     }
-  }, [events]);
+  }, [events, isAgentReady]);
+
+  // Expose real-time agent communication functions to global scope for reasoning agent
+  useEffect(() => {
+    // Set global references for inter-agent communication
+    window.realtimeAgentSendTextMessage = sendTextMessage;
+    window.realtimeAgentSendClientEvent = sendClientEvent;
+    window.realtimeAgentSessionActive = isSessionActive;
+    
+    // Cleanup on unmount
+    return () => {
+      delete window.realtimeAgentSendTextMessage;
+      delete window.realtimeAgentSendClientEvent;
+      delete window.realtimeAgentSessionActive;
+    };
+  }, [sendTextMessage, sendClientEvent, isSessionActive]);
 
   /**
    * Initiates a new WebRTC session with OpenAI's Realtime API

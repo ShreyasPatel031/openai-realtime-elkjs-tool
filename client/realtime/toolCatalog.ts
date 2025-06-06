@@ -93,7 +93,7 @@ export const allTools = [
               description: "Icon name to display for the node (e.g., 'browser_client', 'mobile_app', 'cloud_cdn', etc.)"
             },
             groupIcon: {
-              type: "string",
+                  type: "string",
               description: "Group icon name for visual theming with proper cloud provider colors. Use group icons for logical containers.",
               enum: availableGroupIcons
             }
@@ -288,8 +288,8 @@ export const allTools = [
                 type: "object",
                 description: "For add_node: Additional node data including groupIcon"
               },
-              label: {
-                type: "string",
+                  label: {
+                    type: "string",
                 description: "For add_edge: Optional edge label"
               }
             },

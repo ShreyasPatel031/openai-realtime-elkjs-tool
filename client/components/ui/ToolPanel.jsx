@@ -449,12 +449,11 @@ export default function ToolPanel({
 
     const firstEvent = events[events.length - 1];
     if (!functionAdded && firstEvent.type === "session.created") {
-      console.log("Session created, sending minimal update...");
+      // Reduced logging for session creation
       sendClientEvent(minimalSessionUpdate);
       
       // Send the full description in a separate message
       setTimeout(() => {
-        console.log("Sending full description...");
         sendClientEvent({
           type: "conversation.item.create",
           item: {
@@ -492,24 +491,18 @@ export default function ToolPanel({
     ) {
       mostRecentEvent.response.output.forEach((output) => {
         if (output.type === "function_call") {
-          console.log("Agent output:", output);
+          // Reduced logging for function calls
           
           try {
             const args = JSON.parse(output.arguments);
-            // console.log("Function call:", output.name, args);
             let updatedGraph = null;
             
             // Process each function based on its name
             switch(output.name) {
               case "display_elk_graph":
                 try {
-                  console.log("display_elk_graph called with args:", args);
-                  console.log("Current elkGraph:", elkGraph);
-                  
                   updatedGraph = { ...elkGraph };
                   setElkGraph(updatedGraph);
-                  
-                  console.log("Sending graph to agent:", JSON.stringify(updatedGraph).substring(0, 100) + "...");
                   
                   sendClientEvent({
                     type: "conversation.item.create",
@@ -547,7 +540,6 @@ export default function ToolPanel({
               case "add_node":
                 try {
                   updatedGraph = addNode(args.nodename, args.parentId, elkGraph);
-                  console.log("Updated graph after add_node:", updatedGraph);
                   setElkGraph(updatedGraph);
                   
                   sendClientEvent({
@@ -565,7 +557,6 @@ export default function ToolPanel({
                   });
                 } catch (addError) {
                   console.error(`Error in add_node operation:`, addError);
-                  console.error(`Attempted to add node '${args.nodename}' to parent '${args.parentId}'`);
                   sendClientEvent({
                     type: "conversation.item.create",
                     item: {
@@ -586,7 +577,6 @@ export default function ToolPanel({
               case "delete_node":
                 try {
                   updatedGraph = deleteNode(args.nodeId, elkGraph);
-                  console.log("Updated graph after delete_node:", updatedGraph);
                   setElkGraph(updatedGraph);
                   
                   sendClientEvent({
@@ -604,7 +594,6 @@ export default function ToolPanel({
                   });
                 } catch (deleteError) {
                   console.error(`Error in delete_node operation:`, deleteError);
-                  console.error(`Attempted to delete node '${args.nodeId}'`);
                   sendClientEvent({
                     type: "conversation.item.create",
                     item: {
@@ -1042,13 +1031,6 @@ ${errorCount > 0 ? `\nErrors:\n${errorMessages}` : ''}
               }
             });
             
-            // Prompt for another interaction
-            // setTimeout(() => {
-            //   sendClientEvent({
-            //     type: "response.create", 
-            //   });
-            // }, 1000);
-            
           } catch (parseError) {
             console.error("Error parsing function arguments:", parseError);
             console.error("Raw arguments:", output.arguments);
@@ -1070,13 +1052,6 @@ ${errorCount > 0 ? `\nErrors:\n${errorMessages}` : ''}
                 ]
               }
             });
-            
-            // Prompt for another interaction
-            // setTimeout(() => {
-            //   sendClientEvent({
-            //     type: "response.create", 
-            //   });
-            // }, 1000);
           }
         }
       });

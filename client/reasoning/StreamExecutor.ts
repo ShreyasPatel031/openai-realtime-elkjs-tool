@@ -2,7 +2,7 @@ import { elkGraphDescription } from "./agentConfig";
 import { createPostEventSource } from "./PostEventSource";
 import { createDeltaHandler, EventHandlerCallbacks, PendingCall } from "./EventHandlers";
 import { executeFunctionCall, GraphState } from "./FunctionExecutor";
-import { addProcessCompleteMessage, closeChatWindow } from "../utils/chatUtils";
+import { addProcessCompleteMessage, closeChatWindow, sendArchitectureCompleteToRealtimeAgent } from "../utils/chatUtils";
 
 export interface StreamExecutorOptions {
   elkGraph: any;
@@ -170,6 +170,10 @@ Remember: Do NOT acknowledge or explain. Just execute the functions.`;
           setTimeout(() => {
             addProcessCompleteMessage();
           }, 500);
+          // Send architecture complete notification to real-time agent
+          setTimeout(() => {
+            sendArchitectureCompleteToRealtimeAgent();
+          }, 1000);
         }
       };
 
@@ -189,6 +193,10 @@ Remember: Do NOT acknowledge or explain. Just execute the functions.`;
           setTimeout(() => {
             addProcessCompleteMessage();
           }, 500);
+          // Send architecture complete notification to real-time agent
+          setTimeout(() => {
+            sendArchitectureCompleteToRealtimeAgent();
+          }, 1000);
           resolve();
           return;
         }

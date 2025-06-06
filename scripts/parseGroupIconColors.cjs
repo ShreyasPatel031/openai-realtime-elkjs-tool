@@ -48,7 +48,7 @@ function parseGroupIcons() {
     const primaryColor = analyzeIcon(iconPath);
     
     if (primaryColor) {
-      const iconName = path.basename(iconFile, '.svg');
+    const iconName = path.basename(iconFile, '.svg');
       
       // Optimized format: just name, hex, and fill
       const iconData = {

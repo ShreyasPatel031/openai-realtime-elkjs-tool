@@ -17,7 +17,7 @@ interface ChatBoxProps {
 
 const ChatBox: React.FC<ChatBoxProps> = ({ 
   onSubmit, 
-  isSessionActive = false,
+  isSessionActive = false, 
   isConnecting = false,
   isAgentReady = false,
   onStartSession, 
@@ -29,11 +29,13 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   const [showControls, setShowControls] = useState(false)
   const [showMic, setShowMic] = useState(true)
   const inputRef = useRef<HTMLInputElement>(null)
+  const autoExpandedRef = useRef(false)
 
   // Auto-expand when agent is ready
   useEffect(() => {
-    if (isAgentReady && !isExpanded && !isTransitioning) {
+    if (isAgentReady && !isExpanded && !isTransitioning && !autoExpandedRef.current) {
       console.log('🤖 Agent is ready - auto-expanding chat');
+      autoExpandedRef.current = true;
       toggleExpand();
     }
   }, [isAgentReady]);
@@ -83,7 +85,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
     }
     // Only expand if not already expanded and not transitioning
     if (!isExpanded && !isTransitioning) {
-      toggleExpand();
+    toggleExpand();
     }
   }
 

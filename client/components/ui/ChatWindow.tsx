@@ -107,6 +107,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
   const handleProcessClick = () => {
     console.log('🔄 Process button clicked - collecting conversation data');
     
+    // Send single processing message to real-time agent
+    if (window.realtimeAgentSendTextMessage && typeof window.realtimeAgentSendTextMessage === 'function') {
+      window.realtimeAgentSendTextMessage("Processing please wait...");
+    }
+    
     // Store chat data for the StreamExecutor to use
     storeChatData(messages, selectedOptions);
     

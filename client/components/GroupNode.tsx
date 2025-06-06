@@ -157,10 +157,12 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
   const groupStyle = {
     // Use custom styling if available
     background: customBgColor,
-    border: selected ? `2px dashed ${customBorderColor}` : `1px dashed ${customBorderColor}`,
+    border: data.groupIcon 
+      ? (selected ? `3px solid ${customBorderColor}` : `2px solid ${customBorderColor}`) 
+      : (selected ? `2px dashed ${customBorderColor}` : `1px dashed ${customBorderColor}`),
     borderRadius: '8px',
-    // Reduce padding to eliminate extra space
-    padding: '0px',
+    // Add padding for root node, minimal for others
+    padding: id === 'root' ? '20px' : '0px',
     width: '100%',
     height: '100%',
     fontSize: '12px',
@@ -288,7 +290,7 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
         padding: '2px 8px',
         borderRadius: '4px',
         boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-        border: `1px solid ${customBorderColor}`,
+        border: data.groupIcon ? `2px solid ${customBorderColor}` : `1px solid ${customBorderColor}`,
         zIndex: 10,
         whiteSpace: 'nowrap',
         minWidth: 'min-content',

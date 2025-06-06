@@ -287,4 +287,56 @@ export const simulateTokenStreaming = (messageId: string, fullText: string, spee
       clearInterval(streamInterval);
     }
   }, speed);
+};
+
+// Function to send architecture complete notification to real-time agent
+export const sendArchitectureCompleteToRealtimeAgent = (): void => {
+  console.log('🏗️ Sending architecture complete notification to real-time agent');
+  
+  // Check if global functions are available (set by App component)
+  const globalSendTextMessage = (window as any).realtimeAgentSendTextMessage;
+  const globalSendClientEvent = (window as any).realtimeAgentSendClientEvent;
+  const isSessionActive = (window as any).realtimeAgentSessionActive;
+  
+  if (!isSessionActive) {
+    console.log('ℹ️ Real-time agent session not active - skipping notification');
+    return;
+  }
+  
+  if (!globalSendTextMessage && !globalSendClientEvent) {
+    console.warn('⚠️ Real-time agent communication functions not available');
+    return;
+  }
+  
+  const architectureCompleteMessage = "Architecture generation complete! The diagram has been successfully created and is ready for review. You can now interact with the architecture or make modifications as needed.";
+  
+  try {
+    // Send via text message if available
+    if (globalSendTextMessage) {
+      globalSendTextMessage(architectureCompleteMessage);
+      console.log('✅ Architecture complete message sent to real-time agent via text');
+    } 
+    // Fallback to client event
+    else if (globalSendClientEvent) {
+      globalSendClientEvent({
+        type: "conversation.item.create",
+        item: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: architectureCompleteMessage,
+            },
+          ],
+        },
+      });
+      
+      // Trigger response
+      globalSendClientEvent({ type: "response.create" });
+      console.log('✅ Architecture complete message sent to real-time agent via client event');
+    }
+  } catch (error) {
+    console.error('❌ Failed to send architecture complete message to real-time agent:', error);
+  }
 }; 

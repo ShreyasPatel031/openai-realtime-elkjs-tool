@@ -14,6 +14,8 @@ export interface EventHandlerCallbacks {
   onComplete?: () => void; // Add completion callback
 }
 
+import { sendArchitectureCompleteToRealtimeAgent } from '../utils/chatUtils';
+
 // Function to handle different delta types from the API response
 export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdRef: { current: string | null }) => {
   const { addLine, appendToTextLine, appendToReasoningLine, appendToArgsLine, pushCall, setBusy, onComplete } = callbacks;
@@ -173,6 +175,10 @@ export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdR
       if (onComplete) {
         onComplete();
       }
+      // Send architecture complete notification to real-time agent
+      setTimeout(() => {
+        sendArchitectureCompleteToRealtimeAgent();
+      }, 1500);
       return 'close';
     } else if (delta.type?.includes('.done') || delta.type?.includes('.delta')) {
       // Silently handle common .done and .delta types that don't need processing
@@ -184,4 +190,4 @@ export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdR
       }
     }
   };
-}; 
+};

@@ -21,6 +21,13 @@ interface FunctionCallHelpers {
   safeSend: (e: ClientEvent) => void;
 }
 
+// Extend Window interface for TypeScript
+declare global {
+  interface Window {
+    realtimeAgentSendTextMessage?: (message: string) => void;
+  }
+}
+
 export function handleFunctionCall(
   call: FunctionCall,
   helpers: FunctionCallHelpers
@@ -45,11 +52,7 @@ export function handleFunctionCall(
         break;
         
       case "log_requirements_and_generate_questions":
-        console.group('📝❓ log_requirements_and_generate_questions Function Call');
-        console.log('Arguments from agent:', args);
-        console.log('Requirements:', args.requirements);
-        console.log('Questions:', args.questions);
-        console.log('Call ID:', call_id);
+        console.log('📝 Processing requirements and questions');
         
         // Validate both requirements and questions
         if (!args.requirements || !Array.isArray(args.requirements) || args.requirements.length === 0) {
@@ -59,20 +62,21 @@ export function handleFunctionCall(
           console.error('❌ Invalid or empty questions array');
           result = { success: false, message: 'Error: questions must be a non-empty array' };
         } else {
-          // Log each requirement
-          console.log('📝 Logging requirements...');
+          // Log each requirement to create UI components
           for (const requirement of args.requirements) {
-            const reqResult = addUserDecisionToChat(requirement);
-            console.log(`Logged requirement: ${requirement}`, reqResult);
+            addUserDecisionToChat(requirement);
           }
           
-          // Generate follow-up questions
-          console.log('❓ Generating follow-up questions...');
+          // Generate follow-up questions UI
           result = createFollowupQuestionsToChat(args.questions);
         }
         
-        console.log('Function result:', result);
+        // Store requirements and questions in the graph metadata
+        updated.metadata = updated.metadata || {};
+        updated.metadata.requirements = args.requirements || [];
+        updated.metadata.questions = args.questions || [];
         
+        // Send response and return early to prevent graph update
         safeSend({
           type: "conversation.item.create",
           item: {
@@ -81,10 +85,8 @@ export function handleFunctionCall(
             output: JSON.stringify(result)
           }
         });
-        console.log('Sent response for log_requirements_and_generate_questions');
-        console.groupEnd();
-        safeSend({ type: "response.create" });
         return; // Return early to prevent graph update
+        break;
         
       case "add_node":
         updated = mutations.addNode(args.nodename, args.parentId, graphCopy, args.data);
@@ -143,11 +145,23 @@ export function handleFunctionCall(
         console.log('🔍 args.operations value:', args.operations);
         console.log('🔍 Is operations an array?', Array.isArray(args.operations));
         
+        // Check if the argument structure is incorrect (agent sending {graph: ...} instead of {operations: ...})
+        if (args.graph && !args.operations) {
+          console.error('❌ batch_update received incorrect format: {graph: ...} instead of {operations: [...]}');
+          throw new Error(`batch_update requires 'operations' parameter with an array of operations. Received 'graph' parameter instead. Please use: batch_update({operations: [...]}) format.`);
+        }
+        
         if (!args.operations) {
           throw new Error(`batch_update requires 'operations' parameter, got: ${JSON.stringify(args)}`);
         }
         if (!Array.isArray(args.operations)) {
           throw new Error(`batch_update requires 'operations' to be an array, got: ${typeof args.operations} - ${JSON.stringify(args.operations)}`);
+        }
+        
+        // Validate graph integrity before processing
+        if (!updated || !updated.id) {
+          console.error('❌ Invalid graph state detected');
+          throw new Error(`Invalid graph state: graph must have an 'id' property`);
         }
         
         updated = mutations.batchUpdate(args.operations, graphCopy);
@@ -173,7 +187,6 @@ export function handleFunctionCall(
         output: JSON.stringify(updated)
       }
     });
-    safeSend({ type: "response.create" });
   } catch (error: any) {
     console.error(`❌ Error in ${name} operation:`, error);
     
@@ -191,4 +204,4 @@ export function handleFunctionCall(
     });
     console.error(`❌ Sent error response to agent for ${name}`);
   }
-} 
+}

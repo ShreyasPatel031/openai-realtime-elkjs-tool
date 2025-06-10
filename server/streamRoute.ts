@@ -145,7 +145,12 @@ async function runConversationLoop(conversation: any[], res: any) {
         }
         
         console.log(`🔄 ${calls.length} function call(s) processed, continuing conversation loop`);
-        conversation.push(...delta.response.output);
+        
+        // Only add persistent items to conversation - exclude reasoning items that cause 404 errors
+        const persistentItems = delta.response.output.filter((item: any) => 
+          item.type === "function_call" || item.type === "message"
+        );
+        conversation.push(...persistentItems);
         break;                              // outer while continues
       }
     }

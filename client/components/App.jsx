@@ -131,9 +131,37 @@ export default function App() {
     
     try {
     // Get a session token for OpenAI Realtime API
+    console.log('🔍 Fetching token from /token endpoint...');
     const tokenResponse = await fetch("/token");
-    const data = await tokenResponse.json();
+    console.log('🔍 Token response status:', tokenResponse.status);
+    console.log('🔍 Token response headers:', Object.fromEntries(tokenResponse.headers));
+    
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error('❌ Token endpoint failed:', tokenResponse.status, errorText);
+      throw new Error(`Token endpoint failed: ${tokenResponse.status} - ${errorText}`);
+    }
+    
+    const responseText = await tokenResponse.text();
+    console.log('🔍 Raw token response:', responseText.substring(0, 200) + '...');
+    
+    let data;
+    try {
+      data = JSON.parse(responseText);
+      console.log('✅ Token parsed successfully:', data);
+    } catch (parseError) {
+      console.error('❌ Failed to parse token response as JSON');
+      console.error('❌ Response text:', responseText);
+      throw new Error(`Invalid JSON response from /token: ${parseError.message}`);
+    }
+    
+    if (!data.client_secret || !data.client_secret.value) {
+      console.error('❌ Invalid token response structure:', data);
+      throw new Error('Invalid token response: missing client_secret.value');
+    }
+    
     const EPHEMERAL_KEY = data.client_secret.value;
+    console.log('✅ Got ephemeral key:', EPHEMERAL_KEY.substring(0, 10) + '...');
 
     // Create RTC client or reuse existing one
     if (!rtc.current) {

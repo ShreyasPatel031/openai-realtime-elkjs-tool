@@ -44,6 +44,7 @@ export const createPostEventSource = (payload: string, prevId?: string): PostEve
       });
       
       console.log('🔄 Starting stream...', prevId ? '(follow-up)' : '(initial)');
+      console.log('🔍 Fetch body length:', requestBody.length);
       
       const response = await fetch('/stream', {
         method: 'POST',
@@ -55,8 +56,24 @@ export const createPostEventSource = (payload: string, prevId?: string): PostEve
         signal: controller.signal,
       });
       
+      console.log('🔍 Stream response status:', response.status);
+      console.log('🔍 Stream response headers:', Object.fromEntries(response.headers));
+      console.log('🔍 Stream response content-type:', response.headers.get('content-type'));
+      
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const errorText = await response.text();
+        console.error('❌ Stream endpoint failed:', response.status, errorText);
+        console.error('❌ Full error response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+      }
+      
+      // Check if we're getting the expected content type
+      const contentType = response.headers.get('content-type');
+      if (!contentType?.includes('text/event-stream') && !contentType?.includes('text/plain')) {
+        const responseText = await response.text();
+        console.error('❌ Unexpected content-type from /stream:', contentType);
+        console.error('❌ Response body:', responseText.substring(0, 200) + '...');
+        throw new Error(`Expected event-stream but got ${contentType}: ${responseText}`);
       }
       
       source.readyState = 1; // OPEN

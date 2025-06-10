@@ -5,6 +5,14 @@
   "installCommand": "npm install",
   "routes": [
     {
+      "src": "/token",
+      "dest": "/api/token"
+    },
+    {
+      "src": "/stream",
+      "dest": "/api/stream"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/$1"
     },

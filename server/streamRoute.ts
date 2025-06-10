@@ -126,7 +126,6 @@ async function runConversationLoop(conversation: any[], res: any) {
           };
 
           send(fco);                 // give result to the model *immediately*
-          conversation.push(fco);    // keep it in history
           console.log(`📝 Added function output to conversation for call_id: ${fc.call_id}`);
         } else {
           console.log(`⚠️ Skipping already handled call_id: ${fc.call_id}`);

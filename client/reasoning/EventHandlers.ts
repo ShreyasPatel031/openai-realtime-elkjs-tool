@@ -148,6 +148,25 @@ export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdR
       } else {
         addLine("❌ No response ID available for function call");
       }
+    } else if (delta.type === "function_call_output") {
+      // Handle function call output events from the server
+      addLine(`⚙️ Added function calling message: ${delta.call_id}`);
+      console.log(`📨 Received function call output for call_id: ${delta.call_id}`);
+      
+      // Parse and log the output for debugging
+      try {
+        const output = JSON.parse(delta.output);
+        if (output.graph) {
+          addLine(`📊 Graph state BEFORE operation: ${JSON.stringify(output.graph)}`);
+          console.log('🔍 Current ELK Graph:', output.graph);
+        }
+      } catch (e) {
+        console.log('📝 Function output (not JSON):', delta.output);
+      }
+    } else if (delta.type === "error") {
+      // Handle error events from the server
+      addLine(`❌ Error: ${delta.error || 'Unknown error'}`);
+      console.log('❌ Stream error:', delta);
     } else if (delta.type === "response.completed" || delta.type === "response.done") {
       // Keep the id
       if (!responseIdRef.current && delta.response?.id) {

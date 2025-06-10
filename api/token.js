@@ -1,4 +1,4 @@
-export default function handler(req, res) {
+export default async function handler(req, res) {
   try {
     // Set CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,27 +17,47 @@ export default function handler(req, res) {
 
     const apiKey = process.env.OPENAI_API_KEY;
     
-    console.log('API Key present:', !!apiKey);
-    console.log('API Key length:', apiKey ? apiKey.length : 0);
-    console.log('Node version:', process.version);
-    console.log('Has fetch:', typeof fetch);
-    
-    // Test response
-    res.json({ 
-      success: true,
-      hasApiKey: !!apiKey,
-      apiKeyLength: apiKey ? apiKey.length : 0,
-      nodeVersion: process.version,
-      hasFetch: typeof fetch !== 'undefined',
-      environment: process.env.NODE_ENV || 'unknown'
+    if (!apiKey) {
+      console.error("OPENAI_API_KEY is not set");
+      return res.status(500).json({ error: "API key not configured" });
+    }
+
+    // Use built-in fetch (available in Node.js 18+)
+    const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini-realtime-preview",
+        voice: "verse",
+      }),
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("OpenAI API error:", response.status, errorText);
+      return res.status(response.status).json({ 
+        error: `OpenAI API error: ${response.status}`,
+        details: errorText
+      });
+    }
+
+    const data = await response.json();
+    
+    if (!data || !data.client_secret || !data.client_secret.value) {
+      console.error("Invalid response from OpenAI:", data);
+      return res.status(500).json({ error: "Invalid response from OpenAI" });
+    }
+
+    res.json(data);
     
   } catch (error) {
     console.error("Token endpoint error:", error);
     res.status(500).json({ 
       error: "Function error", 
-      details: error.message,
-      stack: error.stack 
+      details: error.message
     });
   }
 } 

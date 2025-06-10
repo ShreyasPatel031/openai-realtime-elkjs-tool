@@ -106,27 +106,8 @@ async function runConversationLoop(conversation: any[], res: any) {
         
         if (!handledCallIds.has(fc.call_id)) {
           handledCallIds.add(fc.call_id);
-          console.log("🔧 immediate exec →", fc.name, "(call_id:", fc.call_id + ")");
-
-          // For now, just return the current graph state for all functions
-          // The actual execution will happen on the client side
-          let toolResult: any;
-          try {
-            toolResult = { graph: elkGraph };
-            console.log(`✅ Function ${fc.name} executed successfully`);
-          } catch (e: any) {
-            console.error(`❌ Function ${fc.name} failed:`, e);
-            toolResult = { error: e.message };
-          }
-
-          const fco = {
-            type: "function_call_output",
-            call_id: fc.call_id,
-            output: JSON.stringify(toolResult)      // ← back to JSON string, API expects string
-          };
-
-          send(fco);                 // give result to the model *immediately*
-          console.log(`📝 Added function output to conversation for call_id: ${fc.call_id}`);
+          console.log("🔧 Function call completed →", fc.name, "(call_id:", fc.call_id + ")");
+          // Note: Function execution will be handled by the client side
         } else {
           console.log(`⚠️ Skipping already handled call_id: ${fc.call_id}`);
         }

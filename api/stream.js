@@ -1,28 +1,7 @@
 import OpenAI from "openai";
+import { allTools } from "../client/realtime/toolCatalog.js";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-// Simple tool definitions for testing
-const testTools = [
-  {
-    name: "add_node",
-    description: "Add a new node to the graph",
-    parameters: {
-      type: "object",
-      properties: {
-        nodename: { type: "string" },
-        parentId: { type: "string", default: "root" },
-        data: { type: "object" }
-      },
-      required: ["nodename"]
-    }
-  },
-  {
-    name: "display_elk_graph", 
-    description: "Display the current graph",
-    parameters: { type: "object", properties: {} }
-  }
-];
 
 export default async function handler(req, res) {
   try {
@@ -69,15 +48,8 @@ export default async function handler(req, res) {
     let conversation = JSON.parse(payload);
     console.log('Parsed conversation with', conversation.length, 'items');
     
-    // For now, just send a test response
-    res.write(`data: ${JSON.stringify({ 
-      type: "test", 
-      message: "Stream endpoint working",
-      conversationLength: conversation.length
-    })}\n\n`);
-    
-    res.write("data: [DONE]\n\n");
-    res.end();
+    // Actually run the conversation loop with o4-mini reasoning model
+    await runConversationLoop(conversation, res);
     
   } catch (error) {
     console.error('=== STREAMING ERROR ===');
@@ -106,7 +78,7 @@ async function runConversationLoop(conversation, res) {
     const stream = await client.responses.create({
       model: "o4-mini",
       input: conversation,
-      tools: testTools.map(tool => ({
+      tools: allTools.map(tool => ({
         type: "function",
         name: tool.name,
         description: tool.description,

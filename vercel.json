@@ -9,6 +9,18 @@
       "dest": "/api/$1"
     },
     {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
+      "src": "/icons/(.*)",
+      "dest": "/icons/$1"
+    },
+    {
+      "src": "/group-icons/(.*)",
+      "dest": "/group-icons/$1"
+    },
+    {
       "src": "/(.*)",
       "dest": "/index.html"
     }

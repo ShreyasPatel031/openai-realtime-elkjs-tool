@@ -24,58 +24,68 @@ const testTools = [
   }
 ];
 
-module.exports = async function handler(req, res) {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-
-  console.log('=== STREAM REQUEST ===');
-  console.log('Method:', req.method);
-  console.log('Content-Type:', req.headers['content-type']);
-  
-  // Get payload from request
-  const payload = req.method === "POST"
-    ? (req.body?.payload ?? req.body.payload)
-    : req.query.payload;
-
-  console.log('Has payload:', !!payload);
-  console.log('Payload length:', typeof payload === 'string' ? payload.length : 0);
-
-  if (!payload) {
-    return res.status(400).json({ error: "missing payload" });
-  }
-
-  // Set up Server-Sent Events
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders();
-
+export default async function handler(req, res) {
   try {
+    // Set CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+      res.status(200).end();
+      return;
+    }
+
+    console.log('=== STREAM REQUEST ===');
+    console.log('Method:', req.method);
+    console.log('Content-Type:', req.headers['content-type']);
+    
+    const apiKey = process.env.OPENAI_API_KEY;
+    
+    if (!apiKey) {
+      console.error("OPENAI_API_KEY is not set");
+      return res.status(500).json({ error: "API key not configured" });
+    }
+    
+    // Get payload from request
+    const payload = req.method === "POST"
+      ? (req.body?.payload ?? req.body.payload)
+      : req.query.payload;
+
+    console.log('Has payload:', !!payload);
+
+    if (!payload) {
+      return res.status(400).json({ error: "missing payload" });
+    }
+
+    // Set up Server-Sent Events
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
     // Parse initial conversation
     let conversation = JSON.parse(payload);
-    console.log('Initial conversation:', conversation);
+    console.log('Parsed conversation with', conversation.length, 'items');
     
-    // Run the conversation loop
-    await runConversationLoop(conversation, res);
+    // For now, just send a test response
+    res.write(`data: ${JSON.stringify({ 
+      type: "test", 
+      message: "Stream endpoint working",
+      conversationLength: conversation.length
+    })}\n\n`);
+    
+    res.write("data: [DONE]\n\n");
+    res.end();
     
   } catch (error) {
     console.error('=== STREAMING ERROR ===');
-    console.error('Error type:', error.constructor.name);
-    console.error('Error message:', error.message);
-    console.error('Full error:', error);
+    console.error('Error:', error.message);
     
     res.write(`data: ${JSON.stringify({ 
       type: "error", 
-      error: error instanceof Error ? error.message : "Unknown error", 
-      details: error 
+      error: error.message 
     })}\n\n`);
     res.end();
   }

@@ -22,13 +22,36 @@ module.exports = async function handler(req, res) {
       return res.status(500).json({ error: "API key not configured" });
     }
 
-    // Test endpoint - just return success for now
-    res.json({ 
-      success: true, 
-      message: "Token endpoint is working",
-      hasApiKey: !!apiKey,
-      environment: process.env.NODE_ENV || "unknown"
+    // Use built-in fetch (available in Node.js 18+)
+    const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini-realtime-preview",
+        voice: "verse",
+      }),
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("OpenAI API error:", response.status, errorText);
+      return res.status(response.status).json({ 
+        error: `OpenAI API error: ${response.status}`,
+        details: errorText
+      });
+    }
+
+    const data = await response.json();
+    
+    if (!data || !data.client_secret || !data.client_secret.value) {
+      console.error("Invalid response from OpenAI:", data);
+      return res.status(500).json({ error: "Invalid response from OpenAI" });
+    }
+
+    res.json(data);
     
   } catch (error) {
     console.error("Token endpoint error:", error);

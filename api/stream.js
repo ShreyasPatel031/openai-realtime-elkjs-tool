@@ -1,9 +1,30 @@
-import OpenAI from "openai";
-import { allTools } from "../client/realtime/toolCatalog.ts";
+const OpenAI = require("openai");
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export default async function handler(req, res) {
+// Simple tool definitions for testing
+const testTools = [
+  {
+    name: "add_node",
+    description: "Add a new node to the graph",
+    parameters: {
+      type: "object",
+      properties: {
+        nodename: { type: "string" },
+        parentId: { type: "string", default: "root" },
+        data: { type: "object" }
+      },
+      required: ["nodename"]
+    }
+  },
+  {
+    name: "display_elk_graph", 
+    description: "Display the current graph",
+    parameters: { type: "object", properties: {} }
+  }
+];
+
+module.exports = async function handler(req, res) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -75,7 +96,7 @@ async function runConversationLoop(conversation, res) {
     const stream = await client.responses.create({
       model: "o4-mini",
       input: conversation,
-      tools: allTools.map(tool => ({
+      tools: testTools.map(tool => ({
         type: "function",
         name: tool.name,
         description: tool.description,

@@ -146,9 +146,9 @@ async function runConversationLoop(conversation: any[], res: any) {
         
         console.log(`🔄 ${calls.length} function call(s) processed, continuing conversation loop`);
         
-        // Only add persistent items to conversation - exclude reasoning items that cause 404 errors
+        // Only add persistent items to conversation - exclude reasoning and function_call items to prevent API errors
         const persistentItems = delta.response.output.filter((item: any) => 
-          item.type === "function_call" || item.type === "message"
+          item.type === "message"
         );
         conversation.push(...persistentItems);
         break;                              // outer while continues

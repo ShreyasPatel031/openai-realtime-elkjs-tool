@@ -14,8 +14,6 @@ export interface EventHandlerCallbacks {
   onComplete?: () => void; // Add completion callback
 }
 
-import { sendArchitectureCompleteToRealtimeAgent } from '../utils/chatUtils';
-
 // Function to handle different delta types from the API response
 export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdRef: { current: string | null }) => {
   const { addLine, appendToTextLine, appendToReasoningLine, appendToArgsLine, pushCall, setBusy, onComplete } = callbacks;
@@ -150,18 +148,22 @@ export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdR
       }
     } else if (delta.type === "function_call_output") {
       // Handle function call output events from the server
-      addLine(`⚙️ Added function calling message: ${delta.call_id}`);
+      addLine(`📨 Received function call output for call_id: ${delta.call_id}`);
       console.log(`📨 Received function call output for call_id: ${delta.call_id}`);
       
       // Parse and log the output for debugging
       try {
         const output = JSON.parse(delta.output);
         if (output.graph) {
-          addLine(`📊 Graph state BEFORE operation: ${JSON.stringify(output.graph)}`);
           console.log('🔍 Current ELK Graph:', output.graph);
         }
       } catch (e) {
         console.log('📝 Function output (not JSON):', delta.output);
+      }
+      
+      // Mark this call as handled to prevent the StreamExecutor from trying to send another output
+      if (handledCalls) {
+        handledCalls.add(delta.call_id);
       }
     } else if (delta.type === "error") {
       // Handle error events from the server
@@ -196,7 +198,7 @@ export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdR
       }
       // Send architecture complete notification to real-time agent
       setTimeout(() => {
-        sendArchitectureCompleteToRealtimeAgent();
+        // sendArchitectureCompleteToRealtimeAgent();
       }, 1500);
       return 'close';
     } else if (delta.type?.includes('.done') || delta.type?.includes('.delta')) {

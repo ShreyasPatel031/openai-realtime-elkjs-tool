@@ -10,7 +10,41 @@ const client = new OpenAI({
   timeout: 60000, // 60 seconds
 });
 
-// ... existing code ...
+// Helper to decompress base64 payload
+const decompressPayload = async (compressedPayload: string): Promise<string> => {
+  // Convert base64 to Uint8Array
+  const binaryStr = atob(compressedPayload);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  
+  // Decompress using DecompressionStream
+  const ds = new DecompressionStream('gzip');
+  const writer = ds.writable.getWriter();
+  await writer.write(bytes);
+  await writer.close();
+  
+  // Read the decompressed data
+  const reader = ds.readable.getReader();
+  const chunks: Uint8Array[] = [];
+  
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  
+  // Combine chunks and convert to string
+  const decompressed = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    decompressed.set(chunk, offset);
+    offset += chunk.length;
+  }
+  
+  return new TextDecoder().decode(decompressed);
+};
 
 export default async function handler(req: Request) {
   // Handle preflight requests
@@ -20,7 +54,7 @@ export default async function handler(req: Request) {
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Content-Encoding'
       }
     });
   }
@@ -31,9 +65,33 @@ export default async function handler(req: Request) {
     
     // Get payload from request
     let payload: string | undefined;
+    let isCompressed = false;
+    
     if (req.method === "POST") {
       const body = await req.json();
       payload = body?.payload;
+      isCompressed = body?.isCompressed === true;
+      
+      // Decompress if needed
+      if (isCompressed && payload) {
+        try {
+          console.log('🔄 Decompressing payload...');
+          payload = await decompressPayload(payload);
+          console.log('✅ Payload decompressed successfully');
+        } catch (decompressError) {
+          console.error('❌ Failed to decompress payload:', decompressError);
+          return new Response(JSON.stringify({ 
+            error: "Failed to decompress payload",
+            details: decompressError instanceof Error ? decompressError.message : String(decompressError)
+          }), {
+            status: 400,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*'
+            }
+          });
+        }
+      }
     } else {
       const url = new URL(req.url);
       payload = url.searchParams.get('payload') ?? undefined;

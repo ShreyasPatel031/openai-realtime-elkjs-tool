@@ -12,6 +12,39 @@ export interface PostEventSource extends EventTarget {
   CLOSED: number;
 }
 
+// Helper to compress payload using base64 to reduce size
+const compressPayload = async (payload: string): Promise<string> => {
+  // Use TextEncoder to convert string to Uint8Array
+  const encoder = new TextEncoder();
+  const data = encoder.encode(payload);
+  
+  // Create a buffer to hold compressed data
+  const cs = new CompressionStream('gzip');
+  const writer = cs.writable.getWriter();
+  await writer.write(data);
+  await writer.close();
+  
+  // Get the compressed data from the stream
+  const reader = cs.readable.getReader();
+  const chunks: Uint8Array[] = [];
+  
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  
+  // Combine chunks and convert to base64
+  const compressed = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
+  let offset = 0;
+  for (const chunk of chunks) {
+    compressed.set(chunk, offset);
+    offset += chunk.length;
+  }
+  
+  return btoa(String.fromCharCode(...compressed));
+};
+
 // Helper to create EventSource-like object using POST + SSE parsing
 export const createPostEventSource = (payload: string, prevId?: string): PostEventSource => {
   const controller = new AbortController();
@@ -37,20 +70,30 @@ export const createPostEventSource = (payload: string, prevId?: string): PostEve
   // Start the fetch request
   const startFetch = async () => {
     try {
+      // Check if payload needs compression (over 40KB)
+      const isLargePayload = payload.length > 40 * 1024;
+      const compressedPayload = isLargePayload ? await compressPayload(payload) : payload;
+      
       // Use JSON format for cleaner API
       const requestBody = JSON.stringify({
-        payload: payload,
+        payload: compressedPayload,
+        isCompressed: isLargePayload,
         ...(prevId && { previous_response_id: prevId })
       });
       
       console.log('🔄 Starting stream...', prevId ? '(follow-up)' : '(initial)');
-      console.log('🔍 Fetch body length:', requestBody.length);
+      console.log('🔍 Original payload size:', payload.length);
+      if (isLargePayload) {
+        console.log('🔍 Compressed payload size:', compressedPayload.length);
+        console.log('🔍 Compression ratio:', (compressedPayload.length / payload.length * 100).toFixed(1) + '%');
+      }
       
       const response = await fetch('/stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'text/event-stream',
+          'Content-Encoding': isLargePayload ? 'gzip' : 'identity'
         },
         body: requestBody,
         signal: controller.signal,
@@ -58,7 +101,6 @@ export const createPostEventSource = (payload: string, prevId?: string): PostEve
       
       console.log('🔍 Stream response status:', response.status);
       console.log('🔍 Stream response headers:', Object.fromEntries(response.headers));
-      console.log('🔍 Stream response content-type:', response.headers.get('content-type'));
       
       if (!response.ok) {
         const errorText = await response.text();

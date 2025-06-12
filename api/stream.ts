@@ -250,65 +250,18 @@ async function runConversationLoop(
           const funcCall = delta.item;
           console.log(`🎯 Processing function call: ${funcCall.name}`);
           
-          try {
-            // Parse function arguments
-            const args = typeof funcCall.arguments === 'string' ? 
-              JSON.parse(funcCall.arguments) : funcCall.arguments;
-            
-            // Handle different function types
-            let result;
-            switch (funcCall.name) {
-              case "display_elk_graph":
-                result = elkGraph;
-                break;
-              case "add_node":
-                elkGraph = {
-                  ...elkGraph,
-                  children: [
-                    ...elkGraph.children,
-                    {
-                      id: args.nodename,
-                      parentId: args.parentId,
-                      ...args.data
-                    }
-                  ]
-                };
-                result = elkGraph;
-                break;
-              // Add other function handlers as needed
-              default:
-                result = {
-                  error: `Unknown function: ${funcCall.name}`,
-                  current_graph: elkGraph
-                };
-            }
-            
-            // Build function call output
-            const fco = {
-              type: "function_call_output",
-              call_id: funcCall.call_id,
-              output: JSON.stringify(result)
-            };
-            
-            // Send it back to the model
-            send(fco);
-            
-            // Keep it in history
-            conversation.push(fco);
-            
-          } catch (error) {
-            console.error(`❌ Error processing function call:`, error);
-            const errorOutput = {
-              type: "function_call_output",
-              call_id: funcCall.call_id,
-              output: JSON.stringify({
-                error: error instanceof Error ? error.message : String(error),
-                current_graph: elkGraph
-              })
-            };
-            send(errorOutput);
-            conversation.push(errorOutput);
-          }
+          // Build function call output
+          const fco = {
+            type: "function_call_output",
+            call_id: funcCall.call_id,
+            output: JSON.stringify(elkGraph)
+          };
+          
+          // Send it back to the model
+          send(fco);
+          
+          // Keep it in history
+          conversation.push(fco);
         }
 
         if (delta.type === "response.completed") {
@@ -360,3 +313,9 @@ async function runConversationLoop(
     }
   }
 }
+
+// Configure this endpoint to run in Edge Runtime
+export const config = {
+  runtime: 'edge',
+  regions: ['cle1'], // US East to match your deployment
+};

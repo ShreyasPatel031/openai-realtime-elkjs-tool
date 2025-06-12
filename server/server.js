@@ -29,6 +29,10 @@ app.use(cors());
 app.use(express.json());                     // for application/json
 app.use(express.urlencoded({ extended: false })); // for x-www-form-urlencoded
 
+// Stream route for development
+import streamHandler from './streamRoute.ts';
+app.post("/stream", streamHandler);
+
 // API route for chat completions - MUST be before Vite middleware
 app.post("/chat", async (req, res) => {
   try {

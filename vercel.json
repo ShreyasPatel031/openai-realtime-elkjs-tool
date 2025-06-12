@@ -10,7 +10,10 @@
     },
     {
       "src": "/stream",
-      "dest": "/api/stream"
+      "dest": "/api/stream",
+      "headers": {
+        "x-vercel-edge-runtime": "1"
+      }
     },
     {
       "src": "/api/(.*)",

@@ -264,112 +264,110 @@ const allTools = [
   }
 ];
 
-export default async function handler(req, res) {
-  try {
-    // Set CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    
-    // Handle preflight requests
-    if (req.method === 'OPTIONS') {
-      res.status(200).end();
-      return;
-    }
+export default async function handler(req) {
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      }
+    });
+  }
 
+  try {
     console.log('=== STREAM REQUEST ===');
     console.log('Method:', req.method);
-    console.log('Content-Type:', req.headers['content-type']);
-    console.log('🐛 DEBUG: Environment check - NODE_ENV:', process.env.NODE_ENV);
-    console.log('🐛 DEBUG: Vercel Region:', process.env.VERCEL_REGION);
-    console.log('🐛 DEBUG: Request URL:', req.url);
-    console.log('🐛 DEBUG: Request headers:', JSON.stringify(req.headers, null, 2));
-    
-    const apiKey = process.env.OPENAI_API_KEY;
-    console.log('🐛 DEBUG: API Key exists:', !!apiKey);
-    console.log('🐛 DEBUG: API Key length:', apiKey ? apiKey.length : 'N/A');
-    console.log('🐛 DEBUG: API Key prefix:', apiKey ? apiKey.substring(0, 10) + '...' : 'N/A');
-    
-    if (!apiKey) {
-      console.error("❌ OPENAI_API_KEY is not set");
-      return res.status(500).json({ error: "API key not configured" });
-    }
     
     // Get payload from request
-    const payload = req.method === "POST"
-      ? (req.body?.payload ?? req.body.payload)
-      : req.query.payload;
-
-    console.log('🐛 DEBUG: Has payload:', !!payload);
-    console.log('🐛 DEBUG: Payload type:', typeof payload);
-    console.log('🐛 DEBUG: Payload length:', payload ? payload.length : 'N/A');
-    console.log('🐛 DEBUG: Request body keys:', req.body ? Object.keys(req.body) : 'N/A');
+    let payload;
+    if (req.method === "POST") {
+      const body = await req.json();
+      payload = body?.payload;
+    } else {
+      const url = new URL(req.url);
+      payload = url.searchParams.get('payload');
+    }
 
     if (!payload) {
-      console.error("❌ Missing payload in request");
-      return res.status(400).json({ error: "missing payload" });
+      return new Response(JSON.stringify({ error: "missing payload" }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
     }
 
-    // Set up Server-Sent Events
-    console.log('🐛 DEBUG: Setting up SSE headers...');
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.flushHeaders();
-    console.log('🐛 DEBUG: SSE headers set and flushed');
+    // Create a new ReadableStream for SSE
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
+        const send = (obj) => {
+          const data = `data: ${JSON.stringify(obj)}\n\n`;
+          controller.enqueue(encoder.encode(data));
+        };
 
-    // Parse initial conversation
-    let conversation;
-    try {
-      conversation = JSON.parse(payload);
-      console.log('🐛 DEBUG: Parsed conversation with', conversation.length, 'items');
-      console.log('🐛 DEBUG: Conversation preview:', JSON.stringify(conversation.slice(0, 2), null, 2));
-    } catch (parseError) {
-      console.error('❌ Failed to parse payload:', parseError.message);
-      res.write(`data: ${JSON.stringify({ type: "error", error: "Invalid payload format" })}\n\n`);
-      res.end();
-      return;
-    }
-    
-    // Actually run the conversation loop with o4-mini reasoning model
-    console.log('🐛 DEBUG: Starting runConversationLoop...');
-    await runConversationLoop(conversation, res);
-    console.log('🐛 DEBUG: runConversationLoop completed');
-    
+        try {
+          // Parse initial conversation
+          const conversation = JSON.parse(payload);
+          await runConversationLoop(conversation, send, controller);
+        } catch (error) {
+          console.error('=== STREAMING ERROR ===');
+          console.error('Error type:', error.constructor.name);
+          console.error('Error message:', error.message);
+          
+          send({ 
+            type: "error", 
+            error: error.message,
+            debug: {
+              type: error.constructor.name,
+              stack: error.stack
+            }
+          });
+          
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        }
+      }
+    });
+
+    // Return the stream response
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
   } catch (error) {
-    console.error('=== STREAMING ERROR ===');
-    console.error('🐛 DEBUG: Error type:', error.constructor.name);
-    console.error('🐛 DEBUG: Error message:', error.message);
-    console.error('🐛 DEBUG: Error stack:', error.stack);
+    console.error('=== REQUEST ERROR ===');
+    console.error('Error:', error);
     
-    res.write(`data: ${JSON.stringify({ 
+    return new Response(JSON.stringify({ 
       type: "error", 
       error: error.message,
       debug: {
         type: error.constructor.name,
         stack: error.stack
       }
-    })}\n\n`);
-    res.end();
+    }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
   }
 }
 
-async function runConversationLoop(conversation, res) {
+async function runConversationLoop(conversation, send, controller) {
+  const encoder = new TextEncoder();
   let elkGraph = { id: "root", children: [], edges: [] };
   
-  // helper to push an SSE chunk to the browser
-  const send = (obj) => {
-    const data = `data: ${JSON.stringify(obj)}\n\n`;
-    console.log('🐛 DEBUG: Sending SSE chunk:', obj.type || 'unknown type');
-    try {
-      res.write(data);
-    } catch (writeError) {
-      console.error('❌ Error writing to response stream:', writeError);
-      // If we can't write to the stream, it's probably closed
-      throw writeError;
-    }
-  };
-
   while (true) {
     console.log(`🔄 Starting conversation turn with ${conversation.length} items`);
     console.log('🐛 DEBUG: About to call OpenAI API...');
@@ -420,7 +418,7 @@ async function runConversationLoop(conversation, res) {
           console.log(`🐛 DEBUG: Processed ${messageCount} stream messages so far...`);
         }
         
-        send(delta);                                   // mirror every chunk to client
+        send(delta);
 
         // Debug: Log ALL delta types to see what we're actually receiving
         console.log("📨 Delta type:", delta.type);
@@ -472,31 +470,29 @@ async function runConversationLoop(conversation, res) {
         /* ─── finished turn? decide to loop or exit ─── */
         if (delta.type === "response.completed") {
           const calls = delta.response?.output?.filter((x) => x.type === "function_call") ?? [];
-          if (calls.length === 0) {           // model is done
+          if (calls.length === 0) {
             console.log('✅ No function calls found, ending conversation');
             console.log(`🐛 DEBUG: Total stream messages processed: ${messageCount}`);
             send({ type: "done", data: "[DONE]" });
-            res.write("data: [DONE]\n\n");
-            res.end();
-            return;                  // model finished – no more calls
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+            return;
           }
           
           console.log(`🔄 ${calls.length} function call(s) processed, continuing conversation loop`);
           console.log(`🐛 DEBUG: Total stream messages processed this turn: ${messageCount}`);
           
-          // Only add persistent items to conversation - exclude reasoning items that cause 404 errors
+          // Only add persistent items to conversation
           const persistentItems = delta.response.output.filter((item) => 
             item.type === "message"
           );
           conversation.push(...persistentItems);
-          break;                              // outer while continues
+          break;
         }
       }
-      console.log(`🐛 DEBUG: Stream for-await loop completed with ${messageCount} messages`);
     } catch (apiError) {
       console.error('🐛 DEBUG: OpenAI API Error:', apiError.constructor.name);
       console.error('🐛 DEBUG: OpenAI API Error message:', apiError.message);
-      console.error('🐛 DEBUG: OpenAI API Error stack:', apiError.stack);
       
       // Check if it's a connection error
       const isConnectionError = 
@@ -518,13 +514,8 @@ async function runConversationLoop(conversation, res) {
         }
       });
       
-      // Always ensure we end the response
-      try {
-        res.write("data: [DONE]\n\n");
-        res.end();
-      } catch (endError) {
-        console.error('❌ Error ending response stream:', endError);
-      }
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
       return;
     }
   }
@@ -534,4 +525,4 @@ async function runConversationLoop(conversation, res) {
 export const config = {
   runtime: 'edge',
   regions: ['iad1'], // US East (N. Virginia) for lower latency
-}; 
+};

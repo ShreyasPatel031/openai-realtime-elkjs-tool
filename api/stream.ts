@@ -245,6 +245,25 @@ async function runConversationLoop(
         
         send(delta);
 
+        // Handle function calls and generate outputs
+        if (delta.type === "response.output_item.done" && delta.item?.type === "function_call") {
+          const funcCall = delta.item;
+          console.log(`🎯 Processing function call: ${funcCall.name}`);
+          
+          // Build function call output
+          const fco = {
+            type: "function_call_output",
+            call_id: funcCall.call_id,
+            output: JSON.stringify(elkGraph)
+          };
+          
+          // Send it back to the model
+          send(fco);
+          
+          // Keep it in history
+          conversation.push(fco);
+        }
+
         if (delta.type === "response.completed") {
           const calls = delta.response?.output?.filter((x: any) => x.type === "function_call") ?? [];
           if (calls.length === 0) {
@@ -259,11 +278,8 @@ async function runConversationLoop(
           console.log(`🔄 ${calls.length} function call(s) processed, continuing conversation loop`);
           console.log(`🐛 DEBUG: Total stream messages processed this turn: ${messageCount}`);
           
-          // Only add persistent items to conversation
-          const persistentItems = delta.response.output.filter((item: any) => 
-            item.type === "message"
-          );
-          conversation.push(...persistentItems);
+          // Keep everything the model sent so it remembers its own tool use
+          conversation.push(...delta.response.output);
           break;
         }
       }

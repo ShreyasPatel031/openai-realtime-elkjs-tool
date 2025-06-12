@@ -61,80 +61,113 @@ async function runConversationLoop(conversation: any[], res: any) {
   // helper to push an SSE chunk to the browser
   const send = (obj: any) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
 
+  // Track all function calls across turns to prevent duplicates
+  const allHandledCallIds = new Set<string>();
+  let turnCount = 0;
+  const MAX_TURNS = 10; // Safety limit
+
   while (true) {
-    console.log(`🔄 Starting conversation turn with ${conversation.length} items`);
+    turnCount++;
+    if (turnCount > MAX_TURNS) {
+      console.log('⚠️ Reached maximum turns limit');
+      send({ 
+        type: "error", 
+        error: "Reached maximum conversation turns limit", 
+        debug: { turnCount, MAX_TURNS } 
+      });
+      break;
+    }
+
+    console.log(`🔄 Starting conversation turn ${turnCount} with ${conversation.length} items`);
     
-    // Track which function calls we've already handled in this turn
-    const handledCallIds = new Set<string>();
-    
-    const stream = await client.responses.create({
-      model: "o4-mini",
-      input: conversation,
-      tools: allTools.map(tool => ({
-        type: "function" as const,
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters,
-        strict: false
-      })),
-      tool_choice: "auto",
-      parallel_tool_calls: false,
-      reasoning: { effort: "low", summary: "detailed" },
-      stream: true
-    });
+    try {
+      const stream = await client.responses.create({
+        model: "o4-mini",
+        input: conversation,
+        tools: allTools.map(tool => ({
+          type: "function" as const,
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+          strict: false
+        })),
+        tool_choice: "auto",
+        parallel_tool_calls: false,
+        reasoning: { effort: "low", summary: "detailed" },
+        stream: true
+      });
 
-    for await (const delta of stream) {
-      send(delta);                                   // mirror every chunk to client
+      for await (const delta of stream) {
+        // Debug: Log ALL delta types
+        console.log("📨 Delta type:", delta.type, delta);
 
-      // Debug: Log ALL delta types to see what we're actually receiving
-      console.log("📨 Delta type:", delta.type);
+        // Check for OpenAI API errors
+        if (delta.type === "error" && delta.error) {
+          console.error("❌ OpenAI API Error:", delta.error);
+          send({ 
+            type: "error", 
+            error: `OpenAI API Error: ${delta.error}`,
+            debug: delta 
+          });
+          continue;
+        }
 
-      // Debug logs to see what the model is actually sending
-      if (delta.type?.startsWith("function_call")) {
-        console.log("🔔 delta function_call.* →", JSON.stringify(delta, null, 2));
-      }
-      if (delta.type === "response.reasoning_summary_text.delta") {
-        console.log("🧠 reasoning →", delta.delta);
-      }
-      if (delta.type === "response.completed") {
-        console.log("🏁 completed – output:", JSON.stringify(delta.response?.output, null, 2));
-      }
+        send(delta); // mirror chunk to client
 
-      /* ─── execute as soon as the call is complete ─── */
-      if (delta.type === "response.output_item.done" && (delta as any).item?.type === "function_call") {
-        const fc = (delta as any).item;
-        
-        if (!handledCallIds.has(fc.call_id)) {
-          handledCallIds.add(fc.call_id);
-          console.log("🔧 Function call completed →", fc.name, "(call_id:", fc.call_id + ")");
-          // Note: Function execution will be handled by the client side
-        } else {
-          console.log(`⚠️ Skipping already handled call_id: ${fc.call_id}`);
+        // Handle function calls
+        if (delta.type === "response.output_item.done" && (delta as any).item?.type === "function_call") {
+          const fc = (delta as any).item;
+          
+          if (allHandledCallIds.has(fc.call_id)) {
+            console.log(`⚠️ Skipping duplicate call_id: ${fc.call_id}`);
+            continue;
+          }
+
+          console.log("🔧 Function call completed →", {
+            name: fc.name,
+            call_id: fc.call_id,
+            args: fc.args
+          });
+
+          allHandledCallIds.add(fc.call_id);
+        }
+
+        // Handle turn completion
+        if (delta.type === "response.completed") {
+          const calls = delta.response?.output?.filter((x: any) => x.type === "function_call") ?? [];
+          
+          if (calls.length === 0) {
+            console.log('✅ No function calls found, ending conversation');
+            send({ type: "done", data: "[DONE]" });
+            res.write("data: [DONE]\n\n");
+            res.end();
+            return;
+          }
+          
+          console.log(`🔄 Turn ${turnCount} complete: ${calls.length} function call(s) processed`);
+          
+          // Only add persistent items to conversation
+          const persistentItems = delta.response.output.filter((item: any) => 
+            item.type === "message"
+          );
+          conversation.push(...persistentItems);
+          break; // Continue to next turn
         }
       }
-
-      /* ─── finished turn? decide to loop or exit ─── */
-      if (delta.type === "response.completed") {
-        const calls = delta.response?.output?.filter((x: any) => x.type === "function_call") ?? [];
-        if (calls.length === 0) {           // model is done
-          console.log('✅ No function calls found, ending conversation');
-          send({ type: "done", data: "[DONE]" });
-          res.write("data: [DONE]\n\n");
-          res.end();
-          return;                  // model finished – no more calls
-        }
-        
-        console.log(`🔄 ${calls.length} function call(s) processed, continuing conversation loop`);
-        
-        // Only add persistent items to conversation - exclude reasoning and function_call items to prevent API errors
-        const persistentItems = delta.response.output.filter((item: any) => 
-          item.type === "message"
-        );
-        conversation.push(...persistentItems);
-        break;                              // outer while continues
-      }
+    } catch (error) {
+      console.error('❌ Stream error:', error);
+      send({ 
+        type: "error", 
+        error: error instanceof Error ? error.message : "Stream error",
+        debug: { error, turn: turnCount }
+      });
+      break;
     }
   }
+
+  // Ensure we always end the response
+  res.write("data: [DONE]\n\n");
+  res.end();
 }
 
 // Handle both GET and POST requests to the same endpoint

@@ -297,9 +297,3 @@ async function runConversationLoop(
     }
   }
 }
-
-// Configure Edge runtime for better streaming support
-export const config = {
-  runtime: 'edge',
-  regions: ['iad1'], // US East (N. Virginia) for lower latency
-}; 

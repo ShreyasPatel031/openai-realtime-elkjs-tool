@@ -1,6 +1,11 @@
 import OpenAI from "openai";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const client = new OpenAI({ 
+  apiKey: process.env.OPENAI_API_KEY,
+  maxRetries: 3,
+  timeout: 60000, // 60 seconds
+  httpAgent: undefined // Let Node.js handle keep-alive
+});
 
 // Group Icons for architecture grouping and containers
 const availableGroupIcons = [
@@ -356,7 +361,13 @@ async function runConversationLoop(conversation, res) {
   const send = (obj) => {
     const data = `data: ${JSON.stringify(obj)}\n\n`;
     console.log('🐛 DEBUG: Sending SSE chunk:', obj.type || 'unknown type');
-    res.write(data);
+    try {
+      res.write(data);
+    } catch (writeError) {
+      console.error('❌ Error writing to response stream:', writeError);
+      // If we can't write to the stream, it's probably closed
+      throw writeError;
+    }
   };
 
   while (true) {
@@ -368,21 +379,38 @@ async function runConversationLoop(conversation, res) {
     
     try {
       console.log('🐛 DEBUG: Creating OpenAI stream with client...');
-      const stream = await client.responses.create({
-        model: "o4-mini",
-        input: conversation,
-        tools: allTools.map(tool => ({
-          type: "function",
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.parameters,
-          strict: false
-        })),
-        tool_choice: "auto",
-        parallel_tool_calls: false,
-        reasoning: { effort: "low", summary: "detailed" },
-        stream: true
-      });
+      let retryCount = 0;
+      let stream;
+      
+      while (retryCount < 3) {
+        try {
+          stream = await client.responses.create({
+            model: "o4-mini",
+            input: conversation,
+            tools: allTools.map(tool => ({
+              type: "function",
+              name: tool.name,
+              description: tool.description,
+              parameters: tool.parameters,
+              strict: false
+            })),
+            tool_choice: "auto",
+            parallel_tool_calls: false,
+            reasoning: { effort: "low", summary: "detailed" },
+            stream: true
+          });
+          break; // If successful, exit retry loop
+        } catch (streamError) {
+          retryCount++;
+          console.error(`❌ Stream creation failed (attempt ${retryCount}/3):`, streamError);
+          if (retryCount === 3) {
+            throw streamError; // Re-throw after all retries exhausted
+          }
+          // Wait before retrying (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
+        }
+      }
+      
       console.log('🐛 DEBUG: OpenAI stream created successfully');
 
       let messageCount = 0;
@@ -470,15 +498,33 @@ async function runConversationLoop(conversation, res) {
       console.error('🐛 DEBUG: OpenAI API Error message:', apiError.message);
       console.error('🐛 DEBUG: OpenAI API Error stack:', apiError.stack);
       
+      // Check if it's a connection error
+      const isConnectionError = 
+        apiError.constructor.name === 'APIConnectionError' ||
+        apiError.message.toLowerCase().includes('connection') ||
+        apiError.message.toLowerCase().includes('network') ||
+        apiError.message.toLowerCase().includes('timeout');
+      
       send({ 
         type: "error", 
         error: `OpenAI API Error: ${apiError.message}`,
         debug: {
           type: apiError.constructor.name,
-          stack: apiError.stack
+          stack: apiError.stack,
+          isConnectionError,
+          suggestion: isConnectionError ? 
+            "This appears to be a temporary connection issue. Please try again in a few moments." :
+            "An unexpected error occurred. Please check the console for details."
         }
       });
-      res.end();
+      
+      // Always ensure we end the response
+      try {
+        res.write("data: [DONE]\n\n");
+        res.end();
+      } catch (endError) {
+        console.error('❌ Error ending response stream:', endError);
+      }
       return;
     }
   }

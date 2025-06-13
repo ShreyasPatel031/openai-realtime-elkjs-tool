@@ -32,8 +32,8 @@ MANDATORY Conversation Flow:
 2. After calling log_requirements_and_generate_questions():
     -Always call log_requirements_and_generate_questions()
     -The user will not be able to answer questions until you call the function.
-   - Wait quietly for user responses
-   - ❌ Do NOT ask additional questions manually
+   - Wait quietly for user responses ( do not speak the questions you sent in the log_requirements_and_generate_questions function shedding joint legs)
+   - ❌ Do NOT repeat the questions you sent in the log_requirements_and_generate_questions function shedding joint legs
    - ❌ Do NOT try to continue the conversation
 
 🚨 **REMEMBER**: The log_requirements_and_generate_questions() function is what creates the interactive UI for users to answer questions. Without calling this function, users have NO WAY to respond to your questions! 🚨

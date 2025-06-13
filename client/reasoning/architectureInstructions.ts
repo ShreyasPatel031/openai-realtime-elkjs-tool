@@ -238,7 +238,14 @@ You can only interact with the system by calling the following functions:
 - delete_edge(edgeId): Remove an existing edge.
 - group_nodes(nodeIds, parentId, groupId, style): Create a new container with style ("GREEN", "BLUE", "YELLOW", etc.) and move specified nodes into it.
 - remove_group(groupId): Disband a group and promote its children to the parent.
-- batch_update(operations): Apply a list of operations to the graph. If applying bath operations make sure that nodes to which you are applying exist.
+- batch_update({ operations: object[] }): Apply multiple operations at once. The operations parameter MUST be an array of operation objects, each with a "name" field and operation-specific parameters.
+  Example: batch_update({
+    operations: [
+      { name: "add_node", nodename: "api", parentId: "root", data: { label: "API Gateway", icon: "api_gateway" } },
+      { name: "add_edge", edgeId: "e1", sourceId: "client", targetId: "api", label: "HTTPS" }
+    ]
+  })
+  CRITICAL: Never pass a graph object directly. Always use an array of operations.
 - display_elk_graph(): Display the current ELK graph visualization.
 - process_user_requirements(): ONLY call this function when the user specifically says "process user requirements". 
 

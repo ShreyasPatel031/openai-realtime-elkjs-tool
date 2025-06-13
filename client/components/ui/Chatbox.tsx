@@ -52,31 +52,32 @@ const ChatBox: React.FC<ChatBoxProps> = ({
     // Don't toggle if already transitioning
     if (isTransitioning) return;
     
-    setIsTransitioning(true)
+    setIsTransitioning(true);
 
     if (isExpanded) {
       // Closing animation sequence
-      setShowControls(false)
+      setShowControls(false);
       setTimeout(() => {
-        setIsExpanded(false)
+        setIsExpanded(false);
         setTimeout(() => {
-          setShowMic(true)
-          setIsTransitioning(false)
-        }, 400) // Wait for closing animation to complete
-      }, 400) // Wait before starting to collapse
+          setShowMic(true);
+          setIsTransitioning(false);
+        }, 400); // Wait for closing animation to complete
+      }, 100); // Small delay before starting to collapse
     } else {
       // Opening animation sequence
-      setShowMic(false)
-      setIsExpanded(true)
+      setShowMic(false);
+      setIsExpanded(true);
+      // Wait for expansion animation to complete before showing controls
       setTimeout(() => {
-        setShowControls(true)
+        setShowControls(true);
         setTimeout(() => {
-          setIsTransitioning(false)
-          if (inputRef.current) inputRef.current.focus()
-        }, 200) // Wait for controls to fade in
-      }, 400) // Wait for expansion before showing controls
+          setIsTransitioning(false);
+          if (inputRef.current) inputRef.current.focus();
+        }, 100); // Short delay after showing controls
+      }, 500); // Wait a bit longer for full expansion before showing controls
     }
-  }
+  };
 
   const handleMicClick = () => {
     // Start session when mic is clicked if not active and not connecting
@@ -113,7 +114,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
         color: "#22c55e", // green-500
         borderColor: "border-green-500",
         hoverColor: "hover:bg-green-600",
-        icon: <Mic className="h-6 w-6 text-white" />,
+        icon: <Mic className="h-3 w-3 text-white" />,
         disabled: false
       };
     } else if (isSessionActive) {
@@ -121,7 +122,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
         color: "#3b82f6", // blue-500
         borderColor: "border-blue-500",
         hoverColor: "hover:bg-blue-600",
-        icon: <Mic className="h-6 w-6 text-white" />,
+        icon: <Mic className="h-3 w-3 text-white" />,
         disabled: true
       };
     } else {
@@ -129,7 +130,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
         color: "#ef4444", // red-500
         borderColor: "border-red-500",
         hoverColor: "hover:bg-red-600",
-        icon: <Mic className="h-6 w-6 text-white" />,
+        icon: <Mic className="h-5 w-5 text-white" />,
         disabled: false
       };
     }
@@ -142,30 +143,34 @@ const ChatBox: React.FC<ChatBoxProps> = ({
       <form
         onSubmit={handleSubmit}
         style={{
-          transition: "all 300ms cubic-bezier(0, 0, 0.2, 1)",
+          transition: "all 400ms cubic-bezier(0.4, 0, 0.2, 1)",
         }}
         className={cn(
           "flex items-center justify-between bg-white rounded-full border border-gray-200 overflow-hidden",
-          isExpanded ? "w-[70vw] p-2" : "w-14 h-14 p-0",
+          isExpanded 
+            ? "w-[70vw] p-2" 
+            : "w-[140px] h-14 p-0",
         )}
       >
         {isExpanded ? (
           <>
-            <Button
-              type="button"
-              style={{
-                transition: "opacity 300ms cubic-bezier(0, 0, 0.2, 1)",
-                background: "transparent",
-              }}
-              className={cn(
-                "h-14 w-14 rounded-full border-2 border-red-500 flex-shrink-0 flex items-center justify-center p-0",
-                showControls ? "opacity-100" : "opacity-0",
-                "hover:bg-gray-100"
-              )}
-              onClick={handleCancelClick}
-            >
-              <X className="h-6 w-6 text-red-500 hover:text-red-300" />
-            </Button>
+            {(isExpanded && showControls) && (
+              <Button
+                type="button"
+                style={{
+                  transition: "opacity 300ms cubic-bezier(0, 0, 0.2, 1)",
+                  background: "transparent",
+                }}
+                className={cn(
+                  "h-14 w-14 rounded-full border-2 border-red-500 flex-shrink-0 flex items-center justify-center p-0",
+                  "opacity-100",
+                  "hover:bg-gray-100"
+                )}
+                onClick={handleCancelClick}
+              >
+                <X className="h-6 w-6 text-red-500 hover:text-red-300" />
+              </Button>
+            )}
             <Input
               ref={inputRef}
               value={message}
@@ -199,11 +204,11 @@ const ChatBox: React.FC<ChatBoxProps> = ({
             type="button"
             disabled={buttonState.disabled}
             style={{
-              transition: "all 300ms cubic-bezier(0, 0, 0.2, 1)",
+              transition: "all 400ms cubic-bezier(0.4, 0, 0.2, 1)",
               background: buttonState.color,
             }}
             className={cn(
-              "h-14 w-14 rounded-full border-2 flex-grow flex items-center justify-center p-0",
+              "h-14 w-full rounded-full border-2 flex items-center justify-center gap-x-3",
               buttonState.borderColor,
               buttonState.hoverColor,
               showMic ? "opacity-100" : "opacity-0",
@@ -211,6 +216,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
             )}
           >
             {buttonState.icon}
+            <span className="text-white font-medium">Start</span>
           </Button>
         )}
       </form>

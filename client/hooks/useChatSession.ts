@@ -196,44 +196,24 @@ export const useChatSession = ({
 
   // Initialize session with tool definitions
   useEffect(() => {
-    // Static variable to track log suppression across renders
-    const debugLogging = false; // Set to true only when debugging initialization issues
-    
-    if (initSent.current) {
-      // Only log this on first occurrence
-      if (debugLogging) console.log("✅ Session already initialized, skipping");
-      return; // already done
-    }
-    
-    if (!isSessionActive) {
-      // Skip initialization logging when session is inactive
-      return; // don't initialize if session is not active
-    }
-    
-    if (!events || events.length === 0) {
-      if (debugLogging) console.log("⏳ No events yet, waiting for session.created");
-      return;
-    }
+    // Skip if already initialized or session inactive
+    if (initSent.current || !isSessionActive) return;
 
-    // Check specifically for a session.created event
-    const sessionCreatedEvent = events.find(e => e.type === "session.created");
-    if (!sessionCreatedEvent) {
-      if (debugLogging) console.log("⏳ No session.created event found, waiting...");
-      return;
-    }
+    // Wait for session.created
+    if (!events?.some(e => e.type === "session.created")) return;
 
     console.log("🚀 Initializing session with elkGraphDescription");
+    const ok = initSession(events, safeSendClientEvent, elkGraphDescription || '');
     
-    // Use the initSession helper to initialize the session
-    const sent = initSession(events, safeSendClientEvent, elkGraphDescription || '');
-    if (sent) {
+    // Mark this hook instance as done unconditionally
+    initSent.current = true;
+
+    if (ok) {
       console.log("✅ Session initialization complete");
-      initSent.current = true;
     } else {
-      console.warn("⚠️ Session initialization failed");
+      console.log("ℹ️ Session was already globally initialized – skipping further logs");
     }
-    
-  }, [events, isSessionActive, safeSendClientEvent, elkGraphDescription, initSent]);
+  }, [isSessionActive, events, elkGraphDescription, safeSendClientEvent]);
 
   // Handle chat submission
   const handleChatSubmit = useCallback(async (message: string) => {

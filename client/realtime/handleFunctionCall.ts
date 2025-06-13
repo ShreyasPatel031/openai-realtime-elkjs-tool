@@ -32,18 +32,26 @@ export function handleFunctionCall(
   call: FunctionCall,
   helpers: FunctionCallHelpers
 ) {
+  // Correct destructuring for call and helpers
   const { name, arguments: argStr, call_id } = call;
   const args = typeof argStr === "string" ? JSON.parse(argStr) : argStr || {};
   const { elkGraph, setElkGraph, mutations, safeSend } = helpers;
 
-  // Always start from a deep copy so we never mutate the prev-state object
-  const graphCopy =
-    typeof structuredClone === "function"
-      ? structuredClone(elkGraph)
-      : JSON.parse(JSON.stringify(elkGraph));
+  // Add detailed logging
+  console.log('🔧 handleFunctionCall invoked:', {
+    call_id,
+    name,
+    args,
+    graphSnapshot: JSON.stringify(elkGraph),
+    // No sessionMeta in helpers, so omit
+  });
 
-  let updated = graphCopy;   // Work on the copy
-  let result = null;
+  let result: any = null;
+  // Always start from a deep copy so we never mutate the prev-state object
+  let graphCopy = typeof structuredClone === "function"
+    ? structuredClone(elkGraph)
+    : JSON.parse(JSON.stringify(elkGraph));
+  let updated = graphCopy; // Work on the copy
 
   try {
     switch (name) {
@@ -79,6 +87,8 @@ export function handleFunctionCall(
           console.error('❌ Exception in log_requirements_and_generate_questions:', err);
           result = { success: false, message: `Exception: ${err instanceof Error ? err.message : String(err)}` };
         }
+        // Log the result before sending
+        console.log('🔧 log_requirements_and_generate_questions result:', result);
         // Send response and return early to prevent graph update
         safeSend({
           type: "conversation.item.create",
@@ -173,38 +183,35 @@ export function handleFunctionCall(
         
       default:
         console.warn(`⚠️ Unknown function call: ${name}`);
+        result = { success: false, message: `Unknown function: ${name}` };
+        safeSend({
+          type: "conversation.item.create",
+          item: {
+            type: "function_call_output",
+            call_id: call_id,
+            output: JSON.stringify(result)
+          }
+        });
         return;
     }
 
-    // Push a new reference into state – React & the layout hook will rerun
+    // Log the result for non-early-returning cases
+    console.log('🔧 handleFunctionCall result:', { call_id, name, result });
     setElkGraph(updated);
     console.log(`🔄 Graph state updated after ${name}`);
     console.log('Updated graph:', updated);
-
-    // Send function result back to the agent
+  } catch (err) {
+    // Log any unexpected errors in the main handler
+    console.error('❌ Exception in handleFunctionCall:', err);
+    result = { success: false, message: `Exception: ${err instanceof Error ? err.message : String(err)}` };
     safeSend({
       type: "conversation.item.create",
       item: {
         type: "function_call_output",
         call_id: call_id,
-        output: JSON.stringify(updated)
+        output: JSON.stringify(result)
       }
     });
-  } catch (error: any) {
-    console.error(`❌ Error in ${name} operation:`, error);
-    
-    // Send error response back to the agent
-    safeSend({
-      type: "conversation.item.create",
-      item: {
-        type: "function_call_output",
-        call_id: call_id,
-        output: JSON.stringify({ 
-          error: error?.message || 'Unknown error',
-          message: `Error in ${name} operation: ${error?.message || 'Unknown error'}. Current graph remains unchanged.`
-        })
-      }
-    });
-    console.error(`❌ Sent error response to agent for ${name}`);
+    return;
   }
 }

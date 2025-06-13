@@ -139,11 +139,18 @@ Available Functions in Mode 2:
   Example: remove_group("group_123")
 
 - batch_update(operations: object[]): Apply multiple changes at once
-  Example: batch_update([
-    { name: "add_node", nodename: "Cache", parentId: "root", data: { label: "Redis Cache", icon: "cache_redis" } },
-    { name: "add_edge", edgeId: "edge_api_to_cache", sourceId: "api", targetId: "Cache", label: "queries" }
-  ])
-  IMPORTANT: Each operation must have a "name" field and the correct parameters for that operation type
+  ⚠️ CRITICAL: The operations parameter MUST be an array of operation objects, NOT a graph object
+  Example: batch_update({
+    operations: [
+      { name: "add_node", nodename: "Cache", parentId: "root", data: { label: "Redis Cache", icon: "cache_redis" } },
+      { name: "add_edge", edgeId: "edge_api_to_cache", sourceId: "api", targetId: "Cache", label: "queries" }
+    ]
+  })
+  IMPORTANT: 
+  - The argument must be an object with an 'operations' array property
+  - Each operation in the array must have a 'name' field matching one of the available functions
+  - Each operation must include all required parameters for that function type
+  - DO NOT pass a graph object directly to batch_update
 
 🚨 **FINAL REMINDER**: 
 - NEVER skip calling log_requirements_and_generate_questions() for any user information

@@ -155,8 +155,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
       // Add a system message to show processing started
       const processingMessage = {
         id: crypto.randomUUID(),
-        content: `Processing ${conversationHistory.length} messages and ${selectedAnswers.length} answers via StreamViewer...`,
-        sender: 'system' as const
+        content: "Processing please wait...",
+        sender: 'system' as const,
+        type: 'function-calling' as const,
+        isStreaming: true,
+        isDropdownOpen: true,
+        animationType: 'function-calling'
       };
       
       // Dispatch event to add processing message

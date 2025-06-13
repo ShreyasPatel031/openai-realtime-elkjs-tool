@@ -154,22 +154,34 @@ export function handleFunctionCall(
         
       case "batch_update":
         console.log('🔍 batch_update arguments received:', args);
-        console.log('🔍 args.operations type:', typeof args.operations);
-        console.log('🔍 args.operations value:', args.operations);
-        console.log('🔍 Is operations an array?', Array.isArray(args.operations));
         
-        // Check if the argument structure is incorrect (agent sending {graph: ...} instead of {operations: ...})
-        if (args.graph && !args.operations) {
-          console.error('❌ batch_update received incorrect format: {graph: ...} instead of {operations: [...]}');
-          throw new Error(`batch_update requires 'operations' parameter with an array of operations. Received 'graph' parameter instead. Please use: batch_update({operations: [...]}) format.`);
+        // First check if args is a graph object instead of operations
+        if (args.id || args.children || args.edges) {
+          console.error('❌ batch_update received a graph object instead of operations array');
+          throw new Error(`batch_update requires an object with an 'operations' array. You passed a graph object instead. Please use: batch_update({ operations: [...] })`);
         }
         
+        // Check if operations exists
         if (!args.operations) {
-          throw new Error(`batch_update requires 'operations' parameter, got: ${JSON.stringify(args)}`);
+          console.error('❌ batch_update missing operations parameter');
+          throw new Error(`batch_update requires an 'operations' array. Example: batch_update({ operations: [{ name: "add_node", ... }] })`);
         }
+        
+        // Check if operations is an array
         if (!Array.isArray(args.operations)) {
-          throw new Error(`batch_update requires 'operations' to be an array, got: ${typeof args.operations} - ${JSON.stringify(args.operations)}`);
+          console.error('❌ batch_update operations is not an array:', typeof args.operations);
+          throw new Error(`batch_update 'operations' must be an array. Got ${typeof args.operations}. Example: batch_update({ operations: [{ name: "add_node", ... }] })`);
         }
+        
+        // Validate each operation
+        args.operations.forEach((op, index) => {
+          if (!op.name) {
+            throw new Error(`Operation at index ${index} is missing required 'name' field`);
+          }
+          if (!['add_node', 'delete_node', 'move_node', 'add_edge', 'delete_edge', 'group_nodes', 'remove_group'].includes(op.name)) {
+            throw new Error(`Operation at index ${index} has invalid name '${op.name}'. Must be one of: add_node, delete_node, move_node, add_edge, delete_edge, group_nodes, remove_group`);
+          }
+        });
         
         // Validate graph integrity before processing
         if (!updated || !updated.id) {

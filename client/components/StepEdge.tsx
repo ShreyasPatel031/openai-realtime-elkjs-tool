@@ -1,17 +1,18 @@
 import React from 'react';
-import { BaseEdge, EdgeLabelRenderer, EdgeProps } from 'reactflow';
+import { BaseEdge, EdgeLabelRenderer, EdgeProps, useReactFlow } from 'reactflow';
 
-const StepEdge: React.FC<EdgeProps> = ({ 
-  id, 
-  sourceX, 
-  sourceY, 
-  targetX, 
-  targetY, 
+const StepEdge: React.FC<EdgeProps> = ({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
   label,
-  data, 
-  style = {}, 
-  markerEnd 
+  data,
+  style = {},
+  markerEnd
 }) => {
+  const rf = useReactFlow();
   let edgePath = '';
   
   // For edge path calculations only (used in path fallback)
@@ -22,12 +23,25 @@ const StepEdge: React.FC<EdgeProps> = ({
   /* ------------------------------------------------------ */
   const edgeLabel = label || data?.labelText;
 
-  // absolute coordinates from ELK layout (if available)
-  const labelPos = data?.labelPos;          // { x, y } | undefined
+  // container-relative label coordinates
+  const containerId = data?.containerId as string | undefined;
+  const containerPos = React.useMemo(() => {
+    if (!containerId) return { x: 0, y: 0 };
+    const node = rf.getNodes().find(n => n.id === containerId);
+    return node?.positionAbsolute ?? { x: 0, y: 0 };
+  }, [containerId, rf]);
+
+  const labelPosRel = data?.labelPos as { x: number; y: number } | undefined;
+  const labelPos = labelPosRel
+    ? { x: labelPosRel.x + containerPos.x, y: labelPosRel.y + containerPos.y }
+    : undefined;
 
   // Check if we have bend points
   if (data?.bendPoints && data.bendPoints.length > 0) {
-    const bendPoints = data.bendPoints;
+    const bendPoints = data.bendPoints.map((bp: any) => ({
+      x: bp.x + containerPos.x,
+      y: bp.y + containerPos.y
+    }));
     
     if (bendPoints.length === 2) {
       // For 2 bend points, use the first bend point's x as the fixed x coordinate

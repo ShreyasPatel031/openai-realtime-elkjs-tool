@@ -89,7 +89,11 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
   // Create a map of node types for quick lookups
   const nodeTypeMap = new Map(nodes.map(node => [node.id, node.type]));
 
-  const createEdge = (edge: any, containerAbs: { x: number; y: number }) => {
+  const createEdge = (
+    edge: any,
+    containerAbs: { x: number; y: number },
+    containerId: string
+  ) => {
     edge.sources?.forEach((sourceNodeId: string) =>
       edge.targets?.forEach((targetNodeId: string) => {
         const edgeId = edge.id || `${sourceNodeId}-${targetNodeId}-${Math.random().toString(36).substr(2, 9)}`;
@@ -140,15 +144,20 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
         const targetHandle = targetHandleIndex >= 0 ? `${targetHandleSide}-${targetHandleIndex}-${targetHandleType}` : undefined;
 
         if (sourceHandle && targetHandle) {
-          /* ─────── turn label position into ABSOLUTE coordinates ─────── */
+          /* ─────── label text & relative coordinates ─────── */
           const elkLbl      = edge.labels?.[0];
           const labelTxt    = elkLbl?.text ?? "";
-          const labelPosAbs = elkLbl
-            ? { x: elkLbl.x + containerAbs.x, y: elkLbl.y + containerAbs.y }
-            : undefined;
+          const labelPosRel = elkLbl ? { x: elkLbl.x, y: elkLbl.y } : undefined;
+
+          /* ─────── gather bend points relative to container ─────── */
+          const bendPointsRel =
+            edge.sections?.[0]?.bendPoints?.map((bp: any) => ({
+              x: bp.x,
+              y: bp.y
+            })) ?? [];
           edges.push({
-            id: edgeId, 
-            source: sourceNodeId, 
+            id: edgeId,
+            source: sourceNodeId,
             target: targetNodeId,
             type: edge.sections?.[0]?.bendPoints?.length >= 2 ? "step" : "smoothstep",
             zIndex: 1000,
@@ -169,8 +178,9 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
             label: labelTxt,
             data: {
               labelText: labelTxt,
-              bendPoints: edge.absoluteBendPoints ?? [],
-              labelPos: labelPosAbs          // ← now absolute
+              bendPoints: bendPointsRel,
+              labelPos: labelPosRel,
+              containerId: containerId
             },
             selected: false,
             hidden: false,
@@ -191,7 +201,7 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
 
   const processEdges = (node: any) => {
     const abs = absolutePositions[node.id];      // abs pos of this container
-    (node.edges || []).forEach((e: any) => createEdge(e, abs));
+    (node.edges || []).forEach((e: any) => createEdge(e, abs, node.id));
     (node.children || []).forEach(processEdges);
   };
   

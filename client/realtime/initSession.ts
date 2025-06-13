@@ -74,14 +74,15 @@ export function initSession(
       content: [{
         type: "input_text",
         text: `${languageInstruction}
-${elkGraphDescription}
+               ${elkGraphDescription}
 
-Please greet the user with exactly 'How can I help?' and nothing else. Do not add any additional text or explanation.`
+              Please greet the user with exactly 'How can I help?' and nothing else. Do not add any additional text or explanation.`
       }]
     }
   });
 
   // Create single response to trigger the greeting
+  console.log("initSession: sending greet instruction");
   safeSend({ type: "response.create" });
   
   return true;

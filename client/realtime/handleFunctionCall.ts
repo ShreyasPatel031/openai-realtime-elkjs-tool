@@ -53,29 +53,32 @@ export function handleFunctionCall(
         
       case "log_requirements_and_generate_questions":
         console.log('📝 Processing requirements and questions');
-        
-        // Validate both requirements and questions
-        if (!args.requirements || !Array.isArray(args.requirements) || args.requirements.length === 0) {
-          console.error('❌ Invalid or empty requirements array');
-          result = { success: false, message: 'Error: requirements must be a non-empty array' };
-        } else if (!args.questions || !Array.isArray(args.questions) || args.questions.length === 0) {
-          console.error('❌ Invalid or empty questions array');
-          result = { success: false, message: 'Error: questions must be a non-empty array' };
-        } else {
-          // Log each requirement to create UI components
-          for (const requirement of args.requirements) {
-            addUserDecisionToChat(requirement);
+        try {
+          // Validate both requirements and questions
+          if (!args.requirements || !Array.isArray(args.requirements) || args.requirements.length === 0) {
+            console.error('❌ Invalid or empty requirements array');
+            result = { success: false, message: 'Error: requirements must be a non-empty array' };
+          } else if (!args.questions || !Array.isArray(args.questions) || args.questions.length === 0) {
+            console.error('❌ Invalid or empty questions array');
+            result = { success: false, message: 'Error: questions must be a non-empty array' };
+          } else {
+            // Log each requirement to create UI components
+            for (const requirement of args.requirements) {
+              addUserDecisionToChat(requirement);
+            }
+            // Generate follow-up questions UI
+            result = createFollowupQuestionsToChat(args.questions);
           }
-          
-          // Generate follow-up questions UI
-          result = createFollowupQuestionsToChat(args.questions);
+
+          // Store requirements and questions in the graph metadata
+          updated.metadata = updated.metadata || {};
+          updated.metadata.requirements = args.requirements || [];
+          updated.metadata.questions = args.questions || [];
+        } catch (err) {
+          // Catch any unexpected errors and send to agent
+          console.error('❌ Exception in log_requirements_and_generate_questions:', err);
+          result = { success: false, message: `Exception: ${err instanceof Error ? err.message : String(err)}` };
         }
-        
-        // Store requirements and questions in the graph metadata
-        updated.metadata = updated.metadata || {};
-        updated.metadata.requirements = args.requirements || [];
-        updated.metadata.questions = args.questions || [];
-        
         // Send response and return early to prevent graph update
         safeSend({
           type: "conversation.item.create",

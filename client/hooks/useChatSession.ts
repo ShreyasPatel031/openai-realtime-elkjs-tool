@@ -59,7 +59,16 @@ export const useChatSession = ({
   const messagesMap = useRef<Map<string, Message>>(new Map());
   const processed = useRef<Set<string>>(new Set());
   const initSent = useRef(false);
+  const lastSessionId = useRef<string | null>(null);
   const [forceUpdate, setForceUpdate] = useState(0);
+
+  // Reset initialization state when session becomes inactive
+  useEffect(() => {
+    if (!isSessionActive) {
+      initSent.current = false;
+      lastSessionId.current = null;
+    }
+  }, [isSessionActive]);
 
   // Derive messages array from Map
   const messages = useMemo(() => 
@@ -196,16 +205,31 @@ export const useChatSession = ({
 
   // Initialize session with tool definitions
   useEffect(() => {
-    // Skip if already initialized or session inactive
-    if (initSent.current || !isSessionActive) return;
+    if (!isSessionActive) {
+      // Reset both guards when session becomes inactive
+      initSent.current = false;
+      lastSessionId.current = null;
+      return;
+    }
 
-    // Wait for session.created
-    if (!events?.some(e => e.type === "session.created")) return;
+    // Look for the latest session.created
+    const created = events?.find(e => e.type === "session.created");
+    if (!created) {
+      console.log("⏳ Waiting for session.created event...");
+      return;
+    }
 
-    console.log("🚀 Initializing session with elkGraphDescription");
+    // Skip if this is the same session we've already initialized
+    if (created.session.id === lastSessionId.current) {
+      console.log("ℹ️ Session already initialized:", created.session.id);
+      return;
+    }
+
+    console.log("🚀 Initializing new session:", created.session.id);
     const ok = initSession(events, safeSendClientEvent, elkGraphDescription || '');
     
-    // Mark this hook instance as done unconditionally
+    // Update both guards for this session
+    lastSessionId.current = created.session.id;
     initSent.current = true;
 
     if (ok) {
@@ -213,7 +237,7 @@ export const useChatSession = ({
     } else {
       console.log("ℹ️ Session was already globally initialized – skipping further logs");
     }
-  }, [isSessionActive, events, elkGraphDescription, safeSendClientEvent]);
+  }, [isSessionActive, events, safeSendClientEvent, elkGraphDescription]);
 
   // Handle chat submission
   const handleChatSubmit = useCallback(async (message: string) => {

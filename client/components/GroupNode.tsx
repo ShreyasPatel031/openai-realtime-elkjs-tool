@@ -3,6 +3,7 @@ import { Handle, Position } from 'reactflow';
 import { baseHandleStyle } from './graph/handles';
 import { getStyle } from './graph/styles';
 import { getGroupIconHex, allGroupIcons } from '../generated/groupIconColors';
+import { cn } from '../lib/utils';
 
 interface GroupNodeProps {
   data: {
@@ -22,9 +23,10 @@ interface GroupNodeProps {
   };
   id: string;
   selected?: boolean;
+  isConnectable: boolean;
 }
 
-const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
+const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable }) => {
   const [iconLoaded, setIconLoaded] = useState(false);
   const [iconError, setIconError] = useState(false);
   const [finalIconSrc, setFinalIconSrc] = useState<string | undefined>(undefined);
@@ -75,9 +77,6 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
   // Get group icon colors if specified
   const groupIconHex = data.groupIcon ? getGroupIconHex(data.groupIcon) : null;
   
-  // Debug logging for group icon styling
-  console.log(`🎨 GroupNode ${id} - groupIcon: ${data.groupIcon}, hex: ${groupIconHex}`);
-  
   // Get custom styling using the shared getStyle helper, but override with group icon colors
   const resolvedStyle = getStyle(data.style);
   
@@ -111,21 +110,15 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected }) => {
     // Find the group icon data to check if it's filled
     const groupIconData = allGroupIcons.find(icon => icon.name === data.groupIcon);
     
-    console.log(`🎨 GroupNode ${id} - found groupIconData:`, groupIconData);
-    
     if (groupIconData && groupIconData.fill) {
       // For filled group icons, use the hex color as background with transparency
       customBgColor = `${groupIconHex}80`; // 50% opacity
       customBorderColor = groupIconHex;
-      console.log(`🎨 GroupNode ${id} - applying FILLED styling: bg=${customBgColor}, border=${customBorderColor}`);
     } else {
       // For border-only group icons, use the hex color as border only
       customBgColor = 'rgba(255, 255, 255, 0.1)'; // Very light background
       customBorderColor = groupIconHex;
-      console.log(`🎨 GroupNode ${id} - applying BORDER styling: bg=${customBgColor}, border=${customBorderColor}`);
     }
-  } else {
-    console.log(`🎨 GroupNode ${id} - no group icon styling applied (hex: ${groupIconHex}, groupIcon: ${data.groupIcon})`);
   }
   
   // Create a more saturated background color for the header based on the group's background

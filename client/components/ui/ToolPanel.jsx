@@ -479,8 +479,7 @@ export default function ToolPanel({
             ]
           }
         });
-        console.log("ToolPanel: sending greet instruction");
-        sendClientEvent({ type: "response.create" });
+        // sendClientEvent({ type: "response.create" });
       }, 1000);
       
       setFunctionAdded(true);

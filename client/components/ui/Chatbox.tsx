@@ -1,10 +1,11 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from "react"
+import React, { useState, useRef, useCallback, useEffect } from "react"
 import { Input } from "./input"
 import { Button } from "./button"
 import { Send, Mic, X, Loader2 } from "lucide-react"
 import { cn } from "../../lib/utils"
+import { QuestionnaireExecutor } from "../../questionnaire/QuestionnaireExecutor"
 
 interface ChatBoxProps {
   onSubmit: (message: string) => void;
@@ -13,6 +14,7 @@ interface ChatBoxProps {
   isAgentReady?: boolean;
   onStartSession?: () => void;
   onStopSession?: () => void;
+  onTriggerReasoning?: () => void;
 }
 
 const ChatBox: React.FC<ChatBoxProps> = ({ 
@@ -21,13 +23,15 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   isConnecting = false,
   isAgentReady = false,
   onStartSession, 
-  onStopSession 
+  onStopSession,
+  onTriggerReasoning
 }) => {
   const [message, setMessage] = useState("")
   const [isExpanded, setIsExpanded] = useState(false)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [showControls, setShowControls] = useState(false)
   const [showMic, setShowMic] = useState(true)
+  const [isProcessing, setIsProcessing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const autoExpandedRef = useRef(false)
 
@@ -40,11 +44,38 @@ const ChatBox: React.FC<ChatBoxProps> = ({
     }
   }, [isAgentReady]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (message.trim()) {
-      onSubmit(message)
-      setMessage("")
+    if (message.trim() && !isProcessing) {
+      setIsProcessing(true);
+      
+      try {
+        console.log('🔧 Starting questionnaire agent with user input:', message);
+        
+        const executor = new QuestionnaireExecutor();
+
+        await executor.execute(
+          message,
+          () => {
+            console.log('🚀 Questionnaire agent started');
+          },
+          (questions) => {
+            console.log('✅ Questions received:', questions.length);
+            setIsProcessing(false);
+          },
+          (error) => {
+            console.error('❌ Questionnaire agent failed:', error);
+            setIsProcessing(false);
+          }
+        );
+        
+        // Clear the input
+        setMessage("");
+        
+      } catch (error) {
+        console.error('❌ Failed to execute questionnaire:', error);
+        setIsProcessing(false);
+      }
     }
   }
 
@@ -80,13 +111,9 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   };
 
   const handleMicClick = () => {
-    // Start session when mic is clicked if not active and not connecting
-    if (!isSessionActive && !isConnecting && onStartSession) {
-      onStartSession();
-    }
-    // Only expand if not already expanded and not transitioning
+    // Just expand the chat input - no session start
     if (!isExpanded && !isTransitioning) {
-    toggleExpand();
+      toggleExpand();
     }
   }
 
@@ -99,41 +126,15 @@ const ChatBox: React.FC<ChatBoxProps> = ({
     toggleExpand();
   }
 
-  // Determine button appearance based on connection state
+  // Simple button appearance - red like it used to be
   const getButtonState = () => {
-    if (isConnecting) {
-      return {
-        color: "#f59e0b", // yellow-500
-        borderColor: "border-yellow-500",
-        hoverColor: "hover:bg-yellow-600",
-        icon: <Loader2 className="h-6 w-6 text-white animate-spin" />,
-        disabled: true
-      };
-    } else if (isAgentReady) {
-      return {
-        color: "#22c55e", // green-500
-        borderColor: "border-green-500",
-        hoverColor: "hover:bg-green-600",
-        icon: <Mic className="h-3 w-3 text-white" />,
-        disabled: false
-      };
-    } else if (isSessionActive) {
-      return {
-        color: "#3b82f6", // blue-500
-        borderColor: "border-blue-500",
-        hoverColor: "hover:bg-blue-600",
-        icon: <Mic className="h-3 w-3 text-white" />,
-        disabled: true
-      };
-    } else {
-      return {
-        color: "#ef4444", // red-500
-        borderColor: "border-red-500",
-        hoverColor: "hover:bg-red-600",
-        icon: <Mic className="h-5 w-5 text-white" />,
-        disabled: false
-      };
-    }
+    return {
+      color: "#ef4444", // red-500
+      borderColor: "border-red-500", 
+      hoverColor: "hover:bg-red-600",
+      icon: null, // No icon
+      disabled: false
+    };
   };
 
   const buttonState = getButtonState();
@@ -175,27 +176,35 @@ const ChatBox: React.FC<ChatBoxProps> = ({
               ref={inputRef}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder={isAgentReady ? "Speak or type a message..." : "Type a message..."}
+              placeholder={isProcessing ? "Processing..." : "Describe your architecture requirements..."}
+              disabled={isProcessing}
               style={{
                 transition: "opacity 300ms cubic-bezier(0, 0, 0.2, 1)",
               }}
               className={cn(
                 "flex-grow mx-4 rounded-full border-none focus-visible:ring-0 focus-visible:ring-offset-0 text-center",
                 showControls ? "opacity-100" : "opacity-0",
+                isProcessing && "cursor-not-allowed opacity-75"
               )}
             />
             <Button
               type="submit"
+              disabled={isProcessing}
               style={{
                 transition: "opacity 300ms cubic-bezier(0, 0, 0.2, 1)",
-                background: "#000",
+                background: isProcessing ? "#6b7280" : "#000",
               }}
               className={cn(
                 "h-14 w-14 rounded-full border-2 border-black text-white hover:bg-gray-800 flex-shrink-0 flex items-center justify-center p-0",
                 showControls ? "opacity-100" : "opacity-0",
+                isProcessing && "cursor-not-allowed"
               )}
             >
-              <Send className="h-6 w-6" />
+              {isProcessing ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                <Send className="h-6 w-6" />
+              )}
             </Button>
           </>
         ) : (
@@ -208,14 +217,13 @@ const ChatBox: React.FC<ChatBoxProps> = ({
               background: buttonState.color,
             }}
             className={cn(
-              "h-14 w-full rounded-full border-2 flex items-center justify-center gap-x-3",
+              "h-14 w-full rounded-full border-2 flex items-center justify-center",
               buttonState.borderColor,
               buttonState.hoverColor,
               showMic ? "opacity-100" : "opacity-0",
               buttonState.disabled && "cursor-not-allowed opacity-75"
             )}
           >
-            {buttonState.icon}
             <span className="text-white font-medium">Start</span>
           </Button>
         )}

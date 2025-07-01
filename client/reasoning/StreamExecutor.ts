@@ -77,7 +77,9 @@ export class StreamExecutor {
       if (conversationData.trim()) {
         userContent = `${conversationData}
 
-Build a complete architecture following these requirements using proper group icon theming:
+CRITICAL: The user has already provided specific requirements above. DO NOT ask generic questions about cloud provider, deployment type, or basic architecture choices - these requirements are final.
+
+Build a complete architecture following these EXACT requirements using proper group icon theming:
 - Available Group Icons: Use groupIconName parameter for all group_nodes operations
 - AWS: aws_vpc, aws_region, aws_account for AWS-based architectures
 - GCP: gcp_system (neutral), gcp_user_default (frontend), gcp_infrastructure_system (APIs), gcp_logical_grouping_services_instances (services), gcp_external_saas_providers (external)
@@ -85,11 +87,11 @@ Build a complete architecture following these requirements using proper group ic
 
 EXECUTION STEPS:
 1. First call display_elk_graph() to see current state
-2. Use batch_update to create each group with ALL its nodes based on the requirements
+2. Use batch_update to create each group with ALL its nodes based on the SPECIFIC requirements provided
 3. After creating all groups, add edges between components using batch_update
 4. Each batch_update should be complete - include all nodes for a group or all edges in one call
 
-Remember: Do NOT acknowledge or explain. Just execute the functions.`;
+Remember: DO NOT acknowledge or explain. Just execute the functions to build the architecture specified in the requirements.`;
       } else {
         userContent = `Build a complete e-commerce microservices architecture following this exact structure:
 

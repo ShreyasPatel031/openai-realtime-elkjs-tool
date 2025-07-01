@@ -204,18 +204,27 @@ export const updateStreamingMessage = (messageId: string, newContent: string, is
   });
   document.dispatchEvent(updateEvent);
   
-  // Auto-scroll to bottom when content updates - target the specific message container
+  // Only auto-scroll if this message's dropdown is open
   setTimeout(() => {
-    // First try to scroll the specific message content
-    const messageElement = document.querySelector(`[data-message-id="${messageId}"] .overflow-y-auto`);
+    // Check if the specific message's dropdown is open
+    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
     if (messageElement) {
-      messageElement.scrollTop = messageElement.scrollHeight;
-    }
-    
-    // Also scroll the main chat container to bottom
-    const messagesContainer = document.querySelector('[data-chat-window] .overflow-y-auto');
-    if (messagesContainer) {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      const dropdownIcon = messageElement.querySelector('.rotate-180');
+      const isDropdownOpen = !!dropdownIcon; // dropdown is open if icon is rotated
+      
+      if (isDropdownOpen) {
+        // First try to scroll the specific message content
+        const messageContentElement = messageElement.querySelector('.overflow-y-auto');
+        if (messageContentElement) {
+          messageContentElement.scrollTop = messageContentElement.scrollHeight;
+        }
+        
+        // Also scroll the main chat container to bottom only if dropdown is open
+        const messagesContainer = document.querySelector('[data-chat-window] .overflow-y-auto');
+        if (messagesContainer) {
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+      }
     }
   }, 10);
 };

@@ -34,9 +34,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
   // Auto-scroll to bottom when new messages arrive or when streaming updates
   useEffect(() => {
     if (messagesEndRef.current && !isMinimized) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      // Check if any reasoning or function dropdowns are currently open
+      const hasOpenDropdowns = Object.values(dropdownStates).some(isOpen => isOpen) ||
+        messages.some(msg => (msg.type === 'reasoning' && (msg.isDropdownOpen ?? true)) ||
+                            (msg.type === 'function-calling' && (msg.isDropdownOpen ?? false)));
+      
+      // Only auto-scroll if there are open dropdowns (user wants to see streaming content)
+      if (hasOpenDropdowns) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
     }
-  }, [messages, isMinimized, streamingMessages]);
+  }, [messages, isMinimized, streamingMessages, dropdownStates]);
 
   // Listen for streaming message updates
   useEffect(() => {

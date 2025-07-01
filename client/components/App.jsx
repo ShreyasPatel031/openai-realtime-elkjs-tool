@@ -14,6 +14,7 @@ import { elkGraphDescription, agentInstruction } from "../realtime/agentConfig";
 import { useChatSession } from "../hooks/useChatSession";
 import { RtcClient } from "../realtime/RtcClient";
 
+
 // Model configuration
 const MODEL_CONFIG = {
   name: "gpt-4o-realtime-preview-2024-12-17",
@@ -263,6 +264,8 @@ export default function App() {
     });
   }
 
+
+
   // Cleanup on unmount
   useEffect(() => {
     return () => stopSession(); // Auto-cleanup on component unmount
@@ -330,6 +333,7 @@ export default function App() {
               sendTextMessage={sendTextMessage}
               sendClientEvent={sendClientEvent}
               events={events}
+
             />
           </ErrorBoundary>
         ) : (

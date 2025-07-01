@@ -5,6 +5,7 @@ export interface ChatBoxProps {
   isAgentReady?: boolean;
   onStartSession?: () => void;
   onStopSession?: () => void;
+  onTriggerReasoning?: () => void;
 }
 
 export interface Message {

@@ -60,9 +60,8 @@ export class QuestionnaireExecutor {
           console.log('✅ Parsed function arguments:', functionArgs);
           
           if (functionArgs.requirements && functionArgs.questions) {
-            console.log('🔍 User input:', requirement);
-            console.log('🔍 Requirements extracted:', functionArgs.requirements);
-            console.log('🔍 First question:', functionArgs.questions[0]?.text);
+            console.log('🔍 DEBUG: Requirements extracted:', functionArgs.requirements);
+            console.log('🔍 DEBUG: Questions generated:', functionArgs.questions);
             
             // Add user's original requirement to chat
             addUserDecisionToChat(requirement);
@@ -75,14 +74,18 @@ export class QuestionnaireExecutor {
             
             createFollowupQuestionsToChat(processedQuestions);
             
-            // Store simplified chat data for reasoning agent
-            // The key is to preserve the original user input and the conversation structure
+            // Store chat data for reasoning agent
             const chatMessages = [
               {
                 id: crypto.randomUUID(),
-                content: requirement, // Original user input - this is critical
+                content: requirement,
                 sender: 'user'
               },
+              ...functionArgs.requirements.map((req: string) => ({
+                id: crypto.randomUUID(),
+                content: req,
+                sender: 'user'
+              })),
               ...processedQuestions.map(q => ({
                 id: q.id,
                 content: q.text,
@@ -96,13 +99,10 @@ export class QuestionnaireExecutor {
               }))
             ];
             
-            // Store for reasoning agent - this is what gets passed to process_user_requirements
+            // Store for reasoning agent
             storeChatData(chatMessages, {});
-            console.log('📝 Stored chat data for reasoning agent:', {
-              messagesCount: chatMessages.length,
-              originalUserInput: requirement,
-              questionsCount: processedQuestions.length
-            });
+            console.log('🔍 DEBUG: Stored chat messages for reasoning agent:', chatMessages);
+            console.log('📝 Stored chat data for reasoning agent:', chatMessages.length, 'messages');
             
             // Call the callback with questions
             onQuestions(processedQuestions);

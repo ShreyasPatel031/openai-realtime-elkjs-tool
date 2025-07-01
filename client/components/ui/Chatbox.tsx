@@ -60,8 +60,16 @@ const ChatBox: React.FC<ChatBoxProps> = ({
             console.log('🚀 Questionnaire agent started');
           },
           (questions) => {
-            console.log('✅ Questions received:', questions.length);
+            console.log('✅ Questions received:', questions);
+            console.log('✅ Questionnaire completed, triggering reasoning agent...');
             setIsProcessing(false);
+            
+            // Trigger reasoning agent after questions are displayed
+            if (onTriggerReasoning) {
+              setTimeout(() => {
+                onTriggerReasoning();
+              }, 2000); // 2 second delay to let user see questions
+            }
           },
           (error) => {
             console.error('❌ Questionnaire agent failed:', error);

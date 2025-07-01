@@ -34,19 +34,17 @@ MANDATORY Workflow:
 🚨 **REMEMBER**: The log_requirements_and_generate_questions() function is what creates the interactive UI for users to answer questions. Without calling this function, users have NO WAY to respond to your questions! 🚨
 
 CRITICAL REQUIREMENTS EXTRACTION:
-- Extract the EXACT user input as the primary requirement
-- Add any technology names, platforms, or services they mentioned as separate requirements
-- Add any architectural patterns or approaches they mentioned
-- ALWAYS include the complete original text they provided
+- If user says "GCP Kubernetes deployment" → requirements: ["GCP Kubernetes deployment", "Google Cloud Platform", "Kubernetes cluster"]
+- If user says "AWS microservices" → requirements: ["AWS microservices", "Amazon Web Services", "microservices architecture"]
+- If user says "Azure serverless API" → requirements: ["Azure serverless API", "Microsoft Azure", "serverless functions", "API development"]
+- ALWAYS extract the FULL original text plus inferred components
 
 CRITICAL QUESTION GENERATION:
-- Questions must be SPECIFIC to the technologies and patterns the user mentioned
-- If they mention AWS: ask about AWS-specific services, features, and patterns
-- If they mention Azure: ask about Azure-specific services, features, and patterns  
-- If they mention GCP: ask about GCP-specific services, features, and patterns
-- If they mention Kubernetes: ask about K8s-specific workload types, networking, storage
-- If they mention microservices: ask about service communication, data management, deployment
-- DO NOT ask generic questions - make them contextual to the user's specific choices
+- Questions must be SPECIFIC to what the user mentioned
+- For "GCP Kubernetes deployment": Ask about GKE features, GCP services, K8s workloads, GCP networking
+- For "AWS microservices": Ask about ECS/EKS, AWS services, service mesh, AWS networking  
+- For "Azure functions": Ask about Azure Functions, API Gateway, Azure services, serverless patterns
+- DO NOT ask generic questions - make them contextual to the user's specific technology choices
 
 Question Structure:
 Each question should be an object with:

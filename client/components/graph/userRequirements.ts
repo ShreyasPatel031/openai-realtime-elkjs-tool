@@ -41,87 +41,97 @@ export const process_user_requirements = (elkGraph?: any, setElkGraph?: (graph: 
   // Collect conversation data from stored chat messages
   let conversationData = "";
   try {
-    // Find the original user input - this is the most important piece
-    const originalUserInput = globalChatMessages.find(msg => msg.sender === 'user')?.content || '';
-    
+    const requirements: string[] = [];
     const questions: string[] = [];
     const answers: string[] = [];
     
-    console.log("🔍 DEBUG: Original user input:", originalUserInput);
+    // Debug: Show what we're starting with
     console.log("🔍 DEBUG: Global chat messages:", globalChatMessages.length, globalChatMessages);
     console.log("🔍 DEBUG: Global selected options:", Object.keys(globalSelectedOptions).length, globalSelectedOptions);
     
-    // Process stored messages to collect questions and answers
+    // Process stored messages
     globalChatMessages.forEach(message => {
-      if (message.type === 'radio-question' || message.type === 'checkbox-question') {
-        questions.push(message.question || message.content);
-        
-        // Get selected answer for this question
-        const selectedAnswer = globalSelectedOptions[message.id];
-        if (selectedAnswer) {
-          if (Array.isArray(selectedAnswer)) {
-            // Checkbox question - multiple selections
-            selectedAnswer.forEach(optionId => {
-              const option = message.options?.find((opt: any) => opt.id === optionId);
+      if (message.sender === 'user' || message.sender === 'assistant') {
+        if (message.type === 'radio-question' || message.type === 'checkbox-question') {
+          questions.push(message.question || message.content);
+          
+          // Get selected answer for this question
+          const selectedAnswer = globalSelectedOptions[message.id];
+          if (selectedAnswer) {
+            if (Array.isArray(selectedAnswer)) {
+              // Checkbox question - multiple selections
+              selectedAnswer.forEach(optionId => {
+                const option = message.options?.find((opt: any) => opt.id === optionId);
+                if (option) answers.push(option.text);
+              });
+            } else {
+              // Radio question - single selection
+              const option = message.options?.find((opt: any) => opt.id === selectedAnswer);
               if (option) answers.push(option.text);
-            });
-          } else {
-            // Radio question - single selection
-            const option = message.options?.find((opt: any) => opt.id === selectedAnswer);
-            if (option) answers.push(option.text);
+            }
           }
+        } else if (message.content && !message.content.includes('Processing') && !message.content.includes('Architecture')) {
+          requirements.push(message.content);
         }
       }
     });
     
+    // Debug: Show what we collected
+    console.log("🔍 DEBUG: Collected requirements:", requirements);
     console.log("🔍 DEBUG: Collected questions:", questions);
     console.log("🔍 DEBUG: Collected answers:", answers);
     
-    // Build conversation data - focus on the original user input and their specific choices
-    if (originalUserInput) {
+    // Build conversation summary
+    if (requirements.length > 0 || questions.length > 0 || answers.length > 0) {
       conversationData = `
-ORIGINAL USER REQUEST: "${originalUserInput}"
+FULL CONVERSATION HISTORY:
 
-FOLLOW-UP QUESTIONS AND USER RESPONSES:
+ORIGINAL USER INPUT: ${requirements.join(' | ')}
+
+FOLLOW-UP QUESTIONS AND ANSWERS:
 ${questions.map((question, index) => {
-  const relatedAnswers: string[] = [];
+  const relatedAnswers = [];
   // Find answers for this question
   globalChatMessages.forEach(message => {
-    if ((message.type === 'radio-question' || message.type === 'checkbox-question') && 
-        (message.question === question || message.content === question)) {
-      const selectedAnswer = globalSelectedOptions[message.id];
-      if (selectedAnswer) {
-        if (Array.isArray(selectedAnswer)) {
-          selectedAnswer.forEach(optionId => {
-            const option = message.options?.find((opt: any) => opt.id === optionId);
+    if (message.type === 'radio-question' || message.type === 'checkbox-question') {
+      if (message.question === question || message.content === question) {
+        const selectedAnswer = globalSelectedOptions[message.id];
+        if (selectedAnswer) {
+          if (Array.isArray(selectedAnswer)) {
+            selectedAnswer.forEach(optionId => {
+              const option = message.options?.find((opt: any) => opt.id === optionId);
+              if (option) relatedAnswers.push(option.text);
+            });
+          } else {
+            const option = message.options?.find((opt: any) => opt.id === selectedAnswer);
             if (option) relatedAnswers.push(option.text);
-          });
-        } else {
-          const option = message.options?.find((opt: any) => opt.id === selectedAnswer);
-          if (option) relatedAnswers.push(option.text);
+          }
         }
       }
     }
   });
   
-  return `Q${index + 1}: ${question}
-A${index + 1}: ${relatedAnswers.join(', ') || 'Not answered yet'}`;
-}).join('\n\n')}
+  return `
+Question ${index + 1}: ${question}
+Selected Answer(s): ${relatedAnswers.join(', ') || 'Not answered yet'}`;
+}).join('')}
 
-ARCHITECTURE TASK:
-Build a complete architecture diagram that addresses the user's original request: "${originalUserInput}"
-Incorporate their specific choices from the Q&A above.
-Focus on the exact technologies and patterns they mentioned in their original request.
+ARCHITECTURE REQUIREMENTS:
+Based on the user input "${requirements.join(' ')}" and their selected answers, build a complete architecture that specifically addresses:
+1. The exact technologies they mentioned (${requirements.filter(req => req.includes('GCP') || req.includes('AWS') || req.includes('Azure') || req.includes('Kubernetes') || req.includes('microservices')).join(', ')})
+2. The components they selected: ${answers.join(', ')}
+3. Integration with the services they chose
+4. The use case and scaling approach they specified
+
+DO NOT ask generic questions about cloud provider or basic architecture choices - these are already decided above.
+Build the specific architecture they requested.
 `;
-      
-      console.log("📝 Built conversation data for reasoning agent:", conversationData);
+      console.log("📝 Collected full conversation data:", conversationData);
     } else {
-      console.warn("⚠️ No original user input found in chat messages");
-      conversationData = "No conversation data available - using default architecture.";
+      console.log("📝 No conversation data found, using default architecture");
     }
   } catch (error) {
     console.warn("⚠️ Error collecting conversation data:", error);
-    conversationData = "Error collecting conversation data - using default architecture.";
   }
   
   // Store conversation data globally so StreamExecutor can access it

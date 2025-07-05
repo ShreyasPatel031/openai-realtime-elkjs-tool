@@ -6,6 +6,7 @@ import { dirname, resolve } from "path";
 import "dotenv/config";
 import cors from 'cors';
 import OpenAI from 'openai';
+import multer from 'multer';
 // Import tools from catalog
 import { allTools } from "../client/realtime/toolCatalog.ts";
 
@@ -24,6 +25,22 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Configure multer for handling image uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept only image files
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'), false);
+    }
+  }
+});
+
 // Middleware
 app.use(cors());
 app.use(express.json());                     // for application/json
@@ -31,7 +48,7 @@ app.use(express.urlencoded({ extended: false })); // for x-www-form-urlencoded
 
 // Stream route for development
 import streamHandler from './streamRoute.ts';
-app.post("/stream", streamHandler);
+app.post("/stream", upload.array('images', 5), streamHandler);
 
 // API route for chat completions - MUST be before Vite middleware
 app.post("/chat", async (req, res) => {

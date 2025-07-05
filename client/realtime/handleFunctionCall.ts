@@ -57,6 +57,7 @@ export function handleFunctionCall(
     switch (name) {
       case "display_elk_graph":
         // Nothing to change, just return a fresh copy so React sees a new object
+        // This will be handled by the common result generation below
         break;
         
       case "log_requirements_and_generate_questions":
@@ -207,11 +208,86 @@ export function handleFunctionCall(
         return;
     }
 
+    // Helper function to recursively collect all nodes
+    const collectAllNodes = (node: any, parentId: string = 'root'): any[] => {
+      const nodes = [];
+      if (node.children) {
+        for (const child of node.children) {
+          nodes.push({
+            id: child.id,
+            label: child.label || child.id,
+            icon: child.icon,
+            parentId: parentId,
+            hasChildren: child.children && child.children.length > 0
+          });
+          // Recursively collect nested nodes
+          nodes.push(...collectAllNodes(child, child.id));
+        }
+      }
+      return nodes;
+    };
+    
+    // Helper function to recursively collect all edges
+    const collectAllEdges = (node: any): any[] => {
+      const edges = [];
+      if (node.edges) {
+        for (const edge of node.edges) {
+          edges.push({
+            id: edge.id,
+            source: edge.source,
+            target: edge.target,
+            label: edge.label || ''
+          });
+        }
+      }
+      if (node.children) {
+        for (const child of node.children) {
+          edges.push(...collectAllEdges(child));
+        }
+      }
+      return edges;
+    };
+    
+    // Create detailed result with graph information for the agent
+    const allNodes = collectAllNodes(updated);
+    const allEdges = collectAllEdges(updated);
+    
+    const graphSummary = {
+      nodeCount: allNodes.length,
+      edgeCount: allEdges.length,
+      nodes: allNodes,
+      edges: allEdges
+    };
+    
+    // Create comprehensive result object
+    result = {
+      success: true,
+      operation: name,
+      graph: graphSummary,
+      message: `${name} completed successfully. Graph now has ${graphSummary.nodeCount} nodes and ${graphSummary.edgeCount} edges.`,
+      summary: {
+        totalNodes: graphSummary.nodeCount,
+        totalEdges: graphSummary.edgeCount,
+        nodesList: graphSummary.nodes.map(n => `${n.id} (${n.icon || 'no-icon'})`).join(', '),
+        edgesList: graphSummary.edges.map(e => `${e.source} → ${e.target}${e.label ? ` (${e.label})` : ''}`).join(', ')
+      }
+    };
+    
     // Log the result for non-early-returning cases
     console.log('🔧 handleFunctionCall result:', { call_id, name, result });
     setElkGraph(updated);
     console.log(`🔄 Graph state updated after ${name}`);
     console.log('Updated graph:', updated);
+    
+    // Send the result back to the agent
+    safeSend({
+      type: "conversation.item.create",
+      item: {
+        type: "function_call_output",
+        call_id: call_id,
+        output: JSON.stringify(result)
+      }
+    });
   } catch (err) {
     // Log any unexpected errors in the main handler
     console.error('❌ Exception in handleFunctionCall:', err);

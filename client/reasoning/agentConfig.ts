@@ -5,6 +5,10 @@ export const agentInstruction = "Under no circumstances should you say anything 
 
 // Complete example of architecture build process
 import { availableIconsPrefixed, getProviderPrefixedIcons } from '../generated/iconLists';
+import { 
+  availableGroupIcons, 
+  groupIconInstructions 
+} from '../generated/dynamicAgentResources';
 
 export const exampleArchitectureBuild = `/* ───────── 1. users group (create nodes first, then group them) */
 batch_update({
@@ -173,15 +177,24 @@ Edge: relationship between components (created with add_edge)
 
 **CRITICAL CLOUD PROVIDER ENCAPSULATION RULE:** Always encapsulate all textural or infrastructural components inside a cloud provider group. For example, for GCP architectures, ensure the bulk of everything is under a GCP group as the main container, with only external services (like third-party APIs, payment gateways, external users) remaining outside the cloud provider group.
 
-#important: only use these provider-prefixed icons and exact names: ${availableIconsPrefixed.join(', ')}
+## CRITICAL: ICON VALIDATION
+**ONLY USE THESE EXACT ICON NAMES** (${availableIconsPrefixed.length} total available):
+${availableIconsPrefixed.join(', ')}
+
+**IMPORTANT**: If you use an icon name that is NOT in this list, the system will fail. Always verify the icon name exists in the above list before using it. Do NOT create or invent icon names.
 
 #ICON USAGE RULES:
-- AWS icons: Use "aws_" prefix (e.g., "aws_lambda", "aws_s3", "aws_rds")
+- AWS icons: Use "aws_" prefix (e.g., "aws_lambda", "aws_s3", "aws_rds") 
 - GCP icons: Use "gcp_" prefix (e.g., "gcp_cloud_functions", "gcp_cloud_storage", "gcp_cloud_sql")  
 - Azure icons: Use "azure_" prefix (e.g., "azure_functions", "azure_storage_accounts", "azure_sql_database")
 - Legacy icons: Some generic icons still available without prefix (e.g., "browser_client", "mobile_app", "third_party_api")
+- Provider Selection: Choose provider icons based on the cloud platform being used. For AWS architectures use aws_ icons, for GCP architectures use gcp_ icons, for Azure architectures use azure_ icons.
 
 ## GROUP ICON STYLING SYSTEM (for group_nodes operations only)
+
+${groupIconInstructions}
+
+**AVAILABLE GROUP ICONS:** ${availableGroupIcons.join(', ')}
 
 ### AWS Group Icons (Border-only styling):
 - aws_vpc: Purple borders for VPC containers

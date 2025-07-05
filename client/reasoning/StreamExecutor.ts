@@ -60,9 +60,18 @@ export class StreamExecutor {
       // Get conversation data if available
       let conversationData = (window as any).chatConversationData || "";
       
-      // Debug what conversation data we're using
+      // Get additional text input if available
+      const additionalTextInput = (window as any).chatTextInput || "";
+      
+      // Check for globally stored images
+      const storedImages = (window as any).selectedImages || [];
+      const hasImages = storedImages.length > 0;
+      
+      // Debug what conversation data, text input, and images we're using
       console.log("🔍 DEBUG: Retrieved conversation data:", conversationData);
       console.log("🔍 DEBUG: Conversation data length:", conversationData.length);
+      console.log("🔍 DEBUG: Additional text input:", additionalTextInput);
+      console.log("📸 DEBUG: Found stored images:", storedImages.length);
       
       // Clear any potentially cached fake data
       if (conversationData.includes('Which GCP services do you plan to use') || 
@@ -74,10 +83,25 @@ export class StreamExecutor {
       
       // Build payload with conversation data or default architecture
       let userContent = "";
-      if (conversationData.trim()) {
-        userContent = `${conversationData}
+      
+      // Combine conversation data with additional text input
+      const combinedContent = [conversationData, additionalTextInput].filter(content => content.trim()).join('\n\n');
+      
+      if (combinedContent.trim()) {
+        userContent = `${combinedContent}
 
 CRITICAL: The user has already provided specific requirements above. DO NOT ask generic questions about cloud provider, deployment type, or basic architecture choices - these requirements are final.
+
+${hasImages ? `
+CRITICAL: The user has provided ${storedImages.length} image(s) that show the exact architecture to replicate. REPLICATE and MIMIC the architecture shown in the image(s) as closely as possible.
+
+When building the architecture:
+1. Use the conversation data for functional requirements
+2. REPLICATE the visual architecture structure, components, and connections shown in the image(s)
+3. Match the component layout, grouping, and relationships depicted in the image(s)
+4. Combine conversation requirements with the exact visual structure from the image(s)
+5. **CRITICAL**: ONLY use icon names from your available icon list - do NOT invent or create new icon names based on what you see in the image
+` : ''}
 
 Build a complete architecture following these EXACT requirements using proper group icon theming:
 - Available Group Icons: Use groupIconName parameter for all group_nodes operations
@@ -94,6 +118,11 @@ EXECUTION STEPS:
 Remember: DO NOT acknowledge or explain. Just execute the functions to build the architecture specified in the requirements.`;
       } else {
         userContent = `Build a complete e-commerce microservices architecture following this exact structure:
+
+${hasImages ? `
+CRITICAL: The user has provided ${storedImages.length} image(s) showing the exact architecture to replicate. REPLICATE and MIMIC the architecture shown in the image(s) as closely as possible. Do not build a generic architecture - build exactly what is shown in the image(s).
+**CRITICAL**: ONLY use icon names from your available icon list - do NOT invent or create new icon names based on what you see in the image.
+` : ''}
 
 IMPORTANT: Call display_elk_graph() first to see the current state, then build the architecture step by step.
 
@@ -114,8 +143,11 @@ CRITICAL: Always specify groupIconName parameter for group_nodes operations - it
 Remember: Do NOT acknowledge or explain. Just execute the functions.`;
       }
       
-      // Full payload with complete instructions
-      const fullPayload = JSON.stringify([
+      // Clear stored text input after using it
+      (window as any).chatTextInput = '';
+      
+      // Create the conversation payload
+      const conversationPayload = [
         { 
           role: "system", 
           content: elkGraphDescription
@@ -124,13 +156,49 @@ Remember: Do NOT acknowledge or explain. Just execute the functions.`;
           role: "user", 
           content: userContent
         }
-      ]);
-
-      const fullEncodedLength = encodeURIComponent(fullPayload).length;
-      addLine(`📦 Full payload (${fullEncodedLength} chars), using POST...`);
-      addLine(`📝 Using ${conversationData.trim() ? 'conversation requirements' : 'default e-commerce architecture'}`);
+      ];
       
-      await this.createMainStream(fullPayload);
+      // If we have images, create FormData payload, otherwise use JSON
+      let payload;
+      let isFormData = false;
+      
+      if (hasImages) {
+        addLine(`📸 Including ${storedImages.length} image(s) in reasoning request...`);
+        
+        // Create FormData payload
+        const formData = new FormData();
+        formData.append('conversation', JSON.stringify(conversationPayload));
+        
+        // Add each image to FormData using the field name 'images' (not 'image_0', 'image_1', etc.)
+        storedImages.forEach((imageFile: File, index: number) => {
+          formData.append('images', imageFile);
+          addLine(`📸 Added image ${index + 1}: ${imageFile.name} (${Math.round(imageFile.size / 1024)}KB)`);
+        });
+        
+        payload = formData;
+        isFormData = true;
+        
+        // Clear stored images after including them
+        (window as any).selectedImages = [];
+      } else {
+        // Use JSON payload as before
+        payload = JSON.stringify(conversationPayload);
+        isFormData = false;
+      }
+
+      if (isFormData) {
+        addLine(`📦 FormData payload with ${storedImages.length} image(s), using POST...`);
+      } else {
+        const fullEncodedLength = encodeURIComponent(payload as string).length;
+        addLine(`📦 JSON payload (${fullEncodedLength} chars), using POST...`);
+      }
+      
+      addLine(`📝 Using ${combinedContent.trim() ? 'conversation requirements' : 'default e-commerce architecture'}`);
+      if (additionalTextInput.trim()) {
+        addLine(`📝 Including additional text input: "${additionalTextInput.substring(0, 100)}${additionalTextInput.length > 100 ? '...' : ''}"`);
+      }
+      
+      await this.createMainStream(payload, isFormData);
       
     } catch (error) {
       console.error('StreamExecutor error:', error);
@@ -152,10 +220,10 @@ Remember: Do NOT acknowledge or explain. Just execute the functions.`;
     this.pendingCalls.current.clear();
   }
 
-  private async createMainStream(payload: string): Promise<void> {
+  private async createMainStream(payload: string | FormData, isFormData: boolean): Promise<void> {
     return new Promise((resolve, reject) => {
       const { addLine, setBusy } = this.options;
-      const ev = createPostEventSource(payload);
+      const ev = createPostEventSource(payload, undefined);
       const responseIdRef = { current: null as string | null };
 
       const callbacks: EventHandlerCallbacks = {

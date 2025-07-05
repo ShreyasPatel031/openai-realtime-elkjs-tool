@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardFooter } from "./card"
 import { ScrollArea } from "./scroll-area"
-import { User, Bot, ChevronDown, ChevronUp, Send, Info, Brain, Settings, CheckCircle } from "lucide-react"
+import { User, Bot, ChevronDown, ChevronUp, Send, Info, Brain, Settings, CheckCircle, ImageIcon } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "./radio-group"
 import { Checkbox } from "./checkbox"
 import { Label } from "./label"
@@ -24,8 +24,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
   const [isMinimized, setIsMinimized] = useState(propIsMinimized)
   const [dropdownStates, setDropdownStates] = useState<Record<string, boolean>>({})
   const [streamingMessages, setStreamingMessages] = useState<Record<string, { content: string; isStreaming: boolean; currentFunction?: string }>>({})
+  const [selectedImages, setSelectedImages] = useState<File[]>([])
+  const [textInput, setTextInput] = useState<string>('')
   const chatWindowRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [localMessages, setLocalMessages] = useState<Message[]>(propMessages)
 
   // Use messages from props instead of sample messages
@@ -112,7 +115,115 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
     setIsMinimized(!isMinimized)
   }
 
-  const handleProcessClick = () => {
+  // Function to convert SVG to PNG
+  const convertSvgToPng = (svgFile: File): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = (e) => {
+        const svgData = e.target?.result as string;
+        
+        // Create an image element from the SVG data
+        const img = new Image();
+        img.onload = () => {
+          // Create canvas and draw the SVG
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          if (!ctx) {
+            reject(new Error('Failed to get canvas context'));
+            return;
+          }
+          
+          // Set canvas size (you can adjust this for better quality)
+          canvas.width = img.width || 800;
+          canvas.height = img.height || 600;
+          
+          // Draw the SVG image onto the canvas
+          ctx.drawImage(img, 0, 0);
+          
+          // Convert canvas to PNG blob
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              reject(new Error('Failed to convert canvas to blob'));
+              return;
+            }
+            
+            // Create a new File object with PNG type
+            const pngFile = new File([blob], svgFile.name.replace('.svg', '.png'), {
+              type: 'image/png',
+              lastModified: Date.now()
+            });
+            
+            console.log(`📸 Converted SVG to PNG: ${svgFile.name} → ${pngFile.name}`);
+            resolve(pngFile);
+          }, 'image/png', 0.9); // 90% quality
+        };
+        
+        img.onerror = () => {
+          reject(new Error('Failed to load SVG image'));
+        };
+        
+        // Set the SVG data as the image source
+        img.src = svgData;
+      };
+      
+      reader.onerror = () => {
+        reject(new Error('Failed to read SVG file'));
+      };
+      
+      reader.readAsDataURL(svgFile);
+    });
+  };
+
+  // Function to handle image selection with SVG conversion
+  const handleImageSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    
+    // Filter for image files (including SVG)
+    const imageFiles = files.filter(file => 
+      file.type.startsWith('image/') || file.type === 'image/svg+xml'
+    );
+    
+    if (imageFiles.length > 0) {
+      console.log('📸 Processing selected images:', imageFiles.map(f => f.name));
+      
+      const processedImages: File[] = [];
+      
+      for (const file of imageFiles) {
+        try {
+          if (file.type === 'image/svg+xml') {
+            // Convert SVG to PNG
+            console.log('🔄 Converting SVG to PNG:', file.name);
+            const pngFile = await convertSvgToPng(file);
+            processedImages.push(pngFile);
+          } else {
+            // Use the file as-is for supported formats
+            processedImages.push(file);
+          }
+        } catch (error) {
+          console.error('❌ Failed to process image:', file.name, error);
+          // Show error to user
+          alert(`Failed to process image "${file.name}": ${error.message}`);
+        }
+      }
+      
+      if (processedImages.length > 0) {
+        setSelectedImages(prev => [...prev, ...processedImages]);
+        console.log('📸 Selected images for reasoning agent:', processedImages.length);
+      }
+    }
+    
+    // Clear the input so the same file can be selected again
+    event.target.value = '';
+  };
+
+  // Function to remove a selected image
+  const removeImage = (indexToRemove: number) => {
+    setSelectedImages(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
+
+  const handleProcessClick = async () => {
     console.log('🔄 Process button clicked - collecting conversation data');
     
     // Send single processing message to real-time agent
@@ -122,6 +233,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
     
     // Store chat data for the StreamExecutor to use
     storeChatData(messages, selectedOptions);
+    
+    // Store additional text input if provided
+    if (textInput.trim()) {
+      (window as any).chatTextInput = textInput.trim();
+      console.log('📝 Stored text input for reasoning agent:', textInput.trim());
+    } else {
+      (window as any).chatTextInput = '';
+    }
     
     // Collect conversation history for logging
     const conversationHistory = messages.map(message => ({
@@ -148,6 +267,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
     const processingData = {
       conversationHistory,
       selectedAnswers,
+      textInput: textInput.trim(),
       timestamp: new Date().toISOString(),
       totalMessages: messages.length,
       totalQuestions: selectedAnswers.length
@@ -155,15 +275,44 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
     
     console.log('📊 Collected processing data:', processingData);
     
-    // Call the actual process_user_requirements function which triggers StreamViewer
     try {
+      // If we have images, store them globally for the StreamExecutor to access
+      if (selectedImages.length > 0) {
+        console.log('📸 Processing with images...');
+        // Store images globally so StreamExecutor can access them
+        (window as any).selectedImages = selectedImages;
+        console.log('📸 Stored images globally for StreamExecutor:', selectedImages.length);
+      } else {
+        // Clear any previously stored images
+        (window as any).selectedImages = [];
+      }
+      
+      // Always call process_user_requirements to trigger StreamViewer
       const result = process_user_requirements();
       console.log('✅ Processing initiated:', result);
+      
+      // Clear selected images and text input after processing starts
+      if (selectedImages.length > 0) {
+        setSelectedImages([]);
+      }
+      if (textInput.trim()) {
+        setTextInput('');
+      }
       
       // Add a system message to show processing started
       const processingMessage = {
         id: crypto.randomUUID(),
-        content: "Processing please wait...",
+        content: (() => {
+          const parts = [];
+          if (textInput.trim()) parts.push('text input');
+          if (selectedImages.length > 0) parts.push(`${selectedImages.length} image${selectedImages.length > 1 ? 's' : ''}`);
+          
+          if (parts.length > 0) {
+            return `Processing ${parts.join(' and ')}...`;
+          } else {
+            return "Processing conversation data...";
+          }
+        })(),
         sender: 'system' as const,
         type: 'function-calling' as const,
         isStreaming: true,
@@ -429,16 +578,96 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
 
           {/* Footer Bar */}
           <CardFooter className="border-t p-2 bg-gray-50 flex-shrink-0">
-            <Button
-              onClick={handleProcessClick}
-              style={{
-                background: "#000",
-              }}
-              className="w-full h-12 rounded-lg border-2 border-black text-white hover:bg-gray-800 flex items-center justify-center"
-            >
-              <Send className="h-6 w-6 mr-2" />
-              Process
-            </Button>
+            <div className="w-full flex flex-col gap-2">
+              {/* Image upload area */}
+              <div className="flex items-center gap-2">
+                {/* Hidden file input */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*,.svg"
+                  multiple
+                  onChange={handleImageSelect}
+                  style={{ display: 'none' }}
+                />
+                
+                {/* Image upload button */}
+                <Button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <ImageIcon className="h-4 w-4" />
+                  Add Images
+                </Button>
+                
+                {/* Image count display */}
+                {selectedImages.length > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-blue-100 rounded-full text-sm">
+                    <span className="text-blue-700">
+                      {selectedImages.length} image{selectedImages.length > 1 ? 's' : ''} selected
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedImages([])}
+                      className="text-blue-500 hover:text-blue-700 text-xs ml-1"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              {/* Text input area */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  placeholder="Add text description or requirements..."
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleProcessClick();
+                    }
+                  }}
+                />
+                {textInput.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => setTextInput('')}
+                    className="text-gray-400 hover:text-gray-600 text-xs px-2"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              
+              {/* Process button */}
+              <Button
+                onClick={handleProcessClick}
+                style={{
+                  background: "#000",
+                }}
+                className="w-full h-12 rounded-lg border-2 border-black text-white hover:bg-gray-800 flex items-center justify-center"
+              >
+                <Send className="h-6 w-6 mr-2" />
+                {(() => {
+                  const parts = [];
+                  if (textInput.trim()) parts.push('text');
+                  if (selectedImages.length > 0) parts.push(`${selectedImages.length} image${selectedImages.length > 1 ? 's' : ''}`);
+                  
+                  if (parts.length > 0) {
+                    return `Process with ${parts.join(' + ')}`;
+                  } else {
+                    return 'Process';
+                  }
+                })()}
+              </Button>
+            </div>
           </CardFooter>
         </Card>
       )}

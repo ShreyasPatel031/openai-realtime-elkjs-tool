@@ -33,13 +33,11 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   const [showMic, setShowMic] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-  const autoExpandedRef = useRef(false)
 
   // Auto-expand when agent is ready
   useEffect(() => {
-    if (isAgentReady && !isExpanded && !isTransitioning && !autoExpandedRef.current) {
+    if (isAgentReady && !isExpanded && !isTransitioning) {
       console.log('🤖 Agent is ready - auto-expanding chat');
-      autoExpandedRef.current = true;
       toggleExpand();
     }
   }, [isAgentReady]);
@@ -50,8 +48,9 @@ const ChatBox: React.FC<ChatBoxProps> = ({
       setIsProcessing(true);
       
       try {
-        console.log('🔧 Starting questionnaire agent with user input:', message);
+        console.log('🔧 Starting reasoning agent with user input:', message);
         
+        // Use questionnaire executor for text-only
         const executor = new QuestionnaireExecutor();
 
         await executor.execute(
@@ -81,7 +80,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
         setMessage("");
         
       } catch (error) {
-        console.error('❌ Failed to execute questionnaire:', error);
+        console.error('❌ Failed to execute:', error);
         setIsProcessing(false);
       }
     }
@@ -119,8 +118,12 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   };
 
   const handleMicClick = () => {
-    // Just expand the chat input - no session start
+    // Start the real-time session when the start button is clicked
     if (!isExpanded && !isTransitioning) {
+      if (onStartSession) {
+        console.log('🎤 Start button clicked - starting real-time session');
+        onStartSession();
+      }
       toggleExpand();
     }
   }
@@ -180,6 +183,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
                 <X className="h-6 w-6 text-red-500 hover:text-red-300" />
               </Button>
             )}
+            
             <Input
               ref={inputRef}
               value={message}
@@ -197,7 +201,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
             />
             <Button
               type="submit"
-              disabled={isProcessing}
+              disabled={isProcessing || !message.trim()}
               style={{
                 transition: "opacity 300ms cubic-bezier(0, 0, 0.2, 1)",
                 background: isProcessing ? "#6b7280" : "#000",

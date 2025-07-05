@@ -33,16 +33,19 @@ export default async function streamHandler(req: Request, res: Response) {
   try {
     console.log('=== STREAM REQUEST ===');
     console.log('Method:', req.method);
+    console.log('Content-Type:', req.get('Content-Type'));
     
     // Get payload from request
     let payload: string | undefined;
     let isCompressed = false;
     
     if (req.method === "POST") {
-      payload = req.body?.payload;
+      // For FormData requests (with images), conversation is in req.body?.conversation
+      // For JSON requests, payload is in req.body?.payload
+      payload = req.body?.conversation || req.body?.payload;
       isCompressed = req.body?.isCompressed === true;
       
-      // Decompress if needed
+      // Decompress if needed (only applies to JSON requests)
       if (isCompressed && payload) {
         try {
           console.log('🔄 Decompressing payload...');
@@ -78,17 +81,51 @@ export default async function streamHandler(req: Request, res: Response) {
     try {
       // Parse initial conversation
       const conversation = JSON.parse(payload);
+      
+      // If we have uploaded files, add them to the conversation
+      if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+        console.log(`📸 Processing ${req.files.length} uploaded image(s)...`);
+        
+        // Find the last user message
+        const lastUserMessageIndex = conversation.findLastIndex((msg: any) => msg.role === 'user');
+        
+        if (lastUserMessageIndex !== -1) {
+          const lastUserMessage = conversation[lastUserMessageIndex];
+          
+          // Convert content to array format if it's a string
+          if (typeof lastUserMessage.content === 'string') {
+            lastUserMessage.content = [
+              { type: 'input_text', text: lastUserMessage.content }
+            ];
+          }
+          
+          // Add images to the content
+          req.files.forEach((file: any, index: number) => {
+            const base64Image = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+            
+            // Debug: Log image info
+            console.log(`📸 Image ${index + 1} details:`);
+            console.log(`  - Original filename: ${file.originalname}`);
+            console.log(`  - MIME type: ${file.mimetype}`);
+            console.log(`  - Buffer size: ${file.buffer.length} bytes`);
+            console.log(`  - Base64 data preview: ${base64Image.substring(0, 100)}...`);
+            
+            lastUserMessage.content.push({
+              type: 'input_image',
+              image_url: base64Image
+            });
+            console.log(`📸 Added image ${index + 1} to conversation`);
+          });
+        }
+      }
+      
       let elkGraph = { id: "root", children: [], edges: [] };
       
       while (true) {
         console.log(`🔄 Starting conversation turn with ${conversation.length} items`);
-        console.log('🐛 DEBUG: About to call OpenAI API...');
-        
-        // Track which function calls we've already handled in this turn
-        const handledCallIds = new Set<string>();
         
         try {
-          console.log('🐛 DEBUG: Creating OpenAI stream with client...');
+          console.log('🐛 DEBUG: Creating OpenAI stream...');
           let retryCount = 0;
           let stream;
           
@@ -109,19 +146,18 @@ export default async function streamHandler(req: Request, res: Response) {
                 reasoning: { effort: "low", summary: "detailed" },
                 stream: true
               });
-              break; // If successful, exit retry loop
+              break;
             } catch (streamError) {
               retryCount++;
               console.error(`❌ Stream creation failed (attempt ${retryCount}/3):`, streamError);
               if (retryCount === 3) {
-                throw streamError; // Re-throw after all retries exhausted
+                throw streamError;
               }
-              // Wait before retrying (exponential backoff)
               await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 1000));
             }
           }
           
-          console.log('🐛 DEBUG: OpenAI stream created successfully');
+          console.log('✅ OpenAI stream created successfully');
 
           let messageCount = 0;
           for await (const delta of stream!) {
@@ -130,39 +166,29 @@ export default async function streamHandler(req: Request, res: Response) {
               console.log(`🐛 DEBUG: Processed ${messageCount} stream messages so far...`);
             }
             
-            // Handle errors in the stream
             if (delta.type === "error") {
               const errorDelta = delta as { type: "error"; error: any };
               console.error('❌ Stream error:', errorDelta);
               send({ 
                 type: "error", 
-                error: errorDelta.error.message || "Stream error",
-                debug: {
-                  type: errorDelta.error.type,
-                  details: errorDelta.error
-                }
+                error: errorDelta.error.message || "Stream error"
               });
               continue;
             }
             
             send(delta);
 
-            // Handle function calls and generate outputs
             if (delta.type === "response.output_item.done" && delta.item?.type === "function_call") {
               const funcCall = delta.item;
               console.log(`🎯 Processing function call: ${funcCall.name}`);
               
-              // Build function call output
               const fco = {
                 type: "function_call_output",
                 call_id: funcCall.call_id,
                 output: JSON.stringify(elkGraph)
               };
               
-              // Send it back to the model
               send(fco);
-              
-              // Keep it in history
               conversation.push(fco);
             }
 
@@ -170,7 +196,6 @@ export default async function streamHandler(req: Request, res: Response) {
               const calls = delta.response?.output?.filter((x: any) => x.type === "function_call") ?? [];
               if (calls.length === 0) {
                 console.log('✅ No function calls found, ending conversation');
-                console.log(`🐛 DEBUG: Total stream messages processed: ${messageCount}`);
                 send({ type: "done", data: "[DONE]" });
                 res.write("data: [DONE]\n\n");
                 res.end();
@@ -178,67 +203,34 @@ export default async function streamHandler(req: Request, res: Response) {
               }
               
               console.log(`🔄 ${calls.length} function call(s) processed, continuing conversation loop`);
-              console.log(`🐛 DEBUG: Total stream messages processed this turn: ${messageCount}`);
-              
-              // Keep everything the model sent so it remembers its own tool use
               conversation.push(...delta.response.output);
               break;
             }
           }
         } catch (apiError) {
-          console.error('🐛 DEBUG: OpenAI API Error:', apiError?.constructor?.name);
-          console.error('🐛 DEBUG: OpenAI API Error message:', apiError instanceof Error ? apiError.message : String(apiError));
-          
-          // Check if it's a connection error
-          const isConnectionError = 
-            apiError?.constructor?.name === 'APIConnectionError' ||
-            String(apiError).toLowerCase().includes('connection') ||
-            String(apiError).toLowerCase().includes('network') ||
-            String(apiError).toLowerCase().includes('timeout');
-          
+          console.error('❌ OpenAI API Error:', apiError);
           send({ 
             type: "error", 
-            error: `OpenAI API Error: ${apiError instanceof Error ? apiError.message : String(apiError)}`,
-            debug: {
-              type: apiError?.constructor?.name,
-              stack: apiError instanceof Error ? apiError.stack : undefined,
-              isConnectionError,
-              suggestion: isConnectionError ? 
-                "This appears to be a temporary connection issue. Please try again in a few moments." :
-                "An unexpected error occurred. Please check the console for details."
-            }
+            error: apiError instanceof Error ? apiError.message : "OpenAI API error"
           });
-          
           res.write("data: [DONE]\n\n");
           res.end();
           return;
         }
       }
     } catch (error) {
-      console.error('=== REQUEST ERROR ===');
-      console.error('Error:', error);
-      
+      console.error('=== STREAMING ERROR ===', error);
       send({ 
         type: "error", 
-        error: error instanceof Error ? error.message : String(error),
-        debug: {
-          type: error?.constructor?.name,
-          stack: error instanceof Error ? error.stack : undefined
-        }
+        error: error instanceof Error ? error.message : "Unknown error"
       });
-      
       res.write("data: [DONE]\n\n");
       res.end();
     }
   } catch (error) {
-    console.error('=== OUTER ERROR ===');
-    console.error('Error:', error);
+    console.error('=== REQUEST ERROR ===', error);
     return res.status(500).json({ 
-      error: error instanceof Error ? error.message : String(error),
-      debug: {
-        type: error?.constructor?.name,
-        stack: error instanceof Error ? error.stack : undefined
-      }
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 } 

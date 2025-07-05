@@ -63,6 +63,8 @@ export const executeFunctionCall = async (
           setElkGraph(newGraph);
           // Update the ref immediately
           elkGraphRef.current = newGraph;
+          // Store graph globally for architecture completion notification
+          (window as any).currentElkGraph = newGraph;
         },
         mutations: {
           addNode,
@@ -75,9 +77,26 @@ export const executeFunctionCall = async (
           batchUpdate
         },
         safeSend: (event: any) => {
-          // Let handleFunctionCall do its job - we don't need to intercept
-          // Just log what's being sent for debugging
-          console.log("📤 safeSend called with:", event);
+          // Send the event back to the real-time agent
+          console.log("📤 Sending function result to real-time agent:", event);
+          
+          // Send the event to the real-time agent using the global function
+          if (window.realtimeAgentSendTextMessage && typeof window.realtimeAgentSendTextMessage === 'function') {
+            if (event.type === "conversation.item.create" && event.item?.type === "function_call_output") {
+              try {
+                const output = JSON.parse(event.item.output);
+                if (output.graph) {
+                  const summary = `Function ${output.operation} completed. Graph now has ${output.graph.nodeCount} nodes and ${output.graph.edgeCount} edges. Nodes: ${output.graph.nodes.map(n => n.id).join(', ')}. Edges: ${output.graph.edges.map(e => `${e.source}→${e.target}`).join(', ')}.`;
+                  window.realtimeAgentSendTextMessage(summary);
+                  console.log("📡 Sent graph update to real-time agent");
+                }
+              } catch (e) {
+                console.error("Failed to parse function output:", e);
+              }
+            }
+          } else {
+            console.warn("⚠️ Real-time agent message function not available");
+          }
         }
       }
     );

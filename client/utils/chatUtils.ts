@@ -317,7 +317,68 @@ export const sendArchitectureCompleteToRealtimeAgent = (): void => {
     return;
   }
   
-  const architectureCompleteMessage = "Architecture generation complete! The diagram has been successfully created and is ready for review. You can now interact with the architecture or make modifications as needed.";
+  // Get the current graph state if available
+  const currentGraph = (window as any).currentElkGraph;
+  let architectureCompleteMessage = "Architecture generation complete! The diagram has been successfully created and is ready for review. You can now interact with the architecture or make modifications as needed.";
+  
+  // If we have graph information, include it in the message
+  if (currentGraph) {
+    try {
+      // Helper function to recursively collect all nodes
+      const collectAllNodes = (node: any, parentId: string = 'root'): any[] => {
+        const nodes = [];
+        if (node.children) {
+          for (const child of node.children) {
+            nodes.push({
+              id: child.id,
+              label: child.label || child.id,
+              icon: child.icon,
+              parentId: parentId
+            });
+            // Recursively collect nested nodes
+            nodes.push(...collectAllNodes(child, child.id));
+          }
+        }
+        return nodes;
+      };
+      
+      // Helper function to recursively collect all edges
+      const collectAllEdges = (node: any): any[] => {
+        const edges = [];
+        if (node.edges) {
+          for (const edge of node.edges) {
+            edges.push({
+              id: edge.id,
+              source: edge.sources?.[0] || edge.source,
+              target: edge.targets?.[0] || edge.target,
+              label: edge.label || ''
+            });
+          }
+        }
+        if (node.children) {
+          for (const child of node.children) {
+            edges.push(...collectAllEdges(child));
+          }
+        }
+        return edges;
+      };
+      
+      const allNodes = collectAllNodes(currentGraph);
+      const allEdges = collectAllEdges(currentGraph);
+      
+      architectureCompleteMessage = `Architecture generation complete! Created a diagram with ${allNodes.length} nodes and ${allEdges.length} edges. 
+
+Current Architecture:
+- Nodes: ${allNodes.map(n => `${n.id}${n.icon ? ` (${n.icon})` : ''}`).join(', ')}
+- Connections: ${allEdges.map(e => `${e.source} → ${e.target}${e.label ? ` (${e.label})` : ''}`).join(', ')}
+
+The diagram is ready for review and you can now interact with it or make modifications as needed.`;
+      
+    } catch (error) {
+      console.error('❌ Failed to parse graph state:', error);
+      // Fallback to basic message
+    }
+  }
   
   try {
     // Send via text message if available

@@ -46,7 +46,7 @@ const compressPayload = async (payload: string): Promise<string> => {
 };
 
 // Helper to create EventSource-like object using POST + SSE parsing
-export const createPostEventSource = (payload: string, prevId?: string): PostEventSource => {
+export const createPostEventSource = (payload: string | FormData, prevId?: string): PostEventSource => {
   const controller = new AbortController();
   
   // Create EventSource-like object
@@ -70,31 +70,51 @@ export const createPostEventSource = (payload: string, prevId?: string): PostEve
   // Start the fetch request
   const startFetch = async () => {
     try {
-      // Check if payload needs compression (over 40KB)
-      const isLargePayload = payload.length > 40 * 1024;
-      const compressedPayload = isLargePayload ? await compressPayload(payload) : payload;
+      let requestBody: string | FormData;
+      let headers: Record<string, string> = {
+        'Accept': 'text/event-stream',
+      };
       
-      // Use JSON format for cleaner API
-      const requestBody = JSON.stringify({
-        payload: compressedPayload,
-        isCompressed: isLargePayload,
-        ...(prevId && { previous_response_id: prevId })
-      });
-      
-      console.log('🔄 Starting stream...', prevId ? '(follow-up)' : '(initial)');
-      console.log('🔍 Original payload size:', payload.length);
-      if (isLargePayload) {
-        console.log('🔍 Compressed payload size:', compressedPayload.length);
-        console.log('🔍 Compression ratio:', (compressedPayload.length / payload.length * 100).toFixed(1) + '%');
+      // Handle FormData (images) vs JSON payload
+      if (payload instanceof FormData) {
+        console.log('🔄 Starting stream with FormData (images)...', prevId ? '(follow-up)' : '(initial)');
+        
+        // Add prevId to FormData if provided
+        if (prevId) {
+          payload.append('previous_response_id', prevId);
+        }
+        
+        requestBody = payload;
+        // Don't set Content-Type header for FormData - let browser set it with boundary
+      } else {
+        console.log('🔄 Starting stream with JSON...', prevId ? '(follow-up)' : '(initial)');
+        
+        // Check if payload needs compression (over 40KB)
+        const isLargePayload = payload.length > 40 * 1024;
+        const compressedPayload = isLargePayload ? await compressPayload(payload) : payload;
+        
+        // Use JSON format for cleaner API
+        requestBody = JSON.stringify({
+          payload: compressedPayload,
+          isCompressed: isLargePayload,
+          ...(prevId && { previous_response_id: prevId })
+        });
+        
+        headers['Content-Type'] = 'application/json';
+        if (isLargePayload) {
+          headers['Content-Encoding'] = 'gzip';
+        }
+        
+        console.log('🔍 Original payload size:', payload.length);
+        if (isLargePayload) {
+          console.log('🔍 Compressed payload size:', compressedPayload.length);
+          console.log('🔍 Compression ratio:', (compressedPayload.length / payload.length * 100).toFixed(1) + '%');
+        }
       }
       
       const response = await fetch('/stream', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream',
-          'Content-Encoding': isLargePayload ? 'gzip' : 'identity'
-        },
+        headers,
         body: requestBody,
         signal: controller.signal,
       });

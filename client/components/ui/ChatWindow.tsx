@@ -26,6 +26,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
   const [streamingMessages, setStreamingMessages] = useState<Record<string, { content: string; isStreaming: boolean; currentFunction?: string }>>({})
   const [selectedImages, setSelectedImages] = useState<File[]>([])
   const [textInput, setTextInput] = useState<string>('')
+  const [pasteImageFeedback, setPasteImageFeedback] = useState<string>('')
   const chatWindowRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -85,6 +86,89 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
       return () => clearTimeout(timer);
     }
   }, [localMessages]);
+
+  // Add clipboard paste event listener
+  useEffect(() => {
+    const handlePaste = async (event: ClipboardEvent) => {
+      // Only handle paste if the chat window is visible and not minimized
+      if (!chatWindowRef.current || isMinimized) return;
+      
+      // Check if the paste event is happening within our chat window or if no other input is focused
+      const isWithinChatWindow = chatWindowRef.current.contains(event.target as Node);
+      const activeElement = document.activeElement;
+      const isInTextInput = activeElement && activeElement.tagName.toLowerCase() === 'input';
+      
+      // Only proceed if pasting within our component OR if no text input is focused (global paste)
+      if (!isWithinChatWindow && isInTextInput) return;
+      
+      const clipboardData = event.clipboardData;
+      if (!clipboardData) return;
+      
+      // Check if clipboard contains image data
+      const items = Array.from(clipboardData.items);
+      const imageItems = items.filter(item => item.type.startsWith('image/'));
+      
+      if (imageItems.length > 0) {
+        console.log('📋 Detected image paste, processing...');
+        event.preventDefault(); // Prevent default paste behavior
+        
+        const processedImages: File[] = [];
+        
+        for (const item of imageItems) {
+          try {
+            const blob = item.getAsFile();
+            if (blob) {
+              // Create a File object from the blob
+              const timestamp = Date.now();
+              const fileName = `pasted-image-${timestamp}.${blob.type.split('/')[1] || 'png'}`;
+              const file = new File([blob], fileName, {
+                type: blob.type,
+                lastModified: timestamp
+              });
+              
+              console.log('📋 Processing pasted image:', fileName, blob.type);
+              
+              // If it's an SVG, convert it to PNG (though SVG from clipboard is rare)
+              if (blob.type === 'image/svg+xml') {
+                console.log('🔄 Converting pasted SVG to PNG');
+                const pngFile = await convertSvgToPng(file);
+                processedImages.push(pngFile);
+              } else {
+                processedImages.push(file);
+              }
+            }
+          } catch (error) {
+            console.error('❌ Failed to process pasted image:', error);
+            // Show error feedback to user
+            const errorMessage = `Failed to process pasted image: ${error instanceof Error ? error.message : 'Unknown error'}`;
+            console.error(errorMessage);
+            // You could also show a toast notification here
+          }
+        }
+        
+        if (processedImages.length > 0) {
+          setSelectedImages(prev => [...prev, ...processedImages]);
+          console.log('📋 Added pasted images to selection:', processedImages.length);
+          
+          // Show feedback that images were pasted
+          const feedbackText = `📋 ${processedImages.length} image${processedImages.length > 1 ? 's' : ''} pasted!`;
+          setPasteImageFeedback(feedbackText);
+          
+          // Clear feedback after 2 seconds
+          setTimeout(() => {
+            setPasteImageFeedback('');
+          }, 2000);
+        }
+      }
+    };
+    
+    // Add event listener to the document (will catch paste events anywhere)
+    document.addEventListener('paste', handlePaste);
+    
+    return () => {
+      document.removeEventListener('paste', handlePaste);
+    };
+  }, [isMinimized]);
 
   const handleRadioChange = (questionId: string, value: string) => {
     setSelectedOptions((prev) => ({
@@ -598,10 +682,25 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
                   variant="outline"
                   size="sm"
                   className="flex items-center gap-2"
+                  title="Click to select images or paste images from clipboard"
                 >
                   <ImageIcon className="h-4 w-4" />
                   Add Images
                 </Button>
+                
+                {/* Paste hint */}
+                {!pasteImageFeedback && (
+                  <span className="text-xs text-gray-500 font-medium">
+                    or paste images
+                  </span>
+                )}
+                
+                {/* Paste feedback */}
+                {pasteImageFeedback && (
+                  <span className="text-xs text-green-600 font-medium animate-pulse">
+                    {pasteImageFeedback}
+                  </span>
+                )}
                 
                 {/* Image count display */}
                 {selectedImages.length > 0 && (

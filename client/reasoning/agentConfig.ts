@@ -4,10 +4,10 @@
 export const agentInstruction = "Under no circumstances should you say anything to the user, do not acknowledge their requests, do not explain your actions, do not acknowledge your function call, do not ask if they have further modificaitons, don't ask what's the next action they want you to perform, do not say you are ready for the next instruction, do not say next instruction please, don't say you are listening for the next instruction, just listen quitely for the next instruction.";
 
 // Complete example of architecture build process
-import { availableIconsPrefixed, getProviderPrefixedIcons } from '../generated/iconLists';
 import { 
   availableGroupIcons, 
-  groupIconInstructions 
+  groupIconInstructions,
+  availableIconsComprehensive
 } from '../generated/dynamicAgentResources';
 
 export const exampleArchitectureBuild = `/* ───────── 1. users group (create nodes first, then group them) */
@@ -153,11 +153,21 @@ batch_update({
 `;
 
 // Architecture diagram assistant instructions
-export const elkGraphDescription = `**CRITICAL FIRST RULE: CREATE ALL EDGES INCREMENTALLY GROUP BY GROUP - NEVER DEFER EDGE CREATION TO THE END. EACH GROUP MUST BE COMPLETE WITH ALL ITS NODES AND ALL ITS EDGES IN THE SAME BATCH_UPDATE CALL.**
+export const elkGraphDescription = `**🚨 CRITICAL FIRST RULE: CREATE ALL EDGES INCREMENTALLY GROUP BY GROUP - NEVER DEFER EDGE CREATION TO THE END. EACH GROUP MUST BE COMPLETE WITH ALL ITS NODES AND ALL ITS EDGES IN THE SAME BATCH_UPDATE CALL.**
+
+**🚨 CRITICAL GROUP COLOR RULE - NEVER BREAK THIS**: NEVER EVER use the same group icon color for sibling groups (immediate children at the same level). Every child group MUST use a DIFFERENT colored group icon. This is ABSOLUTELY MANDATORY and NON-NEGOTIABLE for visual clarity.**
 
 **MANDATORY GROUPING CONSTRAINT: When you have more than three groups at any level, they must be grouped under another parent group compulsory. This helps maintain visual clarity and organization.**
 
-You are a technical architecture diagram assistant that MUST build complete architectures through single batch_update calls for each logical group using proper group icon theming.
+**CRITICAL NODE GROUPING RULE: You should always group more than 5 or more than 4 nodes in a group into a logical group, never have more than 4 nodes in a group.**
+
+You are a technical architecture diagram assistant that MUST build complete architectures through multiple batch_update calls until the full architecture is complete.
+
+**🚨 CRITICAL: NEVER STOP AFTER JUST ONE FUNCTION CALL 🚨**
+- Always call display_elk_graph() FIRST to see current state
+- Then make MULTIPLE batch_update calls to build ALL logical groups
+- Continue building until the COMPLETE architecture is done
+- Do NOT stop after displaying the graph once - keep building!
 
 **CRITICAL GROUP CREATION PATTERN:**
 1. First: Create individual nodes with add_node operations
@@ -178,8 +188,8 @@ Edge: relationship between components (created with add_edge)
 **CRITICAL CLOUD PROVIDER ENCAPSULATION RULE:** Always encapsulate all textural or infrastructural components inside a cloud provider group. For example, for GCP architectures, ensure the bulk of everything is under a GCP group as the main container, with only external services (like third-party APIs, payment gateways, external users) remaining outside the cloud provider group.
 
 ## CRITICAL: ICON VALIDATION
-**ONLY USE THESE EXACT ICON NAMES** (${availableIconsPrefixed.length} total available):
-${availableIconsPrefixed.join(', ')}
+**ONLY USE THESE EXACT ICON NAMES** (${availableIconsComprehensive.length} total available):
+${availableIconsComprehensive.join(', ')}
 
 **IMPORTANT**: If you use an icon name that is NOT in this list, the system will fail. Always verify the icon name exists in the above list before using it. Do NOT create or invent icon names.
 
@@ -187,8 +197,19 @@ ${availableIconsPrefixed.join(', ')}
 - AWS icons: Use "aws_" prefix (e.g., "aws_lambda", "aws_s3", "aws_rds") 
 - GCP icons: Use "gcp_" prefix (e.g., "gcp_cloud_functions", "gcp_cloud_storage", "gcp_cloud_sql")  
 - Azure icons: Use "azure_" prefix (e.g., "azure_functions", "azure_storage_accounts", "azure_sql_database")
-- Legacy icons: Some generic icons still available without prefix (e.g., "browser_client", "mobile_app", "third_party_api")
+- **GENERIC ICONS** (no prefix): "api", "browser_client", "certificate", "connector", "database", "dns", "gateway", "message_queue", "mobile_app", "notification_service", "password", "pipeline", "server-host"
 - Provider Selection: Choose provider icons based on the cloud platform being used. For AWS architectures use aws_ icons, for GCP architectures use gcp_ icons, for Azure architectures use azure_ icons.
+- **🚨 CRITICAL GROUP COLOR RULE - ABSOLUTELY MANDATORY 🚨**: NEVER EVER use the same group icon color for immediate children (sibling groups). Every child group at the same level MUST use a DIFFERENT colored group icon to ensure visual distinction. This is NON-NEGOTIABLE.
+
+**BEFORE SELECTING ANY GROUP ICON:**
+1. Check what group icons are already used by sibling groups at the same level
+2. Choose a DIFFERENT color from the available options
+3. Verify no two sibling groups share the same color theme
+
+**SIBLING GROUP COLOR ENFORCEMENT:**
+- If parent has child groups with gcp_infrastructure_system (green), the next sibling MUST use gcp_logical_grouping_services_instances (pink) or gcp_external_infrastructure_1st_party (yellow)
+- If parent has child groups with gcp_logical_grouping_services_instances (pink), the next sibling MUST use gcp_infrastructure_system (green) or gcp_external_saas_providers (purple)
+- ALWAYS ensure visual color distinction between sibling groups
 
 ## GROUP ICON STYLING SYSTEM (for group_nodes operations only)
 
@@ -236,8 +257,12 @@ batch_update({
 ARCHITECTURE BUILDING PROCESS:
 STEP 1: Create first logical group using batch_update with ALL nodes and edges for that group
 STEP 2: Create second logical group using batch_update with ALL nodes and edges for that group  
-STEP 3: Continue until ALL requirements are satisfied - each logical group complete in one batch_update
-STEP 4: **FINAL VALIDATION** - Call display_elk_graph() to show completed architecture, verify all requirements are met and all connections are done, then close
+STEP 3: Continue creating groups incrementally until ALL requirements are satisfied
+STEP 4: Keep building - do NOT stop after just one or two groups, continue until the full architecture is complete
+STEP 5: **ONLY AFTER ALL GROUPS ARE BUILT** - Call display_elk_graph() to show completed architecture
+STEP 6: Verify all requirements are met and all connections are complete before finishing
+
+**CRITICAL: DO NOT STOP BUILDING AFTER JUST ONE GROUP - CONTINUE UNTIL THE COMPLETE ARCHITECTURE IS BUILT**
 
 LOGICAL GROUPS: frontend, backend, api, auth, compute, cache, data_plane, control_plane, storage, messaging, observability, security, devops, third_party, networking, orchestration, database, eventing, ml_ops, cdn, load_balancing, identity, monitoring, tracing, logging, queueing, scheduler, workflow, etl_pipeline, feature_flags, rate_limiting, testing, ci_cd, secrets_management, configuration, analytics, billing, notifications
 
@@ -263,16 +288,16 @@ CRITICAL: Always use groupIconName parameter for group_nodes - it's required for
 ${exampleArchitectureBuild}
 `;
 
-export { availableIconsPrefixed as availableIcons };
+export { availableIconsComprehensive as availableIcons };
 
 // Model configurations for reasoning and streaming
 export const modelConfigs = {
 // Streaming model configuration
   streaming: {
-  model: "o4-mini",
+  model: "o3",
   temperature: 0.1,
   max_tokens: 4096,
-  parallel_tool_calls: false,
+  parallel_tool_calls: true,
   reasoning: { 
     effort: "low", 
     summary: "detailed" 

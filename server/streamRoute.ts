@@ -120,8 +120,13 @@ export default async function streamHandler(req: Request, res: Response) {
       }
       
       let elkGraph = { id: "root", children: [], edges: [] };
+      let turnCount = 0;
+      let consecutiveNoFunctionCallTurns = 0;
+      const maxTurns = 30; // Allow more turns for complex architectures
+      const maxConsecutiveNoFunctionCallTurns = 2; // Reduced - agent should keep building
       
-      while (true) {
+      while (turnCount < maxTurns) {
+        turnCount++;
         console.log(`🔄 Starting conversation turn with ${conversation.length} items`);
         
         try {
@@ -132,7 +137,7 @@ export default async function streamHandler(req: Request, res: Response) {
           while (retryCount < 3) {
             try {
               stream = await client.responses.create({
-                model: "o4-mini",
+                model: "o3",
                 input: conversation,
                 tools: allTools.map(tool => ({
                   type: "function",
@@ -142,7 +147,7 @@ export default async function streamHandler(req: Request, res: Response) {
                   strict: false
                 })),
                 tool_choice: "auto",
-                parallel_tool_calls: false,
+                parallel_tool_calls: true,
                 reasoning: { effort: "low", summary: "detailed" },
                 stream: true
               });
@@ -194,15 +199,42 @@ export default async function streamHandler(req: Request, res: Response) {
 
             if (delta.type === "response.completed") {
               const calls = delta.response?.output?.filter((x: any) => x.type === "function_call") ?? [];
+              const textResponses = delta.response?.output?.filter((x: any) => x.type === "message") ?? [];
+              
               if (calls.length === 0) {
-                console.log('✅ No function calls found, ending conversation');
-                send({ type: "done", data: "[DONE]" });
-                res.write("data: [DONE]\n\n");
-                res.end();
-                return;
+                consecutiveNoFunctionCallTurns++;
+                console.log(`⚠️  No function calls in this turn (${consecutiveNoFunctionCallTurns}/${maxConsecutiveNoFunctionCallTurns})`);
+                
+                // Check if the response indicates completion
+                const responseText = textResponses.map((msg: any) => msg.content || '').join(' ').toLowerCase();
+                const completionIndicators = [
+                  'architecture is complete',
+                  'diagram is finished', 
+                  'all requirements satisfied',
+                  'architecture diagram complete',
+                  'final validation complete',
+                  'all groups are built',
+                  'complete architecture'
+                ];
+                
+                const hasCompletionIndicator = completionIndicators.some(indicator => 
+                  responseText.includes(indicator)
+                );
+                
+                if (consecutiveNoFunctionCallTurns >= maxConsecutiveNoFunctionCallTurns || hasCompletionIndicator) {
+                  console.log('✅ Conversation complete - no more function calls needed or completion indicated');
+                  send({ type: "done", data: "[DONE]" });
+                  res.write("data: [DONE]\n\n");
+                  res.end();
+                  return;
+                }
+                
+                console.log('🔄 Allowing agent to continue thinking...');
+              } else {
+                consecutiveNoFunctionCallTurns = 0; // Reset counter when function calls are made
+                console.log(`🔄 ${calls.length} function call(s) processed, continuing conversation loop`);
               }
               
-              console.log(`🔄 ${calls.length} function call(s) processed, continuing conversation loop`);
               conversation.push(...delta.response.output);
               break;
             }
@@ -218,6 +250,14 @@ export default async function streamHandler(req: Request, res: Response) {
           return;
         }
       }
+      
+      // If we exit the while loop due to max turns, send completion
+      console.log(`⚠️  Reached maximum turns (${maxTurns}), ending conversation`);
+      send({ type: "done", data: "[DONE]" });
+      res.write("data: [DONE]\n\n");
+      res.end();
+      return;
+      
     } catch (error) {
       console.error('=== STREAMING ERROR ===', error);
       send({ 

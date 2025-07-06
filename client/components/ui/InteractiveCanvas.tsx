@@ -95,6 +95,63 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // New state for showing debug information
   const [showElkDebug, setShowElkDebug] = useState(false);
   
+  // Function to extract only core structural data (no layout/rendering config)
+  const getStructuralData = useCallback((graph: any) => {
+    if (!graph) return null;
+    
+    const extractStructuralData = (obj: any): any => {
+      if (!obj || typeof obj !== 'object') return obj;
+      
+      if (Array.isArray(obj)) {
+        return obj.map(extractStructuralData);
+      }
+      
+      const structural: any = {};
+      
+      // Only keep core structural properties that define the graph's logical state
+      const allowedProperties = [
+        'id',           // Node/Edge identification
+        'type',         // Node/Edge type
+        'children',     // Hierarchical structure
+        'edges',        // Edge connections
+        'source',       // Edge source
+        'target',       // Edge target
+        'sourcePort',   // Edge source port
+        'targetPort',   // Edge target port
+        'labels',       // Text labels
+        'properties',   // Custom properties
+        'data',         // Custom data
+        'text'          // Label text
+      ];
+      
+      for (const [key, value] of Object.entries(obj)) {
+        // Only include explicitly allowed structural properties
+        if (allowedProperties.includes(key)) {
+          // Recursively process objects and arrays
+          if (typeof value === 'object' && value !== null) {
+            structural[key] = extractStructuralData(value);
+          } else {
+            structural[key] = value;
+          }
+        }
+      }
+      
+      return structural;
+    };
+    
+    return extractStructuralData(graph);
+  }, []);
+  
+  // Function to copy structural data to clipboard
+  const copyStructuralDataToClipboard = useCallback((data: any) => {
+    const jsonString = JSON.stringify(data, null, 2);
+    navigator.clipboard.writeText(jsonString).then(() => {
+      console.log('✅ Structural ELK data copied to clipboard');
+    }).catch(err => {
+      console.error('❌ Failed to copy to clipboard:', err);
+    });
+  }, []);
+  
   // Ref to access StreamViewer's start method directly
   const streamViewerRef = useRef<StreamViewerHandle | null>(null);
   
@@ -118,6 +175,18 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     onConnect,
     
   } = useElkToReactflowGraphConverter(getInitialElkGraph());
+  
+  // Handler for ELK debug toggle with auto-copy
+  const handleElkDebugToggle = useCallback(() => {
+    const newShowState = !showElkDebug;
+    setShowElkDebug(newShowState);
+    
+    // Auto-copy when showing debug data
+    if (newShowState && layoutGraph) {
+      const structuralData = getStructuralData(layoutGraph);
+      copyStructuralDataToClipboard(structuralData);
+    }
+  }, [showElkDebug, layoutGraph, getStructuralData, copyStructuralDataToClipboard]);
   
 
   
@@ -781,7 +850,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           
           {/* Debug Output Toggle */}
           <button
-            onClick={() => setShowElkDebug((prev) => !prev)}
+            onClick={handleElkDebugToggle}
             className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"
           >
             {showElkDebug ? 'Hide ELK Data' : 'Show ELK Data'}
@@ -798,20 +867,31 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           onToggleVisibility={() => setShowStreamViewer(p => !p)}
         />
         
-        {/* Debug panel to show raw ELK layout data */}
+        {/* Debug panel to show structural ELK data */}
         {showElkDebug && (
           <div className="absolute top-24 right-4 z-50 max-w-lg max-h-[calc(100vh-200px)] overflow-auto bg-white rounded-md shadow-lg border border-gray-200 p-4">
             <div className="flex justify-between items-center mb-2">
-              <h3 className="text-lg font-semibold">ELK Layout Data</h3>
-              <button 
-                onClick={() => setShowElkDebug(false)}
-                className="p-1 rounded hover:bg-gray-100"
-              >
-                ✕
-              </button>
+              <h3 className="text-lg font-semibold">ELK Structural Data</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => copyStructuralDataToClipboard(getStructuralData(layoutGraph))}
+                  className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 border border-blue-200 rounded hover:bg-blue-50"
+                >
+                  📋 Copy
+                </button>
+                <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">
+                  Auto-copied
+                </span>
+                <button 
+                  onClick={() => setShowElkDebug(false)}
+                  className="p-1 rounded hover:bg-gray-100"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
             <pre className="text-xs bg-gray-50 p-4 rounded-md overflow-auto max-h-[calc(100vh-300px)]">
-              {JSON.stringify(layoutGraph, null, 2)}
+              {JSON.stringify(getStructuralData(layoutGraph), null, 2)}
             </pre>
           </div>
         )}

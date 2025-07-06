@@ -103,19 +103,25 @@ When building the architecture:
 5. **CRITICAL**: ONLY use icon names from your available icon list - do NOT invent or create new icon names based on what you see in the image
 ` : ''}
 
+**🚨 CRITICAL EXECUTION INSTRUCTIONS 🚨**
+DO NOT STOP after calling display_elk_graph() once. You MUST continue building the complete architecture:
+
+STEP 1: Call display_elk_graph() to see current state
+STEP 2: Use batch_update to create FIRST logical group with ALL its nodes and edges
+STEP 3: Use batch_update to create SECOND logical group with ALL its nodes and edges  
+STEP 4: Continue with batch_update for EACH logical group until ALL requirements are satisfied
+STEP 5: Keep building - do NOT stop after just one or two groups
+STEP 6: ONLY call display_elk_graph() again after ALL groups are complete
+
+**CRITICAL: BUILD THE COMPLETE ARCHITECTURE, NOT JUST ONE GROUP!**
+
 Build a complete architecture following these EXACT requirements using proper group icon theming:
 - Available Group Icons: Use groupIconName parameter for all group_nodes operations
 - AWS: aws_vpc, aws_region, aws_account for AWS-based architectures
 - GCP: gcp_system (neutral), gcp_user_default (frontend), gcp_infrastructure_system (APIs), gcp_logical_grouping_services_instances (services), gcp_external_saas_providers (external)
 - Azure: azure_subscription_filled, azure_resource_group_filled for Azure architectures
 
-EXECUTION STEPS:
-1. First call display_elk_graph() to see current state
-2. Use batch_update to create each group with ALL its nodes based on the SPECIFIC requirements provided
-3. After creating all groups, add edges between components using batch_update
-4. Each batch_update should be complete - include all nodes for a group or all edges in one call
-
-Remember: DO NOT acknowledge or explain. Just execute the functions to build the architecture specified in the requirements.`;
+Remember: DO NOT acknowledge or explain. Execute multiple function calls to build the complete architecture.`;
       } else {
         userContent = `Build a complete e-commerce microservices architecture following this exact structure:
 
@@ -124,13 +130,18 @@ CRITICAL: The user has provided ${storedImages.length} image(s) showing the exac
 **CRITICAL**: ONLY use icon names from your available icon list - do NOT invent or create new icon names based on what you see in the image.
 ` : ''}
 
-IMPORTANT: Call display_elk_graph() first to see the current state, then build the architecture step by step.
+**🚨 CRITICAL EXECUTION INSTRUCTIONS 🚨**
+DO NOT STOP after calling display_elk_graph() once. You MUST continue building the complete architecture:
 
-EXECUTION STEPS:
-1. First call display_elk_graph() to see current state
-2. Use batch_update to create each group with ALL its nodes
-3. After creating all groups, add edges between components using batch_update
-4. Each batch_update should be complete - include all nodes for a group or all edges in one call
+STEP 1: Call display_elk_graph() to see current state
+STEP 2: Use batch_update to create FIRST logical group (frontend/users) with ALL its nodes and edges
+STEP 3: Use batch_update to create SECOND logical group (api/gateway) with ALL its nodes and edges  
+STEP 4: Use batch_update to create THIRD logical group (backend services) with ALL its nodes and edges
+STEP 5: Use batch_update to create FOURTH logical group (data layer) with ALL its nodes and edges
+STEP 6: Continue until ALL groups are built (6-10 groups total)
+STEP 7: ONLY call display_elk_graph() again after ALL groups are complete
+
+**CRITICAL: BUILD THE COMPLETE ARCHITECTURE, NOT JUST ONE GROUP!**
 
 Example edge relationships:
 - Frontend components → API Gateway
@@ -140,7 +151,7 @@ Example edge relationships:
 
 CRITICAL: Always specify groupIconName parameter for group_nodes operations - it's required for proper visual theming!
 
-Remember: Do NOT acknowledge or explain. Just execute the functions.`;
+Remember: Do NOT acknowledge or explain. Execute multiple function calls to build the complete architecture.`;
       }
       
       // Clear stored text input after using it

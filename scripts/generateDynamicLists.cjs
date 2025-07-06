@@ -38,10 +38,20 @@ const azureGroupIconsList = availableGroupIcons.filter(icon => icon.startsWith('
 const iconListsPath = path.join(__dirname, '..', 'client', 'generated', 'iconLists.ts');
 const iconListsContent = fs.readFileSync(iconListsPath, 'utf8');
 
-// Extract AWS, GCP, Azure icons
-const awsIconsMatch = iconListsContent.match(/export const awsIcons = \[([\s\S]*?)\];/);
-const gcpIconsMatch = iconListsContent.match(/export const gcpIcons = \[([\s\S]*?)\];/);
-const azureIconsMatch = iconListsContent.match(/export const azureIcons = \[([\s\S]*?)\];/);
+// Extract AWS, GCP, Azure, and Generic icons from the prefixed icons list
+const availableIconsPrefixedMatch = iconListsContent.match(/export const availableIconsPrefixed = \[([\s\S]*?)\];/);
+const allPrefixedIcons = availableIconsPrefixedMatch ? availableIconsPrefixedMatch[1]
+  .split('\n')
+  .map(line => line.trim())
+  .filter(line => line.startsWith('"') && line.includes(','))
+  .map(line => line.replace(/[",]/g, '').trim())
+  .filter(Boolean) : [];
+
+// Split by provider prefix
+const awsIcons = allPrefixedIcons.filter(icon => icon.startsWith('aws_')).map(icon => icon.replace(/^aws_/, ''));
+const gcpIcons = allPrefixedIcons.filter(icon => icon.startsWith('gcp_')).map(icon => icon.replace(/^gcp_/, ''));
+const azureIcons = allPrefixedIcons.filter(icon => icon.startsWith('azure_')).map(icon => icon.replace(/^azure_/, ''));
+const genericIcons = allPrefixedIcons.filter(icon => !icon.startsWith('aws_') && !icon.startsWith('gcp_') && !icon.startsWith('azure_'));
 
 const extractIconNames = (match) => {
   if (!match) return [];
@@ -53,11 +63,7 @@ const extractIconNames = (match) => {
     .filter(Boolean);
 };
 
-const awsIcons = extractIconNames(awsIconsMatch);
-const gcpIcons = extractIconNames(gcpIconsMatch);
-const azureIcons = extractIconNames(azureIconsMatch);
-
-console.log(`🔧 Found ${awsIcons.length} AWS icons, ${gcpIcons.length} GCP icons, ${azureIcons.length} Azure icons`);
+console.log(`🔧 Found ${awsIcons.length} AWS icons, ${gcpIcons.length} GCP icons, ${azureIcons.length} Azure icons, ${genericIcons.length} generic icons`);
 
 // Generate dynamic agent configuration
 const agentConfigContent = `// Auto-generated dynamic lists for agents at build time
@@ -74,6 +80,7 @@ export interface DynamicAgentResources {
     aws: string[];
     gcp: string[];
     azure: string[];
+    generic: string[];
   };
   totalCounts: {
     groupIcons: number;
@@ -100,8 +107,19 @@ ${gcpIcons.map(icon => `    "${icon}"`).join(',\n')}
   ],
   azure: [
 ${azureIcons.map(icon => `    "${icon}"`).join(',\n')}
+  ],
+  generic: [
+${genericIcons.map(icon => `    "${icon}"`).join(',\n')}
   ]
 };
+
+// Comprehensive icon list for reasoning agent (includes provider-prefixed and generic)
+export const availableIconsComprehensive = [
+${awsIcons.map(icon => `  "aws_${icon}"`).join(',\n')},
+${gcpIcons.map(icon => `  "gcp_${icon}"`).join(',\n')},
+${azureIcons.map(icon => `  "azure_${icon}"`).join(',\n')},
+${genericIcons.map(icon => `  "${icon}"`).join(',\n')}
+];
 
 // Combined resource object for agent access
 export const dynamicAgentResources: DynamicAgentResources = {
@@ -114,7 +132,7 @@ export const dynamicAgentResources: DynamicAgentResources = {
   regularIcons: availableRegularIcons,
   totalCounts: {
     groupIcons: ${availableGroupIcons.length},
-    regularIcons: ${awsIcons.length + gcpIcons.length + azureIcons.length}
+    regularIcons: ${awsIcons.length + gcpIcons.length + azureIcons.length + genericIcons.length}
   }
 };
 
@@ -123,7 +141,7 @@ export function getGroupIconsByProvider(provider: 'aws' | 'gcp' | 'azure'): stri
   return dynamicAgentResources.groupIcons[provider];
 }
 
-export function getRegularIconsByProvider(provider: 'aws' | 'gcp' | 'azure'): string[] {
+export function getRegularIconsByProvider(provider: 'aws' | 'gcp' | 'azure' | 'generic'): string[] {
   return dynamicAgentResources.regularIcons[provider];
 }
 
@@ -187,4 +205,4 @@ console.log(`   - Group Icons: ${availableGroupIcons.length} total`);
 console.log(`   - AWS Group Icons: ${awsGroupIconsList.length}`);
 console.log(`   - GCP Group Icons: ${gcpGroupIconsList.length}`);
 console.log(`   - Azure Group Icons: ${azureGroupIconsList.length}`);
-console.log(`   - Regular Icons: ${awsIcons.length + gcpIcons.length + azureIcons.length} total`); 
+console.log(`   - Regular Icons: ${awsIcons.length + gcpIcons.length + azureIcons.length + genericIcons.length} total (${genericIcons.length} generic)`); 

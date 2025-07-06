@@ -5,6 +5,7 @@ export interface IconLists {
   aws: { [category: string]: string[] };
   gcp: { [category: string]: string[] };
   azure: { [category: string]: string[] };
+  generic: string[];
   all: string[];
 }
 
@@ -928,6 +929,22 @@ export const iconLists: IconLists = {
       "storsimple_device_managers"
     ]
   },
+  "generic": [
+    "api",
+    "browser_client",
+    "certificate",
+    "connector",
+    "database",
+    "dns",
+    "gateway",
+    "gcp_logo",
+    "message_queue",
+    "mobile_app",
+    "notification_service",
+    "password",
+    "pipeline",
+    "server-host"
+  ],
   "all": [
     "access_context_manager",
     "activate",
@@ -1028,11 +1045,13 @@ export const iconLists: IconLists = {
     "bot_services",
     "bottlerocket",
     "braket",
+    "browser_client",
     "budgets",
     "business_process_tracking",
     "cache_redis",
     "catalog",
     "cdn_profiles",
+    "certificate",
     "certificate_authority_service",
     "certificate_manager",
     "change_analysis",
@@ -1141,6 +1160,7 @@ export const iconLists: IconLists = {
     "connected_cache",
     "connections",
     "connectivity_test",
+    "connector",
     "connectors",
     "console_mobile_application",
     "contact_center_ai",
@@ -1177,6 +1197,7 @@ export const iconLists: IconLists = {
     "data_studio",
     "data_transfer",
     "data_transfer_terminal",
+    "database",
     "database_mariadb_server",
     "database_migration_service",
     "database_migration_services",
@@ -1228,6 +1249,7 @@ export const iconLists: IconLists = {
     "disks_(classic)",
     "disks_snapshots",
     "distro_for_opentelemetry",
+    "dns",
     "dns_multistack",
     "dns_private_resolver",
     "dns_security_policy",
@@ -1331,7 +1353,9 @@ export const iconLists: IconLists = {
     "function_apps",
     "game_servers",
     "gamelift",
+    "gateway",
     "gce_systems_management",
+    "gcp_logo",
     "genomics",
     "genomics_accounts",
     "gke_on-prem",
@@ -1459,12 +1483,14 @@ export const iconLists: IconLists = {
     "memorydb",
     "memorystore",
     "mesh_applications",
+    "message_queue",
     "metrics",
     "metrics_advisor",
     "migrate_for_anthos",
     "migrate_for_compute_engine",
     "migration_evaluator",
     "migration_hub",
+    "mobile_app",
     "monitor",
     "monitron",
     "mq",
@@ -1487,6 +1513,7 @@ export const iconLists: IconLists = {
     "neuron",
     "nice_enginframe",
     "nitro_enclaves",
+    "notification_service",
     "nova",
     "object_understanding",
     "on_premises_data_gateways",
@@ -1513,6 +1540,7 @@ export const iconLists: IconLists = {
     "partner_portal",
     "partner_registration",
     "partner_topic",
+    "password",
     "payment_cryptography",
     "performance_dashboard",
     "permissions",
@@ -1522,6 +1550,7 @@ export const iconLists: IconLists = {
     "phishing_protection",
     "pinpoint",
     "pinpoint_apis",
+    "pipeline",
     "policy",
     "policy_analyzer",
     "polly",
@@ -1601,6 +1630,7 @@ export const iconLists: IconLists = {
     "security_lake",
     "sendgrid_accounts",
     "sentinel",
+    "server-host",
     "serverless_application_repository",
     "serverless_search",
     "service_bus",
@@ -1737,6 +1767,7 @@ export const iconLists: IconLists = {
 
 // Provider-prefixed icons for reasoning agent (avoids confusion between providers)
 export const availableIconsPrefixed = [
+  "api",
   "aws_activate",
   "aws_alexa_for_business",
   "aws_amplify",
@@ -2360,6 +2391,12 @@ export const availableIconsPrefixed = [
   "azure_workbooks",
   "azure_workspace_gateway",
   "azure_workspaces",
+  "browser_client",
+  "certificate",
+  "connector",
+  "database",
+  "dns",
+  "gateway",
   "gcp_access_context_manager",
   "gcp_administration",
   "gcp_advanced_agent_modeling",
@@ -2510,6 +2547,7 @@ export const availableIconsPrefixed = [
   "gcp_kuberun",
   "gcp_launcher",
   "gcp_local_ssd",
+  "gcp_logo",
   "gcp_looker",
   "gcp_managed_service_for_microsoft_active_directory",
   "gcp_media_translation_api",
@@ -2575,7 +2613,13 @@ export const availableIconsPrefixed = [
   "gcp_web_risk",
   "gcp_web_security_scanner",
   "gcp_workflows",
-  "gcp_workload_identity_pool"
+  "gcp_workload_identity_pool",
+  "message_queue",
+  "mobile_app",
+  "notification_service",
+  "password",
+  "pipeline",
+  "server-host"
 ];
 
 // Original flat list of all available icons (for backward compatibility)
@@ -2585,6 +2629,7 @@ export const availableIcons = iconLists.all;
 export const awsIcons = iconLists.aws;
 export const gcpIcons = iconLists.gcp;
 export const azureIcons = iconLists.azure;
+export const genericIcons = iconLists.generic;
 
 // Helper function to get icons by provider and category
 export function getIconsByProvider(provider: 'aws' | 'gcp' | 'azure'): { [category: string]: string[] } {
@@ -2629,6 +2674,7 @@ export const iconStats = {
   aws: Object.values(iconLists.aws).flat().length,
   gcp: Object.values(iconLists.gcp).flat().length,
   azure: Object.values(iconLists.azure).flat().length,
+  generic: iconLists.generic.length,
   categories: {
     aws: Object.keys(iconLists.aws).length,
     gcp: Object.keys(iconLists.gcp).length,

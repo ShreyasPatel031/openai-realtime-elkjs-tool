@@ -90,6 +90,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
   // Add clipboard paste event listener
   useEffect(() => {
     const handlePaste = async (event: ClipboardEvent) => {
+      console.log('📋 Paste event detected at', new Date().toISOString());
+      
       // Only handle paste if the chat window is visible and not minimized
       if (!chatWindowRef.current || isMinimized) return;
       
@@ -98,16 +100,36 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
       const activeElement = document.activeElement;
       const isInTextInput = activeElement && activeElement.tagName.toLowerCase() === 'input';
       
-      // Only proceed if pasting within our component OR if no text input is focused (global paste)
-      if (!isWithinChatWindow && isInTextInput) return;
+      console.log('🔍 Paste context:', {
+        isWithinChatWindow,
+        activeElement: activeElement?.tagName,
+        isInTextInput
+      });
+      
+      // Always allow image paste within our chat window, regardless of text input focus
+      // Only skip if pasting outside our component AND a text input elsewhere is focused
+      if (!isWithinChatWindow && isInTextInput) {
+        console.log('⏭️ Skipping paste: not within chat window and text input is focused');
+        return;
+      }
       
       const clipboardData = event.clipboardData;
-      if (!clipboardData) return;
+      if (!clipboardData) {
+        console.log('❌ No clipboard data available');
+        return;
+      }
       
       // Check if clipboard contains image data
       const items = Array.from(clipboardData.items);
       const imageItems = items.filter(item => item.type.startsWith('image/'));
       
+      console.log('📋 Clipboard analysis:', {
+        totalItems: items.length,
+        imageItems: imageItems.length,
+        itemTypes: items.map(item => item.type)
+      });
+      
+      // Handle direct image paste
       if (imageItems.length > 0) {
         console.log('📋 Detected image paste, processing...');
         event.preventDefault(); // Prevent default paste behavior
@@ -259,6 +281,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
       reader.readAsDataURL(svgFile);
     });
   };
+
+
 
   // Function to handle image selection with SVG conversion
   const handleImageSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -464,6 +488,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
       </div>
     </div>
   );
+
+  // Simple clipboard test function
+  const testClipboard = async () => {
+    try {
+      console.log('🧪 Testing clipboard functionality...');
+      
+      // Test clipboard write
+      await navigator.clipboard.writeText('clipboard test - ' + Date.now());
+      console.log('✅ Clipboard write successful');
+      
+      // Test clipboard read
+      const text = await navigator.clipboard.readText();
+      console.log('✅ Clipboard read successful:', text);
+      
+      setPasteImageFeedback('✅ Clipboard working!');
+      setTimeout(() => setPasteImageFeedback(''), 2000);
+      
+    } catch (error) {
+      console.error('❌ Clipboard test failed:', error);
+      setPasteImageFeedback('❌ Clipboard permission denied');
+      setTimeout(() => setPasteImageFeedback(''), 3000);
+    }
+  };
 
   return (
     <div className="pointer-events-auto" ref={chatWindowRef} data-chat-window>
@@ -694,6 +741,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
                     or paste images
                   </span>
                 )}
+                
+                {/* Clipboard test button */}
+                <button
+                  type="button"
+                  onClick={testClipboard}
+                  className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 border border-blue-200 rounded hover:bg-blue-50"
+                  title="Test clipboard functionality"
+                >
+                  🧪 Test Clipboard
+                </button>
                 
                 {/* Paste feedback */}
                 {pasteImageFeedback && (

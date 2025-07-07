@@ -11,7 +11,6 @@ import multer from 'multer';
 import { allTools } from "../client/realtime/toolCatalog.ts";
 
 const app = express();
-const port = process.env.PORT | 3000;
 const apiKey = process.env.OPENAI_API_KEY;
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -258,6 +257,37 @@ app.use("*", async (req, res, next) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+// Function to find the next available port
+async function findAvailablePort(startPort = 3000) {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(startPort, () => {
+      const port = server.address().port;
+      server.close(() => {
+        resolve(port);
+      });
+    });
+    
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        // Port is in use, try the next one
+        findAvailablePort(startPort + 1).then(resolve).catch(reject);
+      } else {
+        reject(err);
+      }
+    });
+  });
+}
+
+// Start the server on the next available port
+const startPort = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+findAvailablePort(startPort).then(port => {
+  app.listen(port, () => {
+    console.log(`🚀 Server running at http://localhost:${port}`);
+    if (port !== startPort) {
+      console.log(`   (Port ${startPort} was in use, using ${port} instead)`);
+    }
+  });
+}).catch(err => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });

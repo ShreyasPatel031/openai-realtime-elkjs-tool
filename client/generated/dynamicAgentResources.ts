@@ -53,7 +53,7 @@ export const availableGroupIcons = [
   "gcp_firewall",
   "gcp_instance_group",
   "gcp_replica_pool",
-  "gcp_optional_component_dashed",
+
   "azure_subscription_filled",
   "azure_subscription_border",
   "azure_resource_group_filled",

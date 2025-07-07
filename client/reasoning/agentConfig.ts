@@ -17,7 +17,7 @@ batch_update({
       data:{ label:"Web", icon:"browser_client" } },
     { name:"add_node", nodename:"mobile_user", parentId:"root",
       data:{ label:"Mobile", icon:"mobile_app" } },
-    { name:"group_nodes", nodeIds:["web_user", "mobile_user"], parentId:"root", groupId:"users", groupIconName:"gcp_user_default" }
+    { name:"group_nodes", nodeIds:["web_user", "mobile_user"], parentId:"root", groupId:"users", groupIconName:"gcp_system" }
   ]
 })
 
@@ -32,7 +32,7 @@ batch_update({
       data:{ label:"HTTPS LB", icon:"load_balancer_generic" } },
     { name:"add_node", nodename:"cloud_armor", parentId:"gcp",
       data:{ label:"Cloud Armor", icon:"gcp_cloud_armor" } },
-    { name:"group_nodes", nodeIds:["cloud_cdn", "lb_https", "cloud_armor"], parentId:"gcp", groupId:"edge", groupIconName:"gcp_external_infrastructure_1st_party" },
+    { name:"group_nodes", nodeIds:["cloud_cdn", "lb_https", "cloud_armor"], parentId:"gcp", groupId:"edge", groupIconName:"gcp_logical_grouping_services_instances" },
     { name:"add_edge", edgeId:"e_cdn_lb", sourceId:"cloud_cdn", targetId:"lb_https", label:"route" },
     { name:"add_edge", edgeId:"e_waf_lb", sourceId:"cloud_armor", targetId:"lb_https", label:"protect" },
     { name:"add_edge", edgeId:"e_web_edge", sourceId:"web_user", targetId:"cloud_cdn", label:"HTTPS" },
@@ -47,7 +47,7 @@ batch_update({
       data:{ label:"Identity Plat.", icon:"gcp_iam" } },
     { name:"add_node", nodename:"api_gw", parentId:"gcp",
       data:{ label:"API Gateway", icon:"api_gateway" } },
-    { name:"group_nodes", nodeIds:["idp", "api_gw"], parentId:"gcp", groupId:"api", groupIconName:"gcp_infrastructure_system" },
+    { name:"group_nodes", nodeIds:["idp", "api_gw"], parentId:"gcp", groupId:"api", groupIconName:"gcp_logical_grouping_services_instances" },
     { name:"add_edge", edgeId:"e_idp_gw", sourceId:"idp", targetId:"api_gw", label:"JWT" },
     { name:"add_edge", edgeId:"e_lb_api", sourceId:"lb_https", targetId:"api_gw", label:"HTTPS" }
   ]
@@ -56,16 +56,16 @@ batch_update({
 /* ───────── 4. backend services group (create nodes first, then group them) */
 batch_update({
   operations: [
-    { name:"add_node", nodename:"order_svc", parentId:"gcp",
-      data:{ label:"Order", icon:"gcp_cloud_run" } },
-    { name:"add_node", nodename:"risk_svc", parentId:"gcp",
-      data:{ label:"Risk", icon:"gcp_cloud_run" } },
-    { name:"add_node", nodename:"catalog_svc", parentId:"gcp",
-      data:{ label:"Catalog", icon:"gcp_cloud_run" } },
-    { name:"group_nodes", nodeIds:["order_svc", "risk_svc", "catalog_svc"], parentId:"gcp", groupId:"backend", groupIconName:"gcp_logical_grouping_services_instances" },
-    { name:"add_edge", edgeId:"e_order_risk", sourceId:"order_svc", targetId:"risk_svc", label:"score" },
-    { name:"add_edge", edgeId:"e_api_order", sourceId:"api_gw", targetId:"order_svc", label:"REST" },
-    { name:"add_edge", edgeId:"e_api_catalog", sourceId:"api_gw", targetId:"catalog_svc", label:"REST" }
+    { name:"add_node", nodename:"api_svc", parentId:"gcp",
+      data:{ label:"API Service", icon:"gcp_cloud_run" } },
+    { name:"add_node", nodename:"auth_svc", parentId:"gcp",
+      data:{ label:"Auth Service", icon:"gcp_cloud_run" } },
+    { name:"add_node", nodename:"data_svc", parentId:"gcp",
+      data:{ label:"Data Service", icon:"gcp_cloud_run" } },
+    { name:"group_nodes", nodeIds:["api_svc", "auth_svc", "data_svc"], parentId:"gcp", groupId:"backend", groupIconName:"gcp_logical_grouping_services_instances" },
+    { name:"add_edge", edgeId:"e_api_auth", sourceId:"api_svc", targetId:"auth_svc", label:"validate" },
+    { name:"add_edge", edgeId:"e_gw_api", sourceId:"api_gw", targetId:"api_svc", label:"REST" },
+    { name:"add_edge", edgeId:"e_gw_data", sourceId:"api_gw", targetId:"data_svc", label:"REST" }
   ]
 })
 
@@ -74,8 +74,8 @@ batch_update({
   operations: [
     { name:"add_node", nodename:"redis", parentId:"gcp",
       data:{ label:"Memorystore", icon:"cache_redis" } },
-    { name:"group_nodes", nodeIds:["redis"], parentId:"gcp", groupId:"cache", groupIconName:"gcp_infrastructure_system" },
-    { name:"add_edge", edgeId:"e_order_cache", sourceId:"order_svc", targetId:"redis", label:"session" }
+    { name:"group_nodes", nodeIds:["redis"], parentId:"gcp", groupId:"cache", groupIconName:"gcp_logical_grouping_services_instances" },
+    { name:"add_edge", edgeId:"e_api_cache", sourceId:"api_svc", targetId:"redis", label:"cache" }
   ]
 })
 
@@ -86,11 +86,11 @@ batch_update({
       data:{ label:"Spanner", icon:"gcp_spanner" } },
     { name:"add_node", nodename:"firestore", parentId:"gcp",
       data:{ label:"Firestore", icon:"gcp_firestore" } },
-    { name:"group_nodes", nodeIds:["spanner", "firestore"], parentId:"gcp", groupId:"data", groupIconName:"gcp_infrastructure_system" },
-    { name:"add_edge", edgeId:"e_catalog_db", sourceId:"catalog_svc", targetId:"spanner", label:"read" },
-    { name:"add_edge", edgeId:"e_order_db", sourceId:"order_svc", targetId:"spanner", label:"write" },
-    { name:"add_edge", edgeId:"e_risk_db", sourceId:"risk_svc", targetId:"spanner", label:"read" },
-    { name:"add_edge", edgeId:"e_catalog_fs", sourceId:"catalog_svc", targetId:"firestore", label:"stock" }
+    { name:"group_nodes", nodeIds:["spanner", "firestore"], parentId:"gcp", groupId:"data", groupIconName:"gcp_kubernetes_cluster" },
+    { name:"add_edge", edgeId:"e_data_db", sourceId:"data_svc", targetId:"spanner", label:"read" },
+    { name:"add_edge", edgeId:"e_api_db", sourceId:"api_svc", targetId:"spanner", label:"write" },
+    { name:"add_edge", edgeId:"e_auth_db", sourceId:"auth_svc", targetId:"spanner", label:"read" },
+    { name:"add_edge", edgeId:"e_data_fs", sourceId:"data_svc", targetId:"firestore", label:"documents" }
   ]
 })
 
@@ -104,21 +104,21 @@ batch_update({
     { name:"add_node", nodename:"cloud_tasks", parentId:"gcp",
       data:{ label:"Cloud Tasks", icon:"gcp_cloud_tasks" } },
     { name:"group_nodes", nodeIds:["workflows", "eventarc", "cloud_tasks"], parentId:"gcp", groupId:"orchestration", groupIconName:"gcp_infrastructure_system" },
-    { name:"add_edge", edgeId:"e_order_flow", sourceId:"order_svc", targetId:"workflows", label:"invoke" },
-    { name:"add_edge", edgeId:"e_flow_risk", sourceId:"workflows", targetId:"risk_svc", label:"branch" }
+    { name:"add_edge", edgeId:"e_api_flow", sourceId:"api_svc", targetId:"workflows", label:"invoke" },
+    { name:"add_edge", edgeId:"e_flow_data", sourceId:"workflows", targetId:"data_svc", label:"process" }
   ]
 })
 
 /* ───────── 8. messaging group (create nodes first, then group them) */
 batch_update({
   operations: [
-    { name:"add_node", nodename:"order_topic", parentId:"gcp",
-      data:{ label:"order-topic", icon:"gcp_pubsub" } },
+    { name:"add_node", nodename:"event_topic", parentId:"gcp",
+      data:{ label:"event-topic", icon:"gcp_pubsub" } },
     { name:"add_node", nodename:"dlq_topic", parentId:"gcp",
       data:{ label:"DLQ", icon:"message_queue" } },
-    { name:"group_nodes", nodeIds:["order_topic", "dlq_topic"], parentId:"gcp", groupId:"messaging", groupIconName:"gcp_external_infrastructure_1st_party" },
-    { name:"add_edge", edgeId:"e_flow_topic", sourceId:"workflows", targetId:"order_topic", label:"publish" },
-    { name:"add_edge", edgeId:"e_topic_dlq", sourceId:"order_topic", targetId:"dlq_topic", label:"DLQ" }
+    { name:"group_nodes", nodeIds:["event_topic", "dlq_topic"], parentId:"gcp", groupId:"messaging", groupIconName:"gcp_logical_grouping_services_instances" },
+    { name:"add_edge", edgeId:"e_flow_topic", sourceId:"workflows", targetId:"event_topic", label:"publish" },
+    { name:"add_edge", edgeId:"e_topic_dlq", sourceId:"event_topic", targetId:"dlq_topic", label:"DLQ" }
   ]
 })
 
@@ -140,22 +140,24 @@ batch_update({
 /* ───────── 10. external services group (create nodes first, then group them) */
 batch_update({
   operations: [
-    { name:"add_node", nodename:"payment_gateway", parentId:"root",
-      data:{ label:"Payment GW", icon:"payment_gateway" } },
-    { name:"add_node", nodename:"email_svc", parentId:"root",
-      data:{ label:"Email", icon:"notification_service" } },
-    { name:"group_nodes", nodeIds:["payment_gateway", "email_svc"], parentId:"root", groupId:"external", groupIconName:"gcp_external_saas_providers" },
-    { name:"add_edge", edgeId:"e_payment", sourceId:"order_svc", targetId:"payment_gateway", label:"charge" },
-    { name:"add_edge", edgeId:"e_email", sourceId:"workflows", targetId:"email_svc", label:"notify" }
+    { name:"add_node", nodename:"third_party_api", parentId:"root",
+      data:{ label:"Third Party API", icon:"api" } },
+    { name:"add_node", nodename:"notification_svc", parentId:"root",
+      data:{ label:"Notifications", icon:"notification_service" } },
+    { name:"group_nodes", nodeIds:["third_party_api", "notification_svc"], parentId:"root", groupId:"external", groupIconName:"gcp_system" },
+    { name:"add_edge", edgeId:"e_external_api", sourceId:"api_svc", targetId:"third_party_api", label:"call" },
+    { name:"add_edge", edgeId:"e_notify", sourceId:"workflows", targetId:"notification_svc", label:"send" }
   ]
 })
 
 `;
 
 // Architecture diagram assistant instructions
-export const elkGraphDescription = `**🚨 CRITICAL FIRST RULE: CREATE ALL EDGES INCREMENTALLY GROUP BY GROUP - NEVER DEFER EDGE CREATION TO THE END. EACH GROUP MUST BE COMPLETE WITH ALL ITS NODES AND ALL ITS EDGES IN THE SAME BATCH_UPDATE CALL.**
+export const elkGraphDescription = `**CRITICAL FIRST RULE: CREATE ALL EDGES INCREMENTALLY GROUP BY GROUP - NEVER DEFER EDGE CREATION TO THE END. EACH GROUP MUST BE COMPLETE WITH ALL ITS NODES AND ALL ITS EDGES IN THE SAME BATCH_UPDATE CALL.**
 
-**🚨 CRITICAL GROUP COLOR RULE - NEVER BREAK THIS**: NEVER EVER use the same group icon color for sibling groups (immediate children at the same level). Every child group MUST use a DIFFERENT colored group icon. This is ABSOLUTELY MANDATORY and NON-NEGOTIABLE for visual clarity.**
+**CRITICAL EDGE LABEL RULE: EVERY SINGLE EDGE MUST HAVE A DESCRIPTIVE LABEL. Never create edges without labels. Use action verbs that describe the relationship (e.g., "calls", "sends", "queries", "processes", "stores", "authenticates", "routes", "validates", "monitors", "triggers", "publishes", "subscribes", "deploys", "serves", "protects", "caches", "transforms", "configures", "notifies", "syncs", "flows to", "connects to", "backs up", etc.).**
+
+**HIERARCHICAL GROUP COLOR RULE**: Use 3-level color hierarchy: Level 1 = gcp_system (light gray), Level 2 = gcp_logical_grouping_services_instances (light blue), Level 3 = varied colors (pink, green, purple, etc). All sibling groups use the same color.
 
 **MANDATORY GROUPING CONSTRAINT: When you have more than three groups at any level, they must be grouped under another parent group compulsory. This helps maintain visual clarity and organization.**
 
@@ -163,7 +165,7 @@ export const elkGraphDescription = `**🚨 CRITICAL FIRST RULE: CREATE ALL EDGES
 
 You are a technical architecture diagram assistant that MUST build complete architectures through multiple batch_update calls until the full architecture is complete.
 
-**🚨 CRITICAL: NEVER STOP AFTER JUST ONE FUNCTION CALL 🚨**
+**CRITICAL: NEVER STOP AFTER JUST ONE FUNCTION CALL**
 - Always call display_elk_graph() FIRST to see current state
 - Then make MULTIPLE batch_update calls to build ALL logical groups
 - Continue building until the COMPLETE architecture is done
@@ -176,10 +178,6 @@ You are a technical architecture diagram assistant that MUST build complete arch
 
 Each batch_update call must include ALL nodes, the group_nodes operation, AND ALL edges for one complete logical group.
 
-**NEVER create intermediate parent nodes** - use group_nodes to create visual containers:
-❌ WRONG: { name:"add_node", nodename:"api_group", parentId:"gcp", data:{...} }
-✅ CORRECT: { name:"group_nodes", nodeIds:["idp", "api_gw"], parentId:"gcp", groupId:"api", groupIconName:"gcp_infrastructure_system" }
-
 When requirements are provided always follow this logic:
 Group: logical part of architecture (created with group_nodes + groupIconName)
 Node: component of architecture (created with add_node)
@@ -187,29 +185,27 @@ Edge: relationship between components (created with add_edge)
 
 **CRITICAL CLOUD PROVIDER ENCAPSULATION RULE:** Always encapsulate all textural or infrastructural components inside a cloud provider group. For example, for GCP architectures, ensure the bulk of everything is under a GCP group as the main container, with only external services (like third-party APIs, payment gateways, external users) remaining outside the cloud provider group.
 
-## CRITICAL: ICON VALIDATION
-**ONLY USE THESE EXACT ICON NAMES** (${availableIconsComprehensive.length} total available):
+## ⚠️ CRITICAL: ICON VALIDATION - SYSTEM WILL ERROR IF VIOLATED ⚠️
+**MANDATORY ICON RULE: ONLY USE THESE EXACT ICON NAMES** (${availableIconsComprehensive.length} total available):
 ${availableIconsComprehensive.join(', ')}
 
-**IMPORTANT**: If you use an icon name that is NOT in this list, the system will fail. Always verify the icon name exists in the above list before using it. Do NOT create or invent icon names.
+**🚨 CRITICAL WARNING: Using ANY icon name NOT in this list will cause the system to ERROR and FAIL. You MUST verify each icon name exists in the above list before using it. Do NOT create, invent, or guess icon names.**
 
-#ICON USAGE RULES:
-- AWS icons: Use "aws_" prefix (e.g., "aws_lambda", "aws_s3", "aws_rds") 
-- GCP icons: Use "gcp_" prefix (e.g., "gcp_cloud_functions", "gcp_cloud_storage", "gcp_cloud_sql")  
-- Azure icons: Use "azure_" prefix (e.g., "azure_functions", "azure_storage_accounts", "azure_sql_database")
+**ICON VALIDATION CHECKLIST:**
+✅ Before using ANY icon, verify it exists in the available icons list above
+✅ Use EXACT spelling and capitalization as shown in the list
+✅ Do NOT modify or abbreviate icon names
+✅ Do NOT create new icon names based on what you see in images
+✅ When in doubt, use generic icons like "api", "database", "gateway"
+
+**ICON USAGE RULES:**
+- **AWS icons**: Use "aws_" prefix (e.g., "aws_lambda", "aws_s3", "aws_rds") 
+- **GCP icons**: Use "gcp_" prefix (e.g., "gcp_cloud_functions", "gcp_cloud_storage", "gcp_cloud_sql")  
+- **Azure icons**: Use "azure_" prefix (e.g., "azure_functions", "azure_storage_accounts", "azure_sql_database")
 - **GENERIC ICONS** (no prefix): "api", "browser_client", "certificate", "connector", "database", "dns", "gateway", "message_queue", "mobile_app", "notification_service", "password", "pipeline", "server-host"
-- Provider Selection: Choose provider icons based on the cloud platform being used. For AWS architectures use aws_ icons, for GCP architectures use gcp_ icons, for Azure architectures use azure_ icons.
-- **🚨 CRITICAL GROUP COLOR RULE - ABSOLUTELY MANDATORY 🚨**: NEVER EVER use the same group icon color for immediate children (sibling groups). Every child group at the same level MUST use a DIFFERENT colored group icon to ensure visual distinction. This is NON-NEGOTIABLE.
+- **Provider Selection**: Choose provider icons based on the cloud platform being used. For AWS architectures use aws_ icons, for GCP architectures use gcp_ icons, for Azure architectures use azure_ icons.
 
-**BEFORE SELECTING ANY GROUP ICON:**
-1. Check what group icons are already used by sibling groups at the same level
-2. Choose a DIFFERENT color from the available options
-3. Verify no two sibling groups share the same color theme
-
-**SIBLING GROUP COLOR ENFORCEMENT:**
-- If parent has child groups with gcp_infrastructure_system (green), the next sibling MUST use gcp_logical_grouping_services_instances (pink) or gcp_external_infrastructure_1st_party (yellow)
-- If parent has child groups with gcp_logical_grouping_services_instances (pink), the next sibling MUST use gcp_infrastructure_system (green) or gcp_external_saas_providers (purple)
-- ALWAYS ensure visual color distinction between sibling groups
+**GROUP ICON HIERARCHY:** Level 1 groups = gcp_system, Level 2 groups = gcp_logical_grouping_services_instances, Level 3 groups = varied colors. NEVER use gcp_optional_component_dashed (ugly blue border).
 
 ## GROUP ICON STYLING SYSTEM (for group_nodes operations only)
 
@@ -247,9 +243,9 @@ batch_update({
     // 2. Group the nodes with visual container + group icon
     { name:"group_nodes", nodeIds:["node1", "node2"], parentId:"parent", groupId:"group_name", groupIconName:"appropriate_group_icon" },
     
-    // 3. Add all edges for this group
-    { name:"add_edge", edgeId:"e1", sourceId:"node1", targetId:"node2", label:"..." },
-    { name:"add_edge", edgeId:"e2", sourceId:"external", targetId:"node1", label:"..." }
+    // 3. Add all edges for this group WITH REQUIRED LABELS
+    { name:"add_edge", edgeId:"e1", sourceId:"node1", targetId:"node2", label:"flows to" },
+    { name:"add_edge", edgeId:"e2", sourceId:"external", targetId:"node1", label:"calls" }
   ]
 })
 \`\`\`
@@ -276,6 +272,7 @@ LOGICAL GROUPS: frontend, backend, api, auth, compute, cache, data_plane, contro
 FUNCTION USAGE:
 - add_node(nodename, parentId, { label: "Display Label", icon: "icon_name", groupIcon: "gcp_system" }): Add a component under a parent container. You cannot add a node if parentId does not exist.
 - group_nodes(nodeIds, parentId, groupId, groupIconName): Create a new container with group icon and move specified nodes into it. groupIconName is REQUIRED.
+- add_edge(edgeId, sourceId, targetId, label): Create a connection between nodes. **CRITICAL: The label parameter is REQUIRED** - describe the relationship with clear action verbs like "calls", "sends", "queries", "processes", "stores", "triggers", "publishes", "routes", "validates", "monitors", "caches", "authenticates", "manages", "configures", "notifies", "syncs", "flows to", "connects to", "serves", "protects", "loads", "transforms", "schedules", "executes", "deploys", "backs up", etc.
 - batch_update({operations: [...]}): Execute multiple operations in sequence. CRITICAL: Always use {operations: [...]} format, NEVER use {graph: ...} format.
 
 **CRITICAL BATCH_UPDATE FORMAT:**
@@ -294,13 +291,12 @@ export { availableIconsComprehensive as availableIcons };
 export const modelConfigs = {
 // Streaming model configuration
   streaming: {
-  model: "o3",
+  model: "o4-mini",
   temperature: 0.1,
   max_tokens: 4096,
   parallel_tool_calls: true,
   reasoning: { 
-    effort: "low", 
-    summary: "detailed" 
+    effort: "low"
     }
   }
 }; 

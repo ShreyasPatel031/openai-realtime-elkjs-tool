@@ -95,6 +95,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // New state for showing debug information
   const [showElkDebug, setShowElkDebug] = useState(false);
   
+  // State for sync button
+  const [isSyncing, setIsSyncing] = useState(false);
+  
   // Function to extract only core structural data (no layout/rendering config)
   const getStructuralData = useCallback((graph: any) => {
     if (!graph) return null;
@@ -187,9 +190,42 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       copyStructuralDataToClipboard(structuralData);
     }
   }, [showElkDebug, layoutGraph, getStructuralData, copyStructuralDataToClipboard]);
-  
 
-  
+  // Handler for graph sync
+  const handleGraphSync = useCallback(() => {
+    console.log('🔄 Syncing graph state with React Flow...');
+    
+    // Set loading state
+    setIsSyncing(true);
+    
+    // Clear React Flow state first
+    setNodes([]);
+    setEdges([]);
+    
+    // Force a re-layout by creating a new reference to the raw graph
+    // This will trigger the useEffect in the hook that calls ELK layout
+    const syncedGraph = structuredClone(rawGraph);
+    
+    // Use a small delay to ensure clearing happens first
+    setTimeout(() => {
+      setRawGraph(syncedGraph);
+      console.log('✅ Graph sync triggered - complete re-layout starting');
+    }, 50);
+    
+    // Reset loading state after a longer delay as a fallback
+    setTimeout(() => {
+      setIsSyncing(false);
+    }, 3000);
+  }, [rawGraph, setRawGraph, setNodes, setEdges]);
+
+  // Reset syncing state when layout is complete
+  useEffect(() => {
+    if (isSyncing && layoutVersion > 0) {
+      // Layout has been updated, reset syncing state
+      setIsSyncing(false);
+    }
+  }, [layoutVersion, isSyncing]);
+
   // Handler for graph changes from DevPanel
   const handleGraphChange = useCallback((newGraph: RawGraph) => {
     console.group('[DevPanel] Graph Change');
@@ -847,6 +883,19 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               </span>
             </label>
           </div>
+          
+          {/* Graph Sync Button */}
+          <button
+            onClick={handleGraphSync}
+            disabled={isSyncing}
+            className={`w-32 h-10 px-3 py-2 rounded-md shadow-sm border text-sm font-medium flex items-center justify-center ${
+              isSyncing 
+                ? 'bg-gray-300 text-gray-500 border-gray-300 cursor-not-allowed' 
+                : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            {isSyncing ? 'Syncing...' : 'Sync Graph'}
+          </button>
           
           {/* Debug Output Toggle */}
           <button

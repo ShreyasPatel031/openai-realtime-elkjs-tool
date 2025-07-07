@@ -135,9 +135,10 @@ export default function ElkTestPage() {
   });
 
   const [edgeOperation, setEdgeOperation] = useState({
-    edgeId: '',
+    edgeId: 'test-edge',
     sourceId: '',
     targetId: '',
+    label: ''
   });
 
   const [groupOperation, setGroupOperation] = useState({
@@ -253,33 +254,18 @@ export default function ElkTestPage() {
     }
   };
 
-  const handleEdgeOperation = (operation: string) => {
-    try {
-      const currentGraph = JSON.parse(stripComments(jsonInput));
-      let updatedGraph: LayoutElkNode;
-
-      switch (operation) {
-        case 'add':
-          updatedGraph = addEdge(
-            edgeOperation.edgeId,
-            edgeOperation.sourceId,
-            edgeOperation.targetId,
-            currentGraph
-          );
-          break;
-        case 'delete':
-          updatedGraph = deleteEdge(edgeOperation.edgeId, currentGraph);
-          break;
-        default:
-          return;
-      }
-      const updatedJson = JSON.stringify(updatedGraph, null, 2);
-      setJsonInput(updatedJson);
-      setGraphData(updatedGraph);
-      setError(null);
-    } catch (err) {
-      console.error('Error during edge operation:', err);
-      setError(`Operation failed: ${err.message}`);
+  const handleEdgeOperation = (operation: 'add' | 'delete') => {
+    if (operation === 'add') {
+      const label = edgeOperation.label.trim() || undefined;
+      setGraphData(prev => addEdge(
+        edgeOperation.edgeId, 
+        edgeOperation.sourceId, 
+        edgeOperation.targetId, 
+        prev,
+        label
+      ));
+    } else {
+      setGraphData(prev => deleteEdge(edgeOperation.edgeId, prev));
     }
   };
 
@@ -382,6 +368,13 @@ export default function ElkTestPage() {
                   className="w-full p-2 border rounded"
                   value={edgeOperation.targetId}
                   onChange={e => setEdgeOperation({...edgeOperation, targetId: e.target.value})}
+                />
+                <input
+                  type="text"
+                  placeholder="Edge Label (optional)"
+                  className="w-full p-2 border rounded"
+                  value={edgeOperation.label}
+                  onChange={e => setEdgeOperation({...edgeOperation, label: e.target.value})}
                 />
                 <div className="flex space-x-2">
                   <button onClick={() => handleEdgeOperation('add')} className="bg-green-500 text-white px-4 py-2 rounded">Add</button>

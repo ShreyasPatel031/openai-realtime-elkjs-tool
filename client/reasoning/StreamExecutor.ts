@@ -123,7 +123,7 @@ Build a complete architecture following these EXACT requirements using proper gr
 
 Remember: DO NOT acknowledge or explain. Execute multiple function calls to build the complete architecture.`;
       } else {
-        userContent = `Build a complete e-commerce microservices architecture following this exact structure:
+        userContent = `Build a complete cloud architecture following this structure:
 
 ${hasImages ? `
 CRITICAL: The user has provided ${storedImages.length} image(s) showing the exact architecture to replicate. REPLICATE and MIMIC the architecture shown in the image(s) as closely as possible. Do not build a generic architecture - build exactly what is shown in the image(s).
@@ -204,7 +204,7 @@ Remember: Do NOT acknowledge or explain. Execute multiple function calls to buil
         addLine(`📦 JSON payload (${fullEncodedLength} chars), using POST...`);
       }
       
-      addLine(`📝 Using ${combinedContent.trim() ? 'conversation requirements' : 'default e-commerce architecture'}`);
+      addLine(`📝 Using ${combinedContent.trim() ? 'conversation requirements' : 'generic cloud architecture'}`);
       if (additionalTextInput.trim()) {
         addLine(`📝 Including additional text input: "${additionalTextInput.substring(0, 100)}${additionalTextInput.length > 100 ? '...' : ''}"`);
       }

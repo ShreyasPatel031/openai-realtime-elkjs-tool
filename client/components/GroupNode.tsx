@@ -165,7 +165,11 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
     zIndex: 1,
     boxSizing: 'border-box' as const,
     // Override any internal borders that ReactFlow might add
-    overflow: 'visible'
+    overflow: 'visible',
+    // Add grey border specifically for GCP groups
+    ...(cloudProvider === 'gcp' && {
+      border: selected ? '3px solid #adb5bd' : '2px solid #adb5bd'
+    })
   };
 
   return (

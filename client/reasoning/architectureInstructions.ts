@@ -64,21 +64,21 @@ batch_update({
   operations: [
     { name:"add_node", nodename:"backend", parentId:"gcp",
       data:{ label:"Backend Svcs", icon:"gcp_cloud_run", groupIcon:"gcp_logical_grouping_services_instances" } },
-    { name:"add_node", nodename:"order_svc",  parentId:"backend",
-      data:{ label:"Order",   icon:"gcp_cloud_run", groupIcon:"gcp_logical_grouping_services_instances" } },
-    { name:"add_node", nodename:"risk_svc",   parentId:"backend",
-      data:{ label:"Risk",    icon:"gcp_cloud_run", groupIcon:"gcp_logical_grouping_services_instances" } },
-    { name:"add_node", nodename:"catalog_svc",parentId:"backend",
-      data:{ label:"Catalog", icon:"gcp_cloud_run", groupIcon:"gcp_logical_grouping_services_instances" } }
+    { name:"add_node", nodename:"api_svc",  parentId:"backend",
+      data:{ label:"API Service",   icon:"gcp_cloud_run", groupIcon:"gcp_logical_grouping_services_instances" } },
+    { name:"add_node", nodename:"auth_svc",   parentId:"backend",
+      data:{ label:"Auth Service",    icon:"gcp_cloud_run", groupIcon:"gcp_logical_grouping_services_instances" } },
+    { name:"add_node", nodename:"data_svc",parentId:"backend",
+      data:{ label:"Data Service", icon:"gcp_cloud_run", groupIcon:"gcp_logical_grouping_services_instances" } }
   ]
 })
 
 /* ───────── 5-B. backend edges */
 batch_update({
   operations: [
-    { name:"add_edge", edgeId:"e_order_risk", sourceId:"order_svc", targetId:"risk_svc",   label:"score" },
-    { name:"add_edge", edgeId:"e_api_order",  sourceId:"api_gw",    targetId:"order_svc",  label:"REST"  },
-    { name:"add_edge", edgeId:"e_api_catalog",sourceId:"api_gw",    targetId:"catalog_svc",label:"REST"  }
+    { name:"add_edge", edgeId:"e_api_auth", sourceId:"api_svc", targetId:"auth_svc",   label:"validate" },
+    { name:"add_edge", edgeId:"e_gw_api",  sourceId:"api_gw",    targetId:"api_svc",  label:"REST"  },
+    { name:"add_edge", edgeId:"e_gw_data",sourceId:"api_gw",    targetId:"data_svc",label:"REST"  }
   ]
 })
 
@@ -89,7 +89,7 @@ batch_update({
       data:{ label:"Redis Cache", icon:"cache_redis", groupIcon:"gcp_infrastructure_system" } },
     { name:"add_node", nodename:"redis", parentId:"cache",
       data:{ label:"Memorystore", icon:"cache_redis", groupIcon:"gcp_infrastructure_system" } },
-    { name:"add_edge", edgeId:"e_order_cache", sourceId:"order_svc", targetId:"redis", label:"session" }
+    { name:"add_edge", edgeId:"e_api_cache", sourceId:"api_svc", targetId:"redis", label:"cache" }
   ]
 })
 
@@ -108,10 +108,10 @@ batch_update({
 /* ───────── 7-B. data store edges */
 batch_update({
   operations: [
-    { name:"add_edge", edgeId:"e_catalog_db", sourceId:"catalog_svc", targetId:"spanner",   label:"read"  },
-    { name:"add_edge", edgeId:"e_order_db",   sourceId:"order_svc",   targetId:"spanner",   label:"write" },
-    { name:"add_edge", edgeId:"e_risk_db",    sourceId:"risk_svc",    targetId:"spanner",   label:"read"  },
-    { name:"add_edge", edgeId:"e_catalog_fs", sourceId:"catalog_svc", targetId:"firestore", label:"stock" }
+    { name:"add_edge", edgeId:"e_data_db", sourceId:"data_svc", targetId:"spanner",   label:"read"  },
+    { name:"add_edge", edgeId:"e_api_db",   sourceId:"api_svc",   targetId:"spanner",   label:"write" },
+    { name:"add_edge", edgeId:"e_auth_db",    sourceId:"auth_svc",    targetId:"spanner",   label:"read"  },
+    { name:"add_edge", edgeId:"e_data_fs", sourceId:"data_svc", targetId:"firestore", label:"documents" }
   ]
 })
 
@@ -126,8 +126,8 @@ batch_update({
       data:{ label:"Eventarc", icon:"gcp_eventarc", groupIcon:"gcp_infrastructure_system" } },
     { name:"add_node", nodename:"cloud_tasks", parentId:"orchestration",
       data:{ label:"Cloud Tasks", icon:"gcp_cloud_tasks", groupIcon:"gcp_infrastructure_system" } },
-    { name:"add_edge", edgeId:"e_order_flow", sourceId:"order_svc", targetId:"workflows", label:"invoke" },
-    { name:"add_edge", edgeId:"e_flow_risk",  sourceId:"workflows", targetId:"risk_svc",  label:"branch" }
+    { name:"add_edge", edgeId:"e_api_flow", sourceId:"api_svc", targetId:"workflows", label:"invoke" },
+    { name:"add_edge", edgeId:"e_flow_data",  sourceId:"workflows", targetId:"data_svc",  label:"process" }
   ]
 })
 
@@ -136,8 +136,8 @@ batch_update({
   operations: [
     { name:"add_node", nodename:"messaging", parentId:"gcp",
       data:{ label:"Pub/Sub", icon:"gcp_pubsub", groupIcon:"gcp_external_infrastructure_1st_party" } },
-    { name:"add_node", nodename:"order_topic", parentId:"messaging",
-      data:{ label:"order-topic", icon:"gcp_pubsub", groupIcon:"gcp_external_infrastructure_1st_party" } },
+    { name:"add_node", nodename:"event_topic", parentId:"messaging",
+      data:{ label:"event-topic", icon:"gcp_pubsub", groupIcon:"gcp_external_infrastructure_1st_party" } },
     { name:"add_node", nodename:"dlq_topic", parentId:"messaging",
       data:{ label:"DLQ", icon:"message_queue", groupIcon:"gcp_external_infrastructure_1st_party" } }
   ]
@@ -146,8 +146,8 @@ batch_update({
 /* ───────── 9-B. messaging edges */
 batch_update({
   operations: [
-    { name:"add_edge", edgeId:"e_flow_topic", sourceId:"workflows", targetId:"order_topic", label:"publish" },
-    { name:"add_edge", edgeId:"e_topic_dlq",  sourceId:"order_topic", targetId:"dlq_topic", label:"DLQ" }
+    { name:"add_edge", edgeId:"e_flow_topic", sourceId:"workflows", targetId:"event_topic", label:"publish" },
+    { name:"add_edge", edgeId:"e_topic_dlq",  sourceId:"event_topic", targetId:"dlq_topic", label:"DLQ" }
   ]
 })
 
@@ -171,13 +171,13 @@ batch_update({
 batch_update({
   operations: [
     { name:"add_node", nodename:"external", parentId:"root",
-      data:{ label:"External APIs", icon:"third_party_api", groupIcon:"gcp_external_saas_providers" } },
-    { name:"add_node", nodename:"payment_gateway", parentId:"external",
-      data:{ label:"Payment GW", icon:"payment_gateway", groupIcon:"gcp_external_saas_providers" } },
-    { name:"add_node", nodename:"email_svc", parentId:"external",
-      data:{ label:"Email", icon:"notification_service", groupIcon:"gcp_external_saas_providers" } },
-    { name:"add_edge", edgeId:"e_payment", sourceId:"order_svc", targetId:"payment_gateway", label:"charge" },
-    { name:"add_edge", edgeId:"e_email",   sourceId:"workflows", targetId:"email_svc",      label:"notify" }
+      data:{ label:"External APIs", icon:"api", groupIcon:"gcp_external_saas_providers" } },
+    { name:"add_node", nodename:"third_party_api", parentId:"external",
+      data:{ label:"Third Party API", icon:"api", groupIcon:"gcp_external_saas_providers" } },
+    { name:"add_node", nodename:"notification_svc", parentId:"external",
+      data:{ label:"Notifications", icon:"notification_service", groupIcon:"gcp_external_saas_providers" } },
+    { name:"add_edge", edgeId:"e_external_api", sourceId:"api_svc", targetId:"third_party_api", label:"call" },
+    { name:"add_edge", edgeId:"e_notify",   sourceId:"workflows", targetId:"notification_svc",      label:"send" }
   ]
 })
 

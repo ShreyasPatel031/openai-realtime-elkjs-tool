@@ -148,7 +148,7 @@ export default async function streamHandler(req: Request, res: Response) {
                 })),
                 tool_choice: "auto",
                 parallel_tool_calls: true,
-                reasoning: { effort: "low", summary: "detailed" },
+                reasoning: { effort: "high", summary: "detailed" },
                 stream: true
               });
               break;

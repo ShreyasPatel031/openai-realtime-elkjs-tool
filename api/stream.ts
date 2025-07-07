@@ -204,7 +204,7 @@ async function runConversationLoop(
             })),
             tool_choice: "auto",
             parallel_tool_calls: false,
-            reasoning: { effort: "low", summary: "detailed" },
+            reasoning: { effort: "high", summary: "detailed" },
             stream: true
           });
           break; // If successful, exit retry loop

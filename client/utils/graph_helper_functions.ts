@@ -7,6 +7,7 @@ export interface ElkEdge {
   id: string;
   sources: string[];
   targets: string[];
+  labels?: ElkLabel[];
 }
 
 export interface ElkNode {
@@ -297,7 +298,8 @@ export function addEdge(
   edgeId: string,
   sourceId: string,
   targetId: string,
-  layout: ElkNode
+  layout: ElkNode,
+  label?: string
 ): ElkNode {
   const commonAncestor = findCommonAncestor(layout, sourceId, targetId);
   if (!commonAncestor) {
@@ -309,6 +311,12 @@ export function addEdge(
     sources: [sourceId],
     targets: [targetId]
   };
+  
+  // Add label if provided
+  if (label) {
+    newEdge.labels = [{ text: label }];
+  }
+  
   if (!commonAncestor.edges) commonAncestor.edges = [];
   commonAncestor.edges.push(newEdge);
   return layout;
@@ -516,7 +524,7 @@ export function batchUpdate(
         if (!params.targetId || typeof params.targetId !== 'string') {
           throw new Error(`add_edge requires 'targetId' as a string, got: ${JSON.stringify(params.targetId)}`);
         }
-        updatedLayout = addEdge(params.edgeId, params.sourceId, params.targetId, updatedLayout);
+        updatedLayout = addEdge(params.edgeId, params.sourceId, params.targetId, updatedLayout, params.label);
         break;
         
       case "delete_edge":

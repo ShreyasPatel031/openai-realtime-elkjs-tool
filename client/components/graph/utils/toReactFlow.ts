@@ -148,6 +148,7 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
           const labelPosAbs = elkLbl
             ? { x: elkLbl.x + containerAbs.x, y: elkLbl.y + containerAbs.y }
             : undefined;
+          
           edges.push({
             id: edgeId, 
             source: sourceNodeId, 

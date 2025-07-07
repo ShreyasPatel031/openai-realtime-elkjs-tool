@@ -37,3 +37,29 @@ The previous version of this application that used WebSockets on the client (not
 ## License
 
 MIT
+
+## Development
+
+### Running Multiple Dev Servers
+
+The development server now automatically finds the next available port if the default port (3000) is in use. You can run multiple instances simultaneously:
+
+```bash
+# Terminal 1: Starts on port 3000
+npm run dev
+
+# Terminal 2: Automatically starts on port 3001 
+npm run dev
+
+# Terminal 3: Automatically starts on port 3002
+npm run dev
+```
+
+Each server will display which port it's running on:
+- If port 3000 is available: `🚀 Server running at http://localhost:3000`
+- If port 3000 is in use: `🚀 Server running at http://localhost:3001 (Port 3000 was in use, using 3001 instead)`
+
+You can also specify a custom starting port using the PORT environment variable:
+```bash
+PORT=4000 npm run dev  # Starts checking from port 4000
+```

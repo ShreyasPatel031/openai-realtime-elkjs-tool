@@ -81,6 +81,11 @@ export function buildNodeEdgePoints(graph: any, abs: AbsMap): EdgePointMap {
           { x: startPointX, y: startPointY }
         );
         
+        // Keep debug for load balancer edges only (main problem pattern)
+        if (e.id && e.id.includes('lb_app')) {
+          console.log(`🔗 Edge ${e.id} at container ${container.id}: coords ${startPointX},${startPointY} -> node ${sourceNodePos.x},${sourceNodePos.y}`);
+        }
+        
         add(sourceNodeId, sourceSide, {
           edgeId: e.id,
           x: startPointX,

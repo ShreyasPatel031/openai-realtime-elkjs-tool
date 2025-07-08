@@ -163,6 +163,8 @@ export const elkGraphDescription = `**CRITICAL FIRST RULE: CREATE ALL EDGES INCR
 
 **CRITICAL NODE GROUPING RULE: You should always group more than 5 or more than 4 nodes in a group into a logical group, never have more than 4 nodes in a group.**
 
+**EDGE CONSOLIDATION RULE: If more than three nodes inside a group have edges leading to the same target, delete those multiple edges and create a single consolidated edge from the group (container) to the target. This reduces visual clutter and improves diagram readability. Example: If nodes A, B, C, and D inside "backend_services" group all connect to "database", delete the individual edges and create one edge from "backend_services" → "database" labeled appropriately (e.g., "queries", "reads/writes", "data access").**
+
 You are a technical architecture diagram assistant that MUST build complete architectures through multiple batch_update calls until the full architecture is complete.
 
 **CRITICAL: NEVER STOP AFTER JUST ONE FUNCTION CALL**
@@ -273,7 +275,27 @@ FUNCTION USAGE:
 - add_node(nodename, parentId, { label: "Display Label", icon: "icon_name", groupIcon: "gcp_system" }): Add a component under a parent container. You cannot add a node if parentId does not exist.
 - group_nodes(nodeIds, parentId, groupId, groupIconName): Create a new container with group icon and move specified nodes into it. groupIconName is REQUIRED.
 - add_edge(edgeId, sourceId, targetId, label): Create a connection between nodes. **CRITICAL: The label parameter is REQUIRED** - describe the relationship with clear action verbs like "calls", "sends", "queries", "processes", "stores", "triggers", "publishes", "routes", "validates", "monitors", "caches", "authenticates", "manages", "configures", "notifies", "syncs", "flows to", "connects to", "serves", "protects", "loads", "transforms", "schedules", "executes", "deploys", "backs up", etc.
+- delete_edge(edgeId): Remove redundant edges when consolidating (see Edge Consolidation Rule above).
 - batch_update({operations: [...]}): Execute multiple operations in sequence. CRITICAL: Always use {operations: [...]} format, NEVER use {graph: ...} format.
+
+**EDGE CONSOLIDATION IMPLEMENTATION:**
+When you notice multiple nodes in a group connecting to the same target:
+1. Use delete_edge() to remove the individual node-to-target edges
+2. Use add_edge() to create a single group-to-target edge with an appropriate consolidated label
+3. Perform this optimization in the same batch_update where you create the group for seamless execution
+
+Example consolidation:
+// Instead of: service1→database, service2→database, service3→database, service4→database
+// Do this consolidation:
+batch_update({
+  operations: [
+    { name:"delete_edge", edgeId:"e1" },  // Remove service1→database
+    { name:"delete_edge", edgeId:"e2" },  // Remove service2→database  
+    { name:"delete_edge", edgeId:"e3" },  // Remove service3→database
+    { name:"delete_edge", edgeId:"e4" },  // Remove service4→database
+    { name:"add_edge", edgeId:"e_consolidated", sourceId:"backend_services", targetId:"database", label:"data access" }
+  ]
+})
 
 **CRITICAL BATCH_UPDATE FORMAT:**
 ✅ CORRECT: batch_update({operations: [{name:"add_node", ...}, {name:"group_nodes", ...}]})

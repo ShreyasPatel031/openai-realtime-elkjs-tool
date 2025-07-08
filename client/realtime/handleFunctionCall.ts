@@ -259,7 +259,7 @@ export function handleFunctionCall(
       edges: allEdges
     };
     
-    // Create comprehensive result object
+    // Create comprehensive result object - SUCCESS CASE
     result = {
       success: true,
       operation: name,
@@ -291,7 +291,20 @@ export function handleFunctionCall(
   } catch (err) {
     // Log any unexpected errors in the main handler
     console.error('❌ Exception in handleFunctionCall:', err);
-    result = { success: false, message: `Exception: ${err instanceof Error ? err.message : String(err)}` };
+    
+    // Create detailed error result for the agent
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    result = { 
+      success: false, 
+      operation: name,
+      error: errorMessage,
+      message: `❌ OPERATION FAILED: ${name} - ${errorMessage}`,
+      errorType: err instanceof Error ? err.constructor.name : 'UnknownError',
+      details: `The operation '${name}' could not be completed. Please check the error message and retry with corrected parameters.`
+    };
+    
+    console.error('🔧 handleFunctionCall ERROR result:', { call_id, name, result });
+    
     safeSend({
       type: "conversation.item.create",
       item: {

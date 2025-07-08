@@ -149,6 +149,20 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
             ? { x: elkLbl.x + containerAbs.x, y: elkLbl.y + containerAbs.y }
             : undefined;
           
+          // Debug deeply nested edge positioning
+          if (edge.id && (edge.id.includes('int_') || edge.id.includes('lb_') || edge.id.includes('gke_'))) {
+            console.log(`🔍 Edge ${edge.id}:`, {
+              sources: edge.sources,
+              targets: edge.targets,
+              sourceHandle: sourceHandle,
+              targetHandle: targetHandle,
+              containerAbs: containerAbs,
+              labelTxt: labelTxt,
+              sourceNodeExists: !!absolutePositions[edge.sources[0]],
+              targetNodeExists: !!absolutePositions[edge.targets[0]]
+            });
+          }
+
           edges.push({
             id: edgeId, 
             source: sourceNodeId, 
@@ -180,12 +194,14 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
             focusable: true,
           });
         } else {
-          console.warn("[RF-convert] edge skipped – handle not found", {
+          // Keep essential edge skip warning for debugging
+          console.warn(`⚠️ [EDGE-SKIP] Edge ${edge.id} skipped - handle not found`, {
             edgeId,
             sourceNodeId,
             targetNodeId,
             sourceHandle,
-            targetHandle
+            targetHandle,
+            containerAbs: containerAbs
           });
         }
       })
@@ -200,6 +216,12 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
   
   // Process all edges in the graph
   processEdges(elkGraph);
+
+  // 🟪 DEBUG: Final Edge Summary
+  console.log(`🟪 [FINAL-EDGES] Total edges created: ${edges.length}`, {
+    createdEdges: edges.map(e => ({id: e.id, source: e.source, target: e.target})),
+    processedEdgeIds: Array.from(processedEdgeIds)
+  });
 
   return { nodes, edges };
 } 

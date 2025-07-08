@@ -21,6 +21,16 @@ export function computeAbsolutePositions(root: any): AbsMap {
       height: node.height ?? NON_ROOT_DEFAULT_OPTIONS.height 
     };
     
+    // Debug deeply nested positioning
+    if (node.id && (node.id.includes('internet') || node.id.includes('lb_') || node.id.includes('gke_'))) {
+      console.log(`📍 Position ${node.id}:`, {
+        nodePos: { x: node.x ?? 0, y: node.y ?? 0 },
+        parentPos: { x: parentX, y: parentY },
+        absolutePos: { x: absX, y: absY },
+        dimensions: { width: node.width, height: node.height }
+      });
+    }
+    
     (node.children || []).forEach((child: any) => 
       recurse(child, absX, absY)
     );

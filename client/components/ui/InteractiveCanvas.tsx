@@ -271,6 +271,81 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     processEvents();
   }, [events, processEvents]);
   
+  // Expose diagnostic functions to the window object for debugging
+  useEffect(() => {
+    // Import the diagnostic functions
+    import('../../utils/graph_helper_functions').then(({ analyzeGraphState, forceEdgeReattachmentAnalysis, showGraphStructure, validateBatchOperations }) => {
+      // Expose functions to window object
+      (window as any).analyzeGraphState = () => {
+        if (rawGraph) {
+          analyzeGraphState(rawGraph as any);
+        } else {
+          console.warn('No graph available to analyze');
+        }
+      };
+      
+      (window as any).forceEdgeReattachmentAnalysis = () => {
+        if (rawGraph) {
+          const updatedGraph = forceEdgeReattachmentAnalysis(rawGraph as any);
+          setRawGraph(updatedGraph);
+          console.log('🔄 Edge reattachment analysis complete - graph updated');
+        } else {
+          console.warn('No graph available for edge reattachment analysis');
+        }
+      };
+      
+      (window as any).showGraphStructure = () => {
+        if (rawGraph) {
+          showGraphStructure(rawGraph as any);
+        } else {
+          console.warn('No graph available to show structure');
+        }
+      };
+      
+      (window as any).validateBatchOperations = (operations) => {
+        if (!operations) {
+          console.warn('Please provide operations array: validateBatchOperations([...operations])');
+          return [];
+        }
+        return validateBatchOperations(operations);
+      };
+      
+      // Also expose the current graph for direct access
+      (window as any).getCurrentGraph = () => {
+        return rawGraph;
+      };
+      
+      // Expose state synchronization diagnostic and cleanup function
+      const { diagnoseStateSynchronization, cleanupDuplicateGroups } = require('../../utils/graph_helper_functions');
+      (window as any).diagnoseStateSynchronization = diagnoseStateSynchronization;
+      (window as any).cleanupDuplicateGroups = () => {
+        const cleaned = cleanupDuplicateGroups(rawGraph);
+        setRawGraph(cleaned);
+        return cleaned;
+      };
+      
+      console.log('🔧 Diagnostic functions exposed to window:');
+      console.log('  - analyzeGraphState() - Analyze current graph for edge alignment issues');
+      console.log('  - forceEdgeReattachmentAnalysis() - Force reattachment of all edges');
+      console.log('  - showGraphStructure() - Show complete graph hierarchy and edge distribution');
+      console.log('  - validateBatchOperations(ops) - Validate operation sequence for edge misalignment risks');
+      console.log('  - getCurrentGraph() - Get current graph state');
+      console.log('  - diagnoseStateSynchronization() - Analyze state synchronization issues');
+      console.log('  - cleanupDuplicateGroups() - Remove duplicate group nodes from the graph');
+    });
+    
+    // Cleanup on unmount
+    return () => {
+      delete (window as any).analyzeGraphState;
+      delete (window as any).forceEdgeReattachmentAnalysis;
+      delete (window as any).showGraphStructure;
+      delete (window as any).validateBatchOperations;
+      delete (window as any).getCurrentGraph;
+      delete (window as any).diagnoseStateSynchronization;
+      delete (window as any).cleanupDuplicateGroups;
+    };
+  }, [rawGraph, setRawGraph]);
+  
   // State to track edge visibility (keeping minimal state for the fix)
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
 

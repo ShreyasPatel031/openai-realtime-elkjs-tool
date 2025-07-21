@@ -92,9 +92,9 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
       if (payload instanceof FormData) {
         console.log('🔄 Starting stream with FormData (images)...', actualPrevId ? '(follow-up)' : '(initial)');
         
-        // Add actualPrevId to FormData if provided (will be undefined for multi-server compatibility)
+        // NEVER use response IDs for multi-server compatibility
         if (actualPrevId) {
-          payload.append('previous_response_id', actualPrevId);
+          console.log(`🔍 PostEventSource: Blocking FormData response ID for multi-server compatibility: ${actualPrevId}`);
         }
         
         requestBody = payload;
@@ -109,8 +109,8 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         // Use JSON format for cleaner API
         requestBody = JSON.stringify({
           payload: compressedPayload,
-          isCompressed: isLargePayload,
-          ...(actualPrevId && { previous_response_id: actualPrevId })
+          isCompressed: isLargePayload
+          // NEVER include previous_response_id for multi-server compatibility
         });
         
         headers['Content-Type'] = 'application/json';
@@ -341,7 +341,8 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
 export const createGetEventSource = (payload: string, prevId?: string): EventSource => {
   let url = `/stream?payload=${encodeURIComponent(payload)}`;
   if (prevId) {
-    url += `&previous_response_id=${encodeURIComponent(prevId)}`;
+            // NEVER use response IDs for multi-server compatibility - this line removed
+        console.log(`🔍 PostEventSource: Blocking response ID from URL for multi-server compatibility: ${prevId}`);
   }
   console.log(`🔄 Using GET fallback (${url.length} chars)`);
   return new EventSource(url);

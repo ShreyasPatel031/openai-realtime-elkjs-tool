@@ -67,20 +67,15 @@ export const executeFunctionCall = async (
     return "Error: No graph state setter available";
   }
 
-  addLine(`🔧 Executing function: ${functionCall.name}`);
-  
-  // Log graph state before operation (using current ref value)
-  console.log("📊 Graph state BEFORE operation:", elkGraphRef.current);
+  addLine(`🔧 Executing: ${functionCall.name}`);
   
   let updatedGraph: any = null;
   
   try {
     // Special handling for display_elk_graph
     if (functionCall.name === 'display_elk_graph') {
-      addLine(`📊 Displaying current graph state`);
-      console.log("🔍 Current ELK Graph:", elkGraphRef.current);
-      
       const graphState = extractGraphState(elkGraphRef.current);
+      addLine(`📊 Current: ${graphState.nodeCount} nodes, ${graphState.edgeCount} edges`);
       
       return {
         success: true,
@@ -103,9 +98,7 @@ export const executeFunctionCall = async (
         setElkGraph: (newGraph: any) => {
           // Capture the updated graph
           updatedGraph = newGraph;
-          // Log graph state after operation
-          console.log("📊 Graph state AFTER operation:", newGraph);
-          console.log("🔄 Graph layout changes detected - updating state");
+          // Graph updated successfully
           setElkGraph(newGraph);
           // Update the ref immediately
           elkGraphRef.current = newGraph;
@@ -124,32 +117,24 @@ export const executeFunctionCall = async (
         },
         safeSend: (event: any) => {
           // Send the event back to the real-time agent
-          console.log("📤 Sending function result to real-time agent:", event);
-          
-          // Send the event to the real-time agent using the global function
           if (window.realtimeAgentSendTextMessage && typeof window.realtimeAgentSendTextMessage === 'function') {
             if (event.type === "conversation.item.create" && event.item?.type === "function_call_output") {
               try {
                 const output = JSON.parse(event.item.output);
                 if (output.graph) {
-                  const summary = `Function ${output.operation} completed. Graph now has ${output.graph.nodeCount} nodes and ${output.graph.edgeCount} edges. Nodes: ${output.graph.nodes.map(n => n.id).join(', ')}. Edges: ${output.graph.edges.map(e => `${e.source}→${e.target}`).join(', ')}.`;
+                  const summary = `Function ${output.operation} completed. Graph now has ${output.graph.nodeCount} nodes and ${output.graph.edgeCount} edges.`;
                   window.realtimeAgentSendTextMessage(summary);
-                  console.log("📡 Sent graph update to real-time agent");
                 }
               } catch (e) {
                 console.error("Failed to parse function output:", e);
               }
             }
-          } else {
-            console.warn("⚠️ Real-time agent message function not available");
           }
         }
       }
     );
     
-    addLine(`✅ Function executed successfully: ${functionCall.name}`);
-    addLine(`📊 Graph updated! Check the canvas for changes.`);
-    addLine(`🔍 Graph state logged to console`);
+    addLine(`✅ ${functionCall.name} completed`);
     
     // Return the updated graph or current if no update occurred
     const resultGraph = updatedGraph || elkGraphRef.current;

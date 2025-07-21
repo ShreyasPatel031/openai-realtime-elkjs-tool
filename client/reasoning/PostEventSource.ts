@@ -49,6 +49,13 @@ const compressPayload = async (payload: string): Promise<string> => {
 export const createPostEventSource = (payload: string | FormData, prevId?: string): PostEventSource => {
   const controller = new AbortController();
   
+  // NEVER use responseId in multi-server scenarios - always start fresh
+  // This prevents 404 errors when multiple servers are running on different ports
+  if (prevId) {
+    console.log(`🔍 PostEventSource: Ignoring response ID ${prevId} for multi-server compatibility`);
+  }
+  const actualPrevId = undefined; // Force fresh conversation for multi-server compatibility
+  
   // Create EventSource-like object
   const source = new EventTarget() as PostEventSource;
   source.readyState = 0; // CONNECTING
@@ -60,6 +67,12 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
   source.CONNECTING = 0;
   source.OPEN = 1;
   source.CLOSED = 2;
+  
+  // Reconnection state
+  let reconnectAttempts = 0;
+  const maxReconnectAttempts = 3;
+  const reconnectDelay = 2000; // 2 seconds
+  // No timeout - let O3 model take as long as it needs
   
   // Add close method
   source.close = () => {
@@ -77,17 +90,17 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
       
       // Handle FormData (images) vs JSON payload
       if (payload instanceof FormData) {
-        console.log('🔄 Starting stream with FormData (images)...', prevId ? '(follow-up)' : '(initial)');
+        console.log('🔄 Starting stream with FormData (images)...', actualPrevId ? '(follow-up)' : '(initial)');
         
-        // Add prevId to FormData if provided
-        if (prevId) {
-          payload.append('previous_response_id', prevId);
+        // Add actualPrevId to FormData if provided (will be undefined for multi-server compatibility)
+        if (actualPrevId) {
+          payload.append('previous_response_id', actualPrevId);
         }
         
         requestBody = payload;
         // Don't set Content-Type header for FormData - let browser set it with boundary
       } else {
-        console.log('🔄 Starting stream with JSON...', prevId ? '(follow-up)' : '(initial)');
+        console.log('🔄 Starting stream with JSON...', actualPrevId ? '(follow-up)' : '(initial)');
         
         // Check if payload needs compression (over 40KB)
         const isLargePayload = payload.length > 40 * 1024;
@@ -97,7 +110,7 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         requestBody = JSON.stringify({
           payload: compressedPayload,
           isCompressed: isLargePayload,
-          ...(prevId && { previous_response_id: prevId })
+          ...(actualPrevId && { previous_response_id: actualPrevId })
         });
         
         headers['Content-Type'] = 'application/json';
@@ -112,12 +125,17 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         }
       }
       
-      const response = await fetch('/stream', {
-        method: 'POST',
-        headers,
-        body: requestBody,
-        signal: controller.signal,
-      });
+      // Generate a unique session ID for tracking
+      const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      headers['x-session-id'] = sessionId;
+      
+              // No timeout - let O3 model take as long as it needs
+        const response = await fetch('/stream', {
+          method: 'POST',
+          headers,
+          body: requestBody,
+          signal: controller.signal,
+        }) as Response;
       
       console.log('🔍 Stream response status:', response.status);
       console.log('🔍 Stream response headers:', Object.fromEntries(response.headers));
@@ -139,6 +157,10 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
       }
       
       source.readyState = 1; // OPEN
+      
+      // Reset reconnection attempts on successful connection
+      reconnectAttempts = 0;
+      
       const openEvent = new Event('open');
       source.dispatchEvent(openEvent);
       if (source.onopen) source.onopen.call(source as any, openEvent);
@@ -154,7 +176,21 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
       
       // Read the stream
       while (true) {
-        const { done, value } = await reader.read();
+        let readResult;
+        try {
+          readResult = await reader.read();
+        } catch (readError) {
+          // Handle read errors gracefully
+          console.error('❌ Stream read error:', readError.message || readError);
+          if (readError.name === 'AbortError') {
+            console.log('📡 Stream aborted normally');
+            source.readyState = 2; // CLOSED
+            break;
+          }
+          throw readError; // Re-throw non-abort errors
+        }
+        
+        const { done, value } = readResult;
         
         if (done) {
           console.log(`📡 Stream ended (${messageCount} messages)`);
@@ -181,14 +217,10 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
             
             messageCount++;
             
-            // Only log function calls and important events, not every message
+            // Log only errors
             try {
               const parsed = JSON.parse(data);
-              if (parsed.type === 'response.function_call_delta' && parsed.delta?.name) {
-                console.log(`🔧 Function call: ${parsed.delta.name}`);
-              } else if (parsed.type === 'response.done') {
-                console.log('✅ Response completed');
-              } else if (parsed.type === 'error') {
+              if (parsed.type === 'error') {
                 console.log('❌ Error:', parsed.error?.message || 'Unknown error');
               }
             } catch (e) {
@@ -205,13 +237,93 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
       
     } catch (error) {
       console.error('❌ Stream error:', error.message || error);
+      console.error('❌ Stream error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      });
       source.readyState = 2; // CLOSED
       
-      // Don't treat AbortError as a real error - it's expected when we close the stream
+      // Handle different error types
       if (error.name === 'AbortError') {
+        console.log('📡 Stream aborted normally');
         return; // Don't dispatch error event for normal closure
       }
       
+      // Handle socket timeout errors with automatic reconnection
+      if (error.message && error.message.includes('Socket timeout')) {
+        console.warn('⚠️ Socket timeout - this may be due to slow O3 model processing');
+        
+        if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectAttempts++;
+          console.log(`🔄 Attempting reconnection ${reconnectAttempts}/${maxReconnectAttempts} in ${reconnectDelay}ms...`);
+          
+          setTimeout(() => {
+            source.readyState = 0; // CONNECTING
+            startFetch(); // Retry the connection
+          }, reconnectDelay);
+          return;
+        }
+        
+        console.warn('⚠️ Max reconnection attempts reached for socket timeout');
+        
+        // Dispatch a more user-friendly error
+        const errorEvent = new Event('error');
+        (errorEvent as any).error = {
+          ...error,
+          message: 'Request timed out after multiple attempts. The O3 model may need more time to process complex requests.',
+          type: 'socket_timeout'
+        };
+        source.dispatchEvent(errorEvent);
+        if (source.onerror) source.onerror.call(source as any, errorEvent);
+        return;
+      }
+
+      // Handle premature close errors with automatic reconnection
+      if (error.message && error.message.includes('Premature close')) {
+        console.warn('⚠️ Stream closed prematurely - this may be due to server issues or network problems');
+        
+        if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectAttempts++;
+          console.log(`🔄 Attempting reconnection ${reconnectAttempts}/${maxReconnectAttempts} in ${reconnectDelay}ms...`);
+          
+          setTimeout(() => {
+            source.readyState = 0; // CONNECTING
+            startFetch(); // Retry the connection
+          }, reconnectDelay);
+          return;
+        }
+        
+        console.warn('⚠️ Max reconnection attempts reached for premature close');
+        
+        // Dispatch a more user-friendly error
+        const errorEvent = new Event('error');
+        (errorEvent as any).error = {
+          ...error,
+          message: 'Stream connection closed unexpectedly after multiple attempts. Please try again.',
+          type: 'premature_close'
+        };
+        source.dispatchEvent(errorEvent);
+        if (source.onerror) source.onerror.call(source as any, errorEvent);
+        return;
+      }
+      
+      // Handle network errors
+      if (error.name === 'NetworkError' || error.message.includes('fetch')) {
+        console.error('❌ Network error - check internet connection');
+        const errorEvent = new Event('error');
+        (errorEvent as any).error = {
+          ...error,
+          message: 'Network error. Please check your internet connection and try again.',
+          type: 'network_error'
+        };
+        source.dispatchEvent(errorEvent);
+        if (source.onerror) source.onerror.call(source as any, errorEvent);
+        return;
+      }
+      
+      // Default error handling
       const errorEvent = new Event('error');
       (errorEvent as any).error = error;
       source.dispatchEvent(errorEvent);

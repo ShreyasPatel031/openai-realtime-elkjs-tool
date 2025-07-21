@@ -213,7 +213,24 @@ Remember: Do NOT acknowledge or explain. Execute multiple function calls to buil
       
     } catch (error) {
       console.error('StreamExecutor error:', error);
-      addLine(`❌ Stream execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('StreamExecutor error details:', {
+        name: error instanceof Error ? error.name : typeof error,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        errorType: typeof error,
+        errorValue: error
+      });
+      
+      let errorMessage = 'Unknown error';
+      if (error instanceof Error) {
+        errorMessage = error.message || `${error.name} (no message)`;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object') {
+        errorMessage = JSON.stringify(error, null, 2);
+      }
+      
+      addLine(`❌ Stream execution failed: ${errorMessage}`);
       setBusy(false);
       this.options.onError?.(error);
       throw error;
@@ -234,6 +251,24 @@ Remember: Do NOT acknowledge or explain. Execute multiple function calls to buil
   private async createMainStream(payload: string | FormData, isFormData: boolean): Promise<void> {
     return new Promise((resolve, reject) => {
       const { addLine, setBusy } = this.options;
+      
+      // No timeout - let O3 model take as long as it needs
+      
+      // Debug: Check if payload contains response IDs
+      if (typeof payload === 'string') {
+        try {
+          const parsedPayload = JSON.parse(payload);
+          const responseIds = parsedPayload.filter((item: any) => item.response_id || (item.id && item.id.startsWith('rs_')))
+            .map((item: any) => ({ id: item.id, response_id: item.response_id, role: item.role }));
+          
+          if (responseIds.length > 0) {
+            console.log(`🔍 StreamExecutor: Found ${responseIds.length} response IDs in payload:`, responseIds);
+          }
+        } catch (e) {
+          // Ignore parse errors for debugging
+        }
+      }
+      
       const ev = createPostEventSource(payload, undefined);
       const responseIdRef = { current: null as string | null };
 
@@ -246,6 +281,7 @@ Remember: Do NOT acknowledge or explain. Execute multiple function calls to buil
         setBusy: this.options.setBusy,
         onComplete: () => {
           // Trigger completion when EventHandlers detects the done signal
+          // No timeout to clear - let O3 model take as long as it needs
           this.options.onComplete?.();
           // Add the single completion message
           setTimeout(() => {
@@ -285,6 +321,7 @@ Remember: Do NOT acknowledge or explain. Execute multiple function calls to buil
         const result = handleDelta(delta, this.pendingCalls.current, this.handledCallsRef.current);
         
         if (result === 'close') {
+          // No timeout to clear - let O3 model take as long as it needs
           ev.close();
           setBusy(false);
           resolve();
@@ -293,23 +330,58 @@ Remember: Do NOT acknowledge or explain. Execute multiple function calls to buil
       
       ev.onerror = (error) => {
         console.error('EventSource error:', error);
+        console.error('EventSource error details:', {
+          error,
+          errorDetails: (error as any).error,
+          errorType: typeof error,
+          errorString: String(error),
+          timestamp: new Date().toISOString()
+        });
+        
+        const errorDetails = (error as any).error || error;
+        
+        // No timeout to clear - let O3 model take as long as it needs
         ev.close();
         
-        if (error && (error as any).error?.name === 'AbortError') {
+        if (errorDetails?.name === 'AbortError') {
           console.log('📡 Stream closed normally (AbortError expected)');
           resolve();
           return;
         }
         
-        this.incError();
+        // Handle premature close errors more gracefully
+        if (errorDetails?.type === 'premature_close' || errorDetails?.message?.includes('Premature close')) {
+          console.warn('⚠️ Stream closed prematurely - attempting to continue gracefully');
+          addLine(`⚠️ Stream connection interrupted - this may be due to server issues`);
+          
+          // Don't increment error count for premature close - it's often transient
+          if (this.errorRef.current < this.MAX_ERRORS) {
+            addLine(`🔄 Will attempt to continue processing any remaining function calls`);
+            this.options.setBusy(false);
+            resolve(); // Resolve instead of reject for premature close
+            return;
+          }
+        }
+        
+        // Handle network errors
+        if (errorDetails?.type === 'network_error') {
+          console.error('❌ Network error detected');
+          addLine(`❌ Network error - please check your internet connection`);
+          this.incError();
+        } else {
+          this.incError();
+        }
         
         if (this.errorRef.current >= this.MAX_ERRORS) {
           addLine(`🛑 Stopping after ${this.MAX_ERRORS} consecutive errors`);
+          console.error(`🛑 StreamExecutor: Reached max errors (${this.MAX_ERRORS}). Last error:`, errorDetails);
           setBusy(false);
           this.options.onError?.(error);
           reject(error);
         } else {
+          console.warn(`⚠️ StreamExecutor: Error ${this.errorRef.current}/${this.MAX_ERRORS}:`, errorDetails);
           addLine(`❌ Stream failed (${this.errorRef.current}/${this.MAX_ERRORS}) - check console for details`);
+          // Don't reject here - let it continue processing
         }
       };
       
@@ -326,11 +398,11 @@ Remember: Do NOT acknowledge or explain. Execute multiple function calls to buil
       return;
     }
     
-    this.toolCallParent.current.set(pc.call.call_id, pc.responseId);
+    // NEVER store response IDs for multi-server compatibility
+    this.toolCallParent.current.set(pc.call.call_id, null);
     this.pendingCalls.current.set(pc.call.call_id, pc.call);
     this.queueRef.current.push(pc.call.call_id);
-    console.log(`📥 Queued function call: ${pc.call.name} (${pc.call.call_id}) from response ${pc.responseId}`);
-    console.log(`📋 Queue now has ${this.queueRef.current.length} items`);
+    console.log(`📥 Queued: ${pc.call.name} - NO response ID stored for multi-server compatibility`);
     this.processQueue();
   }
 
@@ -348,9 +420,10 @@ Remember: Do NOT acknowledge or explain. Execute multiple function calls to buil
     const callId = this.queueRef.current[0];
     const call = this.pendingCalls.current.get(callId);
     const parentId = this.toolCallParent.current.get(callId);
+    console.log(`🔍 Processing call ${callId} with parentId: ${parentId} (should be null for multi-server compatibility)`);
     
-    if (!call || !parentId) {
-      this.options.addLine(`❌ Missing call details or parent for ${callId}`);
+    if (!call) {
+      this.options.addLine(`❌ Missing call details for ${callId}`);
       this.queueRef.current.shift();
       this.isProcessingRef.current = false;
       this.processQueue();
@@ -395,7 +468,8 @@ Remember: Do NOT acknowledge or explain. Execute multiple function calls to buil
         return;
       }
 
-      await this.openFollowUpStream(parentId, callId, typeof result === 'string' ? result : JSON.stringify(result));
+      // Pass null instead of parentId to ensure no response ID is used
+      await this.openFollowUpStream(null, callId, typeof result === 'string' ? result : JSON.stringify(result));
       
     } catch (error) {
       console.error('Error processing queue item:', error);
@@ -452,10 +526,18 @@ Remember: Do NOT acknowledge or explain. Execute multiple function calls to buil
         }
       ]);
 
-      console.log(`🔄 Opening follow-up stream for call_id: ${callId} with response_id: ${responseId}`);
+      console.log(`🔄 Opening follow-up stream for call_id: ${callId} (NO response_id continuation)`);
+      console.log(`🔍 StreamExecutor: Follow-up payload structure:`, {
+        type: "function_call_output",
+        call_id: callId,
+        output_length: outputContent.length,
+        using_response_id: undefined,
+        responseId_param: responseId
+      });
       
-      const ev = createPostEventSource(followUpPayload, responseId);
-      const responseIdRef = { current: responseId };
+      // DON'T pass responseId - let the server handle conversation state
+      const ev = createPostEventSource(followUpPayload, undefined);
+      const responseIdRef = { current: null };
 
       const callbacks: EventHandlerCallbacks = {
         addLine: this.options.addLine,
@@ -494,6 +576,13 @@ Remember: Do NOT acknowledge or explain. Execute multiple function calls to buil
       
       ev.onerror = (error) => {
         console.error('Follow-up EventSource error:', error);
+        console.error('Follow-up EventSource error details:', {
+          error,
+          callId,
+          responseId: 'NOT_USED',
+          errorType: error && (error as any).error?.name,
+          timestamp: new Date().toISOString()
+        });
         ev.close();
         
         if (error && (error as any).error?.name === 'AbortError') {

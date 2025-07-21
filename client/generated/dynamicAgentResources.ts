@@ -1,5 +1,5 @@
 // Auto-generated dynamic lists for agents at build time
-// Generated on: 2025-07-06T00:55:38.019Z
+// Generated on: 2025-07-14T05:32:25.717Z
 
 export interface DynamicAgentResources {
   groupIcons: {
@@ -53,7 +53,7 @@ export const availableGroupIcons = [
   "gcp_firewall",
   "gcp_instance_group",
   "gcp_replica_pool",
-
+  "gcp_optional_component_dashed",
   "azure_subscription_filled",
   "azure_subscription_border",
   "azure_resource_group_filled",

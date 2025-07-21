@@ -37,14 +37,8 @@ export function handleFunctionCall(
   const args = typeof argStr === "string" ? JSON.parse(argStr) : argStr || {};
   const { elkGraph, setElkGraph, mutations, safeSend } = helpers;
 
-  // Add detailed logging
-  console.log('🔧 handleFunctionCall invoked:', {
-    call_id,
-    name,
-    args,
-    graphSnapshot: JSON.stringify(elkGraph),
-    // No sessionMeta in helpers, so omit
-  });
+  // Essential logging only
+  console.log(`🔧 ${name} (${call_id})`);
 
   let result: any = null;
   // Always start from a deep copy so we never mutate the prev-state object
@@ -154,27 +148,30 @@ export function handleFunctionCall(
         break;
         
       case "batch_update":
-        console.log('🔍 batch_update arguments received:', args);
+        // Debug logging to see what's being passed
+        console.log('🔍 batch_update received arguments:', JSON.stringify(args, null, 2));
+        console.log('🔍 batch_update arg keys:', Object.keys(args));
+        console.log('🔍 batch_update arg types:', Object.keys(args).map(k => `${k}: ${typeof args[k]}`));
         
-        // First check if args is a graph object instead of operations
+        // Quick validation
         if (args.id || args.children || args.edges) {
           console.error('❌ batch_update received a graph object instead of operations array');
+          console.error('❌ Received object with keys:', Object.keys(args));
+          console.error('❌ Expected: { operations: [...] }');
           throw new Error(`batch_update requires an object with an 'operations' array. You passed a graph object instead. Please use: batch_update({ operations: [...] })`);
         }
         
-        // Check if operations exists
         if (!args.operations) {
           console.error('❌ batch_update missing operations parameter');
           throw new Error(`batch_update requires an 'operations' array. Example: batch_update({ operations: [{ name: "add_node", ... }] })`);
         }
         
-        // Check if operations is an array
         if (!Array.isArray(args.operations)) {
           console.error('❌ batch_update operations is not an array:', typeof args.operations);
           throw new Error(`batch_update 'operations' must be an array. Got ${typeof args.operations}. Example: batch_update({ operations: [{ name: "add_node", ... }] })`);
         }
         
-        // Validate each operation
+        // Validate operations
         args.operations.forEach((op, index) => {
           if (!op.name) {
             throw new Error(`Operation at index ${index} is missing required 'name' field`);
@@ -184,14 +181,13 @@ export function handleFunctionCall(
           }
         });
         
-        // Validate graph integrity before processing
         if (!updated || !updated.id) {
           console.error('❌ Invalid graph state detected');
           throw new Error(`Invalid graph state: graph must have an 'id' property`);
         }
         
         updated = mutations.batchUpdate(args.operations, graphCopy);
-        console.log(`🔄 Batch updated graph with ${args.operations.length} operations`);
+        console.log(`✅ batch_update: ${args.operations.length} operations completed`);
         break;
         
       default:
@@ -263,8 +259,12 @@ export function handleFunctionCall(
     result = {
       success: true,
       operation: name,
-      graph: graphSummary,
       message: `${name} completed successfully. Graph now has ${graphSummary.nodeCount} nodes and ${graphSummary.edgeCount} edges.`,
+      graphInfo: {
+        nodeCount: graphSummary.nodeCount,
+        edgeCount: graphSummary.edgeCount,
+        note: "This is informational only - do NOT pass this object to batch_update or other functions"
+      },
       summary: {
         totalNodes: graphSummary.nodeCount,
         totalEdges: graphSummary.edgeCount,
@@ -273,11 +273,8 @@ export function handleFunctionCall(
       }
     };
     
-    // Log the result for non-early-returning cases
-    console.log('🔧 handleFunctionCall result:', { call_id, name, result });
+    // Update graph state
     setElkGraph(updated);
-    console.log(`🔄 Graph state updated after ${name}`);
-    console.log('Updated graph:', updated);
     
     // Send the result back to the agent
     safeSend({
@@ -294,16 +291,20 @@ export function handleFunctionCall(
     
     // Create detailed error result for the agent
     const errorMessage = err instanceof Error ? err.message : String(err);
+    
+    // Add specific guidance for batch_update errors
+    let specificGuidance = '';
+    if (name === 'batch_update' && errorMessage.includes('graph object')) {
+      specificGuidance = '\n\n🔥 CRITICAL: You MUST use the operations array format:\nbatch_update({ operations: [{ name: "add_node", nodename: "my-node", parentId: "root" }] })\n\nNEVER pass graph objects like { id: "...", children: [...] }!';
+    }
+    
     result = { 
       success: false, 
       operation: name,
       error: errorMessage,
-      message: `❌ OPERATION FAILED: ${name} - ${errorMessage}`,
-      errorType: err instanceof Error ? err.constructor.name : 'UnknownError',
+      message: `❌ OPERATION FAILED: ${name} - ${errorMessage}${specificGuidance}`,
       details: `The operation '${name}' could not be completed. Please check the error message and retry with corrected parameters.`
     };
-    
-    console.error('🔧 handleFunctionCall ERROR result:', { call_id, name, result });
     
     safeSend({
       type: "conversation.item.create",

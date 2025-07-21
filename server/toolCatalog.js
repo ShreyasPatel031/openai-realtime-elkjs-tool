@@ -1,11 +1,4 @@
-import { chunkTools } from "../utils/splitTools.js";
-
-// Import dynamic agent resources generated at build time
-import { 
-  availableGroupIcons, 
-  groupIconInstructions 
-} from "../generated/dynamicAgentResources";
-
+// Simple tool catalog for server-side use (JavaScript version)
 export const allTools = [
   {
     type: "function",
@@ -17,9 +10,7 @@ export const allTools = [
         requirements: {
           type: "array",
           description: "Array of user requirements/decisions/constraints",
-          items: {
-            type: "string"
-          }
+          items: { type: "string" }
         },
         questions: {
           type: "array",
@@ -39,9 +30,7 @@ export const allTools = [
               options: {
                 type: "array",
                 description: "Array of answer options",
-                items: {
-                  type: "string"
-                }
+                items: { type: "string" }
               },
               impact: {
                 type: "string",
@@ -90,12 +79,11 @@ export const allTools = [
             },
             icon: {
               type: "string",
-              description: "Icon name to display for the node (e.g., 'browser_client', 'mobile_app', 'cloud_cdn', etc.)"
+              description: "Icon name to display for the node"
             },
             groupIcon: {
-                  type: "string",
-              description: "Group icon name for visual theming with proper cloud provider colors. Use group icons for logical containers.",
-              enum: availableGroupIcons
+              type: "string",
+              description: "Group icon name for visual theming"
             }
           }
         }
@@ -121,7 +109,7 @@ export const allTools = [
   {
     type: "function",
     name: "move_node",
-    description: "Moves a node from one parent to another and updates edge attachments. IMPORTANT: When moving a node into a leaf node (node with no children), an automatic neutral group will be created containing both nodes using 'gcp_system' group icon.",
+    description: "Moves a node from one parent to another and updates edge attachments",
     parameters: {
       type: "object",
       properties: {
@@ -182,7 +170,7 @@ export const allTools = [
   {
     type: "function",
     name: "group_nodes",
-    description: `Creates a new group node and moves specified nodes into it with group icon styling for proper cloud provider theming. ${groupIconInstructions}`,
+    description: "Creates a new group node and moves specified nodes into it",
     parameters: {
       type: "object",
       properties: {
@@ -199,19 +187,22 @@ export const allTools = [
           type: "string",
           description: "ID/name for the new group node"
         },
-        groupIconName: {
+        label: {
           type: "string",
-          description: "Group icon name for visual theming and background colors. REQUIRED for proper cloud provider styling. Choose appropriate provider icon (aws_, gcp_, azure_).",
-          enum: availableGroupIcons
+          description: "Display label for the group"
+        },
+        groupIcon: {
+          type: "string",
+          description: "Group icon name for the group"
         }
       },
-      required: ["nodeIds", "parentId", "groupId", "groupIconName"]
+      required: ["nodeIds", "parentId", "groupId"]
     }
   },
   {
     type: "function",
     name: "remove_group",
-    description: "Removes a group node by moving its children up to the parent",
+    description: "Removes a group and moves its children to the parent",
     parameters: {
       type: "object",
       properties: {
@@ -226,7 +217,7 @@ export const allTools = [
   {
     type: "function",
     name: "batch_update",
-    description: "Executes a series of graph operations in order. CRITICAL: You must pass { operations: [...] } structure. NEVER pass a graph object with id/children/edges. Format: batch_update({ operations: [{ name: \"add_node\", nodename: \"web-server\", parentId: \"root\" }] })",
+    description: "Executes a series of graph operations in order. CRITICAL: You must pass { operations: [...] } structure. NEVER pass a graph object with id/children/edges. Format: batch_update({ operations: [{ name: \"add_node\", nodename: \"server\", parentId: \"root\" }] })",
     parameters: {
       type: "object",
       properties: {
@@ -280,14 +271,13 @@ export const allTools = [
                 type: "string",
                 description: "For group_nodes or remove_group: ID of the group"
               },
-              groupIconName: {
+              groupIcon: {
                 type: "string",
-                description: "For group_nodes: REQUIRED group icon name for proper cloud provider styling",
-                enum: availableGroupIcons
+                description: "For group_nodes: Group icon name for the group"
               },
               data: {
                 type: "object",
-                description: "For add_node: Additional node data including groupIcon"
+                description: "For add_node: Additional node data including icon and label"
               },
               label: {
                 type: "string",
@@ -295,14 +285,11 @@ export const allTools = [
               }
             },
             required: ["name"]
-          }
+          },
+          description: "List of operations to execute. Each operation uses 'name' field to specify the operation type."
         }
       },
       required: ["operations"]
     }
   }
-];
-
-export function toolPages() {
-  return chunkTools(allTools);
-} 
+]; 

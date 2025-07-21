@@ -5,24 +5,20 @@ import { fileURLToPath } from "url";
 import { dirname, resolve } from "path";
 import "dotenv/config";
 import cors from 'cors';
-import OpenAI from 'openai';
 import multer from 'multer';
 // Import tools from catalog
-import { allTools } from "../client/realtime/toolCatalog.ts";
+import { allTools } from "./toolCatalog.js";
+import ConnectionManager from './connectionManager.js';
 
 const app = express();
 const apiKey = process.env.OPENAI_API_KEY;
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const connectionManager = ConnectionManager.getInstance();
 
 if (!apiKey) {
   console.error("OPENAI_API_KEY is not set in .env file");
   process.exit(1);
 }
-
-// Initialize OpenAI client
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 // Configure multer for handling image uploads
 const upload = multer({
@@ -46,8 +42,18 @@ app.use(express.json());                     // for application/json
 app.use(express.urlencoded({ extended: false })); // for x-www-form-urlencoded
 
 // Stream route for development
-import streamHandler from './streamRoute.ts';
+import streamHandler from './streamRoute.js';
 app.post("/stream", upload.array('images', 5), streamHandler);
+
+// Connection manager stats endpoint
+app.get("/api/connection-stats", (req, res) => {
+  const stats = connectionManager.getStats();
+  res.json({
+    ...stats,
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
 
 // API route for chat completions - MUST be before Vite middleware
 app.post("/chat", async (req, res) => {
@@ -62,9 +68,11 @@ app.post("/chat", async (req, res) => {
 
     console.log("Calling OpenAI with messages:", messages);
 
-    // Use Chat Completions API with tools from catalog
-    const response = await client.chat.completions.create({
-      model: "o4-mini-2025-04-16",
+    // Use connection manager for chat completions
+    const response = await connectionManager.queueRequest(async () => {
+      const client = connectionManager.getAvailableClient();
+      return client.chat.completions.create({
+        model: "o3",
       messages: messages,
       tools: allTools.map(tool => ({
         type: "function",
@@ -76,6 +84,7 @@ app.post("/chat", async (req, res) => {
       })),
       tool_choice: "auto"
     });
+    }, 'low');
 
     console.log("OpenAI response received:", response);
 
@@ -130,8 +139,10 @@ app.post("/questionnaire", async (req, res) => {
 
     console.log("Calling OpenAI with questionnaire agent messages:", messages);
 
-    // Use Chat Completions API with tools from catalog, forcing log_requirements_and_generate_questions
-    const response = await client.chat.completions.create({
+    // Use connection manager for questionnaire completions
+    const response = await connectionManager.queueRequest(async () => {
+      const client = connectionManager.getAvailableClient();
+      return client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: messages,
       tools: allTools.map(tool => ({
@@ -149,6 +160,7 @@ app.post("/questionnaire", async (req, res) => {
       temperature: 0.2,
       max_tokens: 4096
     });
+    }, 'normal');
 
     console.log("OpenAI questionnaire response received:", response);
 

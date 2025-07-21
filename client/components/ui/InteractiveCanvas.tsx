@@ -47,6 +47,7 @@ import StreamViewer, { StreamViewerHandle } from "../StreamViewer"
 import Chatbox from "./Chatbox"
 import ChatWindow from "./ChatWindow"
 // import DebugGeometry from '../DebugGeometry'
+import { diagnoseStateSynchronization, cleanupDuplicateGroups } from '../../utils/graph_helper_functions'
 
 const ChatBox = Chatbox as React.ComponentType<ChatBoxProps>
 
@@ -316,11 +317,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       };
       
       // Expose state synchronization diagnostic and cleanup function
-      const { diagnoseStateSynchronization, cleanupDuplicateGroups } = require('../../utils/graph_helper_functions');
       (window as any).diagnoseStateSynchronization = diagnoseStateSynchronization;
       (window as any).cleanupDuplicateGroups = () => {
-        const cleaned = cleanupDuplicateGroups(rawGraph);
-        setRawGraph(cleaned);
+        const cleaned = cleanupDuplicateGroups(rawGraph as any);
+        setRawGraph(cleaned as any);
         return cleaned;
       };
       

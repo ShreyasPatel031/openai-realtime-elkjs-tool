@@ -148,18 +148,7 @@ export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdR
       }
     } else if (delta.type === "function_call_output") {
       // Handle function call output events from the server
-      addLine(`📨 Received function call output for call_id: ${delta.call_id}`);
-      console.log(`📨 Received function call output for call_id: ${delta.call_id}`);
-      
-      // Parse and log the output for debugging
-      try {
-        const output = JSON.parse(delta.output);
-        if (output.graph) {
-          console.log('🔍 Current ELK Graph:', output.graph);
-        }
-      } catch (e) {
-        console.log('📝 Function output (not JSON):', delta.output);
-      }
+      console.log(`📨 Function output received: ${delta.call_id}`);
       
       // Mark this call as handled to prevent the StreamExecutor from trying to send another output
       if (handledCalls) {
@@ -167,19 +156,52 @@ export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdR
       }
     } else if (delta.type === "error") {
       // Handle error events from the server
-      addLine(`❌ Error: ${delta.error || 'Unknown error'}`);
-      console.log('❌ Stream error:', delta);
+      const errorMessage = delta.error || 'Unknown error';
+      
+      // Enhance error messages with recovery information but still show them
+      let displayMessage = errorMessage;
+      let recoveryInfo = '';
+      
+      // Add context for 404 errors
+      if (errorMessage.includes('404') && errorMessage.includes('not found')) {
+        const isResponseIdError = errorMessage.includes('rs_') || errorMessage.includes('response');
+        const isFunctionCallError = errorMessage.includes('fc_') || errorMessage.includes('function');
+        const isMessageIdError = errorMessage.includes('msg_') || errorMessage.includes('message');
+        const isOtherOpenAIId = errorMessage.match(/(run_|thread_|asst_|chatcmpl_)/);
+        
+        if (isResponseIdError || isFunctionCallError || isMessageIdError || isOtherOpenAIId) {
+          recoveryInfo = ' (Server attempting automatic recovery with fresh conversation)';
+        }
+      }
+      
+      // Add context for connection errors
+      if (errorMessage.includes('Socket timeout')) {
+        recoveryInfo = ' (Automatic reconnection in progress - O3 model processing time)';
+      } else if (errorMessage.includes('Premature close')) {
+        recoveryInfo = ' (Automatic reconnection in progress - connection issue)';
+      } else if (errorMessage.includes('session may have expired')) {
+        recoveryInfo = ' (Server creating fresh conversation session)';
+      }
+      
+      // Show all errors with enhanced context
+      addLine(`❌ Error: ${displayMessage}${recoveryInfo}`);
+      console.error('❌ Stream error:', delta);
+      console.error('❌ Stream error details:', {
+        errorType: delta.type,
+        errorMessage,
+        recoveryInfo,
+        fullDelta: delta,
+        timestamp: new Date().toISOString()
+      });
     } else if (delta.type === "response.completed" || delta.type === "response.done") {
       // Keep the id
       if (!responseIdRef.current && delta.response?.id) {
         responseIdRef.current = delta.response.id;
-        console.log("Captured responseId from completed →", responseIdRef.current);
       }
 
-      addLine(`✅ Stream completed`);
       const usage = delta.response?.usage || delta.usage;
       if (usage?.reasoning_tokens) {
-        addLine(`🧠 Reasoning tokens used: ${usage.reasoning_tokens}`);
+        addLine(`🧠 Reasoning tokens: ${usage.reasoning_tokens}`);
       }
       if (usage?.total_tokens) {
         addLine(`📊 Total tokens: ${usage.total_tokens}`);

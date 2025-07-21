@@ -174,8 +174,8 @@ while true; do
     
     # Check if any servers have died
     for i in "${!PIDS[@]}"; do
-        local pid=${PIDS[$i]}
-        local port=$((3000 + $i))
+        pid=${PIDS[$i]}
+        port=$((3000 + $i))
         
         if [[ -n "$pid" ]] && ! kill -0 $pid 2>/dev/null; then
             echo -e "${RED}⚠️  Server on port $port (PID: $pid) has stopped unexpectedly${NC}"

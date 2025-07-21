@@ -1,0 +1,5 @@
+(node:40417) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+--import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("ts-node/esm", pathToFileURL("./"));'
+(Use `node --trace-warnings ...` to show where the warning was created)
+🔧 Initialized 5 OpenAI client instances
+🚀 Server running at http://localhost:3000

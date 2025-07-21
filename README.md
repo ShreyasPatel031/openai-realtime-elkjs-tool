@@ -1,65 +1,76 @@
 # OpenAI Realtime Console
 
-This is an example application showing how to use the [OpenAI Realtime API](https://platform.openai.com/docs/guides/realtime) with [WebRTC](https://platform.openai.com/docs/guides/realtime-webrtc).
+A console application for the OpenAI Realtime API.
 
-## Installation and usage
+## Quick Start
 
-Before you begin, you'll need an OpenAI API key - [create one in the dashboard here](https://platform.openai.com/settings/api-keys). Create a `.env` file from the example file and set your API key in there:
-
-```bash
-cp .env.example .env
-```
-
-Running this application locally requires [Node.js](https://nodejs.org/) to be installed. Install dependencies for the application with:
-
-```bash
-npm install
-```
-
-Start the application server with:
-
+### Single Server (Original)
 ```bash
 npm run dev
 ```
 
-This should start the console application on [http://localhost:3000](http://localhost:3000).
+### Multi-Server Setup (Recommended for High Availability)
+```bash
+# Start 10 server instances on ports 3000-3009
+./scripts/run-multi-servers.sh
 
-This application is a minimal template that uses [express](https://expressjs.com/) to serve the React frontend contained in the [`/client`](./client) folder. The server is configured to use [vite](https://vitejs.dev/) to build the React frontend.
+# The script handles:
+# ✅ Auto-cleanup of existing servers
+# ✅ Starts 10 fresh server instances
+# ✅ Graceful shutdown with Ctrl+C
+# ✅ Logs saved to logs/ directory
+# ✅ Process monitoring
+```
 
-This application shows how to send and receive Realtime API events over the WebRTC data channel and configure client-side function calling. You can also view the JSON payloads for client and server events using the logging panel in the UI.
+## Multi-Server Features
 
-For a more comprehensive example, see the [OpenAI Realtime Agents](https://github.com/openai/openai-realtime-agents) demo built with Next.js, using an agentic architecture inspired by [OpenAI Swarm](https://github.com/openai/swarm).
+**Benefits:**
+- **High Availability**: Multiple server instances for redundancy
+- **Load Distribution**: OpenAI requests distributed across instances
+- **Multi-Server Compatibility**: No 404 errors between different server instances
+- **Easy Management**: Single script for start/stop operations
 
-## Previous WebSockets version
+**Access Points:**
+- http://localhost:3000 through http://localhost:3009
+- All instances share the same codebase and functionality
+- Load balancer compatible
 
-The previous version of this application that used WebSockets on the client (not recommended in browsers) [can be found here](https://github.com/openai/openai-realtime-console/tree/websockets).
+**Monitoring:**
+```bash
+# View server logs
+tail -f logs/server-3000.log
 
-## License
+# Check running instances
+lsof -i :3000-3009
 
-MIT
+# Stop all servers
+# Just press Ctrl+C in the script terminal
+```
+
+## Architecture
+
+This console uses the OpenAI O3 model with ultra-comprehensive conversation cleaning for multi-server compatibility. Key features:
+
+- **404 Error Prevention**: Automatic cleaning of OpenAI-specific IDs
+- **Timeout Elimination**: O3 model can process for unlimited time
+- **Connection Pooling**: 5 OpenAI client instances per server
+- **Automatic Recovery**: 404 errors trigger fresh conversation recovery
 
 ## Development
 
-### Running Multiple Dev Servers
+### Requirements
+- Node.js 18+
+- OpenAI API key with O3 model access
 
-The development server now automatically finds the next available port if the default port (3000) is in use. You can run multiple instances simultaneously:
-
+### Setup
 ```bash
-# Terminal 1: Starts on port 3000
-npm run dev
-
-# Terminal 2: Automatically starts on port 3001 
-npm run dev
-
-# Terminal 3: Automatically starts on port 3002
-npm run dev
+npm install
+npm run build
+./scripts/run-multi-servers.sh
 ```
 
-Each server will display which port it's running on:
-- If port 3000 is available: `🚀 Server running at http://localhost:3000`
-- If port 3000 is in use: `🚀 Server running at http://localhost:3001 (Port 3000 was in use, using 3001 instead)`
-
-You can also specify a custom starting port using the PORT environment variable:
-```bash
-PORT=4000 npm run dev  # Starts checking from port 4000
-```
+### File Structure
+- `server/` - Server-side code with multi-server support
+- `client/` - React frontend with real-time architecture generation
+- `scripts/` - Utility scripts including multi-server manager
+- `logs/` - Server logs (auto-created)

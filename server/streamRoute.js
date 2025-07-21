@@ -531,12 +531,18 @@ export default async function streamHandler(req, res) {
         } catch (apiError) {
           console.error('❌ OpenAI API Error:', apiError);
           
-          // 404 errors are now handled directly in the stream processing loop above
+          // Check if this is a 404 error that should trigger recovery
+          const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+          if (errorMessage.includes('404') && errorMessage.includes('not found')) {
+            console.log(`🔍 [${requestId}] 404 error in API call - this should be handled by recovery in next iteration`);
+            // Don't terminate - let the conversation continue to next turn where recovery will handle it
+            continue;
+          }
           
-          // Original error handling for non-404 errors or failed retries
+          // Original error handling for non-404 errors only
           send({ 
             type: "error", 
-            error: apiError instanceof Error ? apiError.message : "OpenAI API error"
+            error: errorMessage
           });
           res.write("data: [DONE]\n\n");
           res.end();

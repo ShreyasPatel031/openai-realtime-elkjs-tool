@@ -243,6 +243,8 @@ export const useChatSession = ({
   const handleChatSubmit = useCallback(async (message: string) => {
     if (!message.trim()) return;
 
+    console.log('🔧 handleChatSubmit called with message:', message);
+
     const messageId = crypto.randomUUID();
     const newMessage: Message = {
       id: messageId,
@@ -254,22 +256,81 @@ export const useChatSession = ({
     messagesMap.current.set(messageId, newMessage);
     triggerUpdate();
     
-    // If there's a session, send the message to the AI
-    if (isSessionActive && sendTextMessage) {
+    // Check for special image processing marker
+    if (message === "__IMAGES_PRESENT__") {
+      const imageContent = (window as any).chatImageContent;
+      if (imageContent) {
+        console.log('📸 Processing images with reasoning agent');
+        // Make direct API call for image processing
+        try {
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              messages: [
+                {
+                  role: 'user',
+                  content: imageContent
+                }
+              ]
+            }),
+          });
+
+          const data = await response.json();
+          console.log('✅ Image processing response:', data);
+
+          // Add response to chat
+          messagesMap.current.set(`api-response-${messageId}`, {
+            id: `api-response-${messageId}`,
+            content: data.output_text || 'Image processed successfully',
+            sender: 'assistant'
+          });
+          triggerUpdate();
+
+          // Clear the stored image content
+          (window as any).chatImageContent = null;
+          return; // Exit early - don't trigger process_user_requirements
+        } catch (error) {
+          console.error('❌ Image processing failed:', error);
+          messagesMap.current.set(`error-${messageId}`, {
+            id: `error-${messageId}`,
+            content: 'Failed to process images. Please try again.',
+            sender: "assistant"
+          });
+          triggerUpdate();
+          return; // Exit early on error
+        }
+      } else {
+        console.warn('⚠️ Image marker present but no image content found');
+      }
+    } else {
+      // For regular text messages, store the message for the reasoning agent
+      const simplePrompt = message || "Please analyze and create architecture diagrams based on the user input.";
+      (window as any).chatConversationData = simplePrompt;
+      console.log('💬 Stored conversation data for reasoning agent:', simplePrompt);
+    }
+
+    // Always trigger the reasoning agent directly (no real-time agent)
+    if (process_user_requirements) {
+      console.log('🚀 Triggering reasoning agent via process_user_requirements');
       try {
-        await sendTextMessage(message);
+        const result = process_user_requirements();
+        console.log('✅ Reasoning agent triggered:', result);
       } catch (error) {
-        console.error('Failed to send message:', error);
-        // Add error message to Map
-        messagesMap.current.set(`error-${messageId}`, {
-          id: `error-${messageId}`,
-          content: 'Failed to send message. Please try again.',
+        console.error('❌ Failed to trigger reasoning agent:', error);
+        messagesMap.current.set(`error-reasoning-${messageId}`, {
+          id: `error-reasoning-${messageId}`,
+          content: 'Failed to start reasoning agent. Please try again.',
           sender: "assistant"
         });
         triggerUpdate();
       }
+    } else {
+      console.warn('⚠️ process_user_requirements not available');
     }
-  }, [isSessionActive, sendTextMessage, triggerUpdate]);
+  }, [triggerUpdate, process_user_requirements]);
 
   // Clear messages when session becomes inactive
   useEffect(() => {

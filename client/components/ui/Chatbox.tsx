@@ -5,7 +5,6 @@ import { Input } from "./input"
 import { Button } from "./button"
 import { Send, Mic, X, Loader2, ImageIcon } from "lucide-react"
 import { cn } from "../../lib/utils"
-import { QuestionnaireExecutor } from "../../questionnaire/QuestionnaireExecutor"
 
 interface ChatBoxProps {
   onSubmit: (message: string) => void;
@@ -325,34 +324,11 @@ const ChatBox: React.FC<ChatBoxProps> = ({
           fileInputRef.current.value = ''; 
         }
       } else {
-        // Handle text-only submission
-        console.log('🔧 Starting reasoning agent with user input:', message);
+        // Handle text-only submission - send directly to reasoning agent
+        console.log('🔧 Sending text directly to reasoning agent:', message);
         
-        // Use questionnaire executor for text-only
-        const executor = new QuestionnaireExecutor();
-
-        await executor.execute(
-          message,
-          () => {
-            console.log('🚀 Questionnaire agent started');
-          },
-          (questions) => {
-            console.log('✅ Questions received:', questions);
-            console.log('✅ Questionnaire completed, triggering reasoning agent...');
-            setIsProcessing(false);
-            
-            // Trigger reasoning agent after questions are displayed
-            if (onTriggerReasoning) {
-              setTimeout(() => {
-                onTriggerReasoning();
-              }, 2000); // 2 second delay to let user see questions
-            }
-          },
-          (error) => {
-            console.error('❌ Questionnaire agent failed:', error);
-            setIsProcessing(false);
-          }
-        );
+        // Send the text message directly to reasoning agent via onSubmit
+        onSubmit(message);
         
         // Clear the input
         setMessage("");

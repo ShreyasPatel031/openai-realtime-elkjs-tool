@@ -1,3 +1,7 @@
+// Bypass SSL certificate validation for development
+// This MUST be at the very top before any other imports
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 import express from "express";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
@@ -214,6 +218,10 @@ app.use(vite.middlewares);
 // API route for token generation
 app.get("/token", async (req, res) => {
   try {
+    console.log("🔍 Token endpoint called");
+    console.log("🔍 API Key available:", !!apiKey);
+    console.log("🔍 API Key prefix:", apiKey ? apiKey.substring(0, 7) + "..." : "none");
+    
     const response = await fetch(
       "https://api.openai.com/v1/realtime/sessions",
       {
@@ -223,30 +231,59 @@ app.get("/token", async (req, res) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "gpt-4o-mini-realtime-preview",
+          model: "gpt-4o-realtime-preview-2024-12-17",
           voice: "verse",
         }),
       },
     );
 
+    console.log("🔍 OpenAI API response status:", response.status);
+    console.log("🔍 OpenAI API response headers:", response.headers);
+
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error("OpenAI API error:", errorData);
+      const errorText = await response.text();
+      console.error("❌ OpenAI API error:", response.status, errorText);
+      
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch (parseError) {
+        errorData = { error: { message: errorText } };
+      }
+      
       return res.status(response.status).json({ 
-        error: errorData.error?.message || "Failed to generate token" 
+        error: errorData.error?.message || errorData.error || "Failed to generate token",
+        details: errorData,
+        status: response.status
       });
     }
 
     const data = await response.json();
+    console.log("✅ OpenAI API response data structure:", {
+      hasData: !!data,
+      hasClientSecret: !!data?.client_secret,
+      hasClientSecretValue: !!data?.client_secret?.value,
+      keys: Object.keys(data || {})
+    });
+    
     if (!data || !data.client_secret || !data.client_secret.value) {
-      console.error("Invalid response from OpenAI:", data);
-      return res.status(500).json({ error: "Invalid response from OpenAI" });
+      console.error("❌ Invalid response from OpenAI:", data);
+      return res.status(500).json({ 
+        error: "Invalid response from OpenAI - missing client_secret",
+        receivedData: data
+      });
     }
 
+    console.log("✅ Token generated successfully");
     res.json(data);
   } catch (error) {
-    console.error("Token generation error:", error);
-    res.status(500).json({ error: "Failed to generate token" });
+    console.error("❌ Token generation error:", error);
+    console.error("❌ Error stack:", error.stack);
+    res.status(500).json({ 
+      error: "Failed to generate token",
+      details: error.message,
+      type: error.constructor.name
+    });
   }
 });
 

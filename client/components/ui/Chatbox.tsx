@@ -13,7 +13,6 @@ interface ChatBoxProps {
   isAgentReady?: boolean;
   onStartSession?: () => void;
   onStopSession?: () => void;
-  onTriggerReasoning?: () => void;
 }
 
 const ChatBox: React.FC<ChatBoxProps> = ({ 
@@ -22,8 +21,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   isConnecting = false,
   isAgentReady = false,
   onStartSession, 
-  onStopSession,
-  onTriggerReasoning
+  onStopSession
 }) => {
   const [message, setMessage] = useState("")
   const [isExpanded, setIsExpanded] = useState(false)

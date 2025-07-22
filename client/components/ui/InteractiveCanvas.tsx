@@ -1037,11 +1037,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           isAgentReady={isAgentReady}
           onStartSession={startSession}
           onStopSession={stopSession}
-          onTriggerReasoning={() => {
-            if (streamViewerRef && streamViewerRef.current && streamViewerRef.current.start) {
-              streamViewerRef.current.start();
-            }
-          }}
         />
       </div>
     </div>

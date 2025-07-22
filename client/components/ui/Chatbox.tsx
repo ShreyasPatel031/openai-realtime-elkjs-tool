@@ -371,12 +371,9 @@ const ChatBox: React.FC<ChatBoxProps> = ({
   };
 
   const handleMicClick = () => {
-    // Start the real-time session when the start button is clicked
+    // Just expand the chat box - no real-time session needed
     if (!isExpanded && !isTransitioning) {
-      if (onStartSession) {
-        console.log('🎤 Start button clicked - starting real-time session');
-        onStartSession();
-      }
+      console.log('🎤 Start button clicked - opening chat box for reasoning agent');
       toggleExpand();
     }
   }

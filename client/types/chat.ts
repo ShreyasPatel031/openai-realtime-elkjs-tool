@@ -25,10 +25,7 @@ export interface Message {
   animationType?: 'reasoning' | 'function-calling';
 }
 
-export interface ChatWindowProps {
-  messages: Message[];
-  isMinimized?: boolean;
-}
+
 
 export interface InteractiveCanvasProps {
   isSessionActive?: boolean;

@@ -26,7 +26,7 @@ import "reactflow/dist/style.css"
 import { cn } from "../../lib/utils"
 
 // Import types from separate type definition files
-import { ChatBoxProps, Message as ChatMessage, ChatWindowProps, InteractiveCanvasProps } from "../../types/chat"
+import { ChatBoxProps, Message as ChatMessage, InteractiveCanvasProps } from "../../types/chat"
 import { CustomNode, NodeData, EdgeData, ElkGraph, ElkGraphNode, ElkGraphEdge } from "../../types/graph"
 import { RawGraph } from "../graph/types/index"
 import { getInitialElkGraph } from "../graph/initialGraph"
@@ -45,7 +45,6 @@ import DevPanel from "../DevPanel"
 import StreamViewer, { StreamViewerHandle } from "../StreamViewer"
 
 import Chatbox from "./Chatbox"
-import ChatWindow from "./ChatWindow"
 // import DebugGeometry from '../DebugGeometry'
 import { diagnoseStateSynchronization, cleanupDuplicateGroups } from '../../utils/graph_helper_functions'
 
@@ -915,12 +914,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           </div>
         )}
         
-        {/* Chat overlay */}
-        <div className="absolute top-10 left-4 z-10 max-w-md pointer-events-none">
-          <div className="pointer-events-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg overflow-auto max-h-[calc(100vh - 200px)]">
-            <ChatWindow messages={messages} isMinimized={true} />
-          </div>
-        </div>
+
 
         {/* Dev Panel Toggle Button and Visualization Toggle */}
         <div className="absolute top-4 right-4 z-[100] flex flex-col gap-2">

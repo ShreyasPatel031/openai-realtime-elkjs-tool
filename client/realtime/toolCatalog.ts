@@ -289,8 +289,8 @@ export const allTools = [
                 type: "object",
                 description: "For add_node: Additional node data including groupIcon"
               },
-              label: {
-                type: "string",
+                  label: {
+                    type: "string",
                 description: "For add_edge: Optional edge label"
               }
             },

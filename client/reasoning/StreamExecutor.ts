@@ -369,7 +369,7 @@ Remember: Do NOT acknowledge or explain. Execute multiple function calls to buil
           addLine(`❌ Network error - please check your internet connection`);
           this.incError();
         } else {
-          this.incError();
+        this.incError();
         }
         
         if (this.errorRef.current >= this.MAX_ERRORS) {

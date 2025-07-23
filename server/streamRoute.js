@@ -83,8 +83,8 @@ export default async function streamHandler(req, res) {
     // Helper to send SSE messages
     const send = (obj) => {
       try {
-        const data = `data: ${JSON.stringify(obj)}\n\n`;
-        res.write(data);
+      const data = `data: ${JSON.stringify(obj)}\n\n`;
+      res.write(data);
       } catch (writeError) {
         console.error('❌ Failed to write to response stream:', writeError.message);
         if (writeError.code === 'EPIPE' || writeError.code === 'ECONNRESET') {
@@ -454,16 +454,16 @@ export default async function streamHandler(req, res) {
                 }
               } else {
                 // Non-404 errors - send directly to client
-                send({ 
-                  type: "error", 
+              send({ 
+                type: "error", 
                   error: errorMessage
-                });
+              });
               }
               continue;
             }
             
             try {
-              send(delta);
+            send(delta);
             } catch (sendError) {
               if (sendError.message === 'Client disconnected') {
                 console.warn('⚠️ Client disconnected - stopping stream processing');
@@ -478,13 +478,13 @@ export default async function streamHandler(req, res) {
               
               // Only create function call output if not already provided by client
               if (!isFunctionCallOutput) {
-                const fco = {
-                  type: "function_call_output",
-                  call_id: funcCall.call_id,
-                  output: JSON.stringify(elkGraph)
-                };
-                
-                              send(fco);
+              const fco = {
+                type: "function_call_output",
+                call_id: funcCall.call_id,
+                output: JSON.stringify(elkGraph)
+              };
+              
+              send(fco);
                                   finalCleanedConversation.push(fco);
               } else {
                 console.log(`📥 Function call output already provided by client for call_id: ${funcCall.call_id}`);
@@ -577,12 +577,12 @@ export default async function streamHandler(req, res) {
       // Only send error if client is still connected
       if (!res.destroyed && !res.closed) {
         try {
-          send({ 
-            type: "error", 
-            error: error instanceof Error ? error.message : "Unknown error"
-          });
-          res.write("data: [DONE]\n\n");
-          res.end();
+      send({ 
+        type: "error", 
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+      res.write("data: [DONE]\n\n");
+      res.end();
         } catch (finalError) {
           console.error('❌ Failed to send final error message:', finalError.message);
         }
@@ -603,9 +603,9 @@ export default async function streamHandler(req, res) {
     // Only send error response if client is still connected
     if (!res.destroyed && !res.closed) {
       try {
-        return res.status(500).json({ 
-          error: error instanceof Error ? error.message : String(error)
-        });
+    return res.status(500).json({ 
+      error: error instanceof Error ? error.message : String(error)
+    });
       } catch (responseError) {
         console.error('❌ Failed to send error response:', responseError.message);
       }

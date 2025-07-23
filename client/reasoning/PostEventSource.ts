@@ -14,25 +14,45 @@ export interface PostEventSource extends EventTarget {
 
 // Helper to compress payload using base64 to reduce size
 const compressPayload = async (payload: string): Promise<string> => {
+  console.log('🔄 Starting compression for payload of', payload.length, 'characters');
+  
   // Use TextEncoder to convert string to Uint8Array
   const encoder = new TextEncoder();
   const data = encoder.encode(payload);
+  console.log('🔄 Encoded payload to', data.length, 'bytes');
   
   // Create a buffer to hold compressed data
   const cs = new CompressionStream('gzip');
   const writer = cs.writable.getWriter();
-  await writer.write(data);
+  console.log('🔄 Created compression stream and writer');
+  
+  // Write data in smaller chunks to avoid browser hanging
+  const chunkSize = 8192; // 8KB chunks
+  console.log('🔄 Writing data in chunks of', chunkSize, 'bytes');
+  
+  for (let i = 0; i < data.length; i += chunkSize) {
+    const chunk = data.slice(i, i + chunkSize);
+    await writer.write(chunk);
+    console.log('🔄 Wrote chunk', Math.floor(i/chunkSize) + 1, '/', Math.ceil(data.length/chunkSize));
+  }
+  
+  console.log('🔄 Finished writing all chunks, closing writer');
   await writer.close();
+  console.log('🔄 Closed compression writer');
   
   // Get the compressed data from the stream
   const reader = cs.readable.getReader();
   const chunks: Uint8Array[] = [];
+  console.log('🔄 Starting to read compressed chunks');
   
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     chunks.push(value);
+    console.log('🔄 Read chunk of', value.length, 'bytes, total chunks:', chunks.length);
   }
+  
+  console.log('🔄 Finished reading chunks, total:', chunks.length);
   
   // Combine chunks and convert to base64
   const compressed = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
@@ -42,7 +62,26 @@ const compressPayload = async (payload: string): Promise<string> => {
     offset += chunk.length;
   }
   
-  return btoa(String.fromCharCode(...compressed));
+  console.log('🔄 Combined chunks into', compressed.length, 'bytes');
+  
+  // Fixed: Use chunk-based approach to avoid spread operator issues with large arrays
+  let binaryString = '';
+  const stringChunkSize = 8192; // Process in 8KB chunks to avoid call stack issues
+  console.log('🔄 Converting to binary string in chunks of', stringChunkSize);
+  
+  for (let i = 0; i < compressed.length; i += stringChunkSize) {
+    const chunk = compressed.slice(i, i + stringChunkSize);
+    binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+    if (i % (stringChunkSize * 10) === 0) {
+      console.log('🔄 Processed', i, '/', compressed.length, 'bytes');
+    }
+  }
+  
+  console.log('🔄 Finished binary string conversion, encoding to base64');
+  const result = btoa(binaryString);
+  console.log('🔄 Compression complete, result length:', result.length);
+  
+  return result;
 };
 
 // Helper to create EventSource-like object using POST + SSE parsing
@@ -104,25 +143,24 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         
         // Check if payload needs compression (over 40KB)
         const isLargePayload = payload.length > 40 * 1024;
-        const compressedPayload = isLargePayload ? await compressPayload(payload) : payload;
+        console.log('🔍 Payload size check:', payload.length, 'bytes, needs compression:', isLargePayload);
+        
+        // Skip compression due to browser CompressionStream hanging issues
+        console.log('🔄 Skipping compression due to browser compatibility issues');
+        const compressedPayload = payload;
         
         // Use JSON format for cleaner API
         requestBody = JSON.stringify({
           payload: compressedPayload,
-          isCompressed: isLargePayload
+          isCompressed: false // Always false since we disabled compression
           // NEVER include previous_response_id for multi-server compatibility
         });
         
         headers['Content-Type'] = 'application/json';
-        if (isLargePayload) {
-          headers['Content-Encoding'] = 'gzip';
-        }
+        // No compression headers since we disabled compression
         
         console.log('🔍 Original payload size:', payload.length);
-        if (isLargePayload) {
-          console.log('🔍 Compressed payload size:', compressedPayload.length);
-          console.log('🔍 Compression ratio:', (compressedPayload.length / payload.length * 100).toFixed(1) + '%');
-        }
+        console.log('🔍 Sending uncompressed payload to avoid browser hanging issues');
       }
       
       // Generate a unique session ID for tracking

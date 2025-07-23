@@ -1,6 +1,1255 @@
-(node:42821) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+(node:83901) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
 --import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("ts-node/esm", pathToFileURL("./"));'
 (Use `node --trace-warnings ...` to show where the warning was created)
 🔧 Initialized 5 OpenAI client instances
 WebSocket server error: Port is already in use
 🚀 Server running at http://localhost:3005
+Browserslist: browsers data (caniuse-lite) is 7 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+=== STREAM REQUEST ===
+Method: POST
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundaryLAruy55hLB0nlcap
+🔍 [req-1753227856699-ie1vrmeeh] Stream request received
+🔍 [req-1753227856699-ie1vrmeeh] Request headers: {
+  'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+  origin: 'http://localhost:3005',
+  referer: 'http://localhost:3005/',
+  connection: 'keep-alive'
+}
+🔍 [req-1753227856699-ie1vrmeeh] Original conversation length: 2
+🔍 [req-1753227856699-ie1vrmeeh] Cleaned conversation length: 2
+🔍 [req-1753227856699-ie1vrmeeh] Payload structure being sent to OpenAI: {
+  "messages": [
+    {
+      "role": "system",
+      "content": "string",
+      "hasResponseId": false,
+      "hasRsId": false
+    },
+    {
+      "role": "user",
+      "content": "string",
+      "hasResponseId": false,
+      "hasRsId": false
+    }
+  ],
+  "hasResponseIds": false,
+  "originalResponseIds": []
+}
+📸 Processing 1 uploaded image(s)...
+📸 Image 1 details:
+  - Original filename: pasted-image-1753227856164.png
+  - MIME type: image/png
+  - Buffer size: 132039 bytes
+  - Base64 data preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABRUAAASsCAYAAAARym96AAAAAXNSR0IArs4c6QAAAERlWElmTU0AKg...
+📸 Added image 1 to conversation
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753227856709-dysmqd8dp with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 0,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753227856709-dysmqd8dp (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+⚠️ Client disconnected (req.close)
+✅ Request req-1753227856709-dysmqd8dp completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Response stream closed (res.close)
+=== STREAM REQUEST ===
+Method: POST
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundaryB2aWphb3j315Ddx4
+🔍 [req-1753227996658-t9pt34e9s] Stream request received
+🔍 [req-1753227996658-t9pt34e9s] Request headers: {
+  'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+  origin: 'http://localhost:3005',
+  referer: 'http://localhost:3005/',
+  connection: 'keep-alive'
+}
+🔍 [req-1753227996658-t9pt34e9s] Original conversation length: 2
+🔍 [req-1753227996658-t9pt34e9s] Cleaned conversation length: 2
+🔍 [req-1753227996658-t9pt34e9s] Payload structure being sent to OpenAI: {
+  "messages": [
+    {
+      "role": "system",
+      "content": "string",
+      "hasResponseId": false,
+      "hasRsId": false
+    },
+    {
+      "role": "user",
+      "content": "string",
+      "hasResponseId": false,
+      "hasRsId": false
+    }
+  ],
+  "hasResponseIds": false,
+  "originalResponseIds": []
+}
+📸 Processing 1 uploaded image(s)...
+📸 Image 1 details:
+  - Original filename: pasted-image-1753227996339.png
+  - MIME type: image/png
+  - Buffer size: 56791 bytes
+  - Base64 data preview: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA+MAAAJjCAYAAABnQ8C8AAAAAXNSR0IArs4c6QAAAERlWElmTU0AKg...
+📸 Added image 1 to conversation
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753227996660-chc872wsy with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 1,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753227996660-chc872wsy (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+⚠️ Client disconnected (req.close)
+✅ Request req-1753227996660-chc872wsy completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228074601-qxw0k39r0 with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 2,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228074601-qxw0k39r0 (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228074601-qxw0k39r0 completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228075045-5r9vjh5eo with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 3,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228075045-5r9vjh5eo (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228075045-5r9vjh5eo completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228075573-b9icp8jsp with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 4,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228075573-b9icp8jsp (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228075573-b9icp8jsp completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228076011-7i7c84428 with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 5,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228076011-7i7c84428 (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228076011-7i7c84428 completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228076508-3qu9lm6xa with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 6,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228076508-3qu9lm6xa (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228076508-3qu9lm6xa completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228076930-ewpszlku8 with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 7,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228076930-ewpszlku8 (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228076930-ewpszlku8 completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228077330-pvyt8maqe with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 8,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228077330-pvyt8maqe (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228077330-pvyt8maqe completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228077761-xqutmz32f with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 9,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228077761-xqutmz32f (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228077761-xqutmz32f completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228078886-t7k4t9q85 with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 10,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228078886-t7k4t9q85 (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228078886-t7k4t9q85 completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228079421-m38dk8ity with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 11,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228079421-m38dk8ity (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228079421-m38dk8ity completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228079995-5vwp8ymyv with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 12,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228079995-5vwp8ymyv (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228079995-5vwp8ymyv completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228080644-ouzdmhrvf with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 13,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228080644-ouzdmhrvf (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228080644-ouzdmhrvf completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228081121-p5udxkd83 with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 14,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228081121-p5udxkd83 (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228081121-p5udxkd83 completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228081841-fsrwhfemp with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 15,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228081841-fsrwhfemp (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228081841-fsrwhfemp completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228082346-zgnns4lap with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 16,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228082346-zgnns4lap (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228082346-zgnns4lap completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228082856-0m8dwslzb with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 17,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228082856-0m8dwslzb (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228082856-0m8dwslzb completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228083279-qzp2eu3ow with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 18,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228083279-qzp2eu3ow (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228083279-qzp2eu3ow completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228083858-wj2fnl9iw with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 19,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228083858-wj2fnl9iw (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228083858-wj2fnl9iw completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228084555-od62kogxp with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 20,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228084555-od62kogxp (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228084555-od62kogxp completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228085223-8sz20qq8k with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 21,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228085223-8sz20qq8k (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228085223-8sz20qq8k completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228085928-gb804uj14 with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 22,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228085928-gb804uj14 (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228085928-gb804uj14 completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228086847-cnuscrthj with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 23,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228086847-cnuscrthj (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228086847-cnuscrthj completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228087336-zuvzhvaol with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 24,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228087336-zuvzhvaol (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228087336-zuvzhvaol completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228087802-3ckve7q67 with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 25,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228087802-3ckve7q67 (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228087802-3ckve7q67 completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228088266-s9a60m3si with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 26,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228088266-s9a60m3si (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228088266-s9a60m3si completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228088974-b9dpgv3wb with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 27,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228088974-b9dpgv3wb (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228088974-b9dpgv3wb completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228089283-rfgggrwq1 with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 28,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228089283-rfgggrwq1 (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228089283-rfgggrwq1 completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228089660-hp0ax44yp with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 29,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228089660-hp0ax44yp (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228089660-hp0ax44yp completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+🔄 Starting conversation turn with 2 items
+🔍 [req-1753227856699-ie1vrmeeh] Creating OpenAI stream request...
+📥 Queued request req-1753228090278-gs9wn65lo with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 30,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228090278-gs9wn65lo (1/3 active)
+🔍 [req-1753227856699-ie1vrmeeh] Using tools: 10 functions
+🔍 [req-1753227856699-ie1vrmeeh] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 2,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228090278-gs9wn65lo completed successfully
+🔍 [req-1753227856699-ie1vrmeeh] OpenAI stream created successfully
+⚠️ Client disconnected during stream - stopping
+⚠️  Reached maximum turns (30), ending conversation
+🎯 Processing function call: display_elk_graph
+🔄 1 function call(s) processed, continuing conversation loop
+🔄 Starting conversation turn with 5 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753228232166-m6qo9dmyb with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 31,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228232166-m6qo9dmyb (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 5,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228232166-m6qo9dmyb completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+🎯 Processing function call: batch_update
+🔄 1 function call(s) processed, continuing conversation loop
+🔄 Starting conversation turn with 7 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753228238949-bz1rtrfx4 with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 32,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228238949-bz1rtrfx4 (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 7,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+7:50:39 PM [vite] Pre-transform error: Failed to load url /assets/canvas/entry-client.jsx (resolved id: /assets/canvas/entry-client.jsx). Does the file exist?
+✅ Request req-1753228238949-bz1rtrfx4 completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+🎯 Processing function call: batch_update
+🔄 1 function call(s) processed, continuing conversation loop
+🔄 Starting conversation turn with 10 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753228249059-4kcvtth92 with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 33,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228249059-4kcvtth92 (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 10,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228249059-4kcvtth92 completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+🎯 Processing function call: batch_update
+🔄 1 function call(s) processed, continuing conversation loop
+🔄 Starting conversation turn with 12 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753228251046-ioo7niozj with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 34,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228251046-ioo7niozj (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 12,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228251046-ioo7niozj completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+🎯 Processing function call: batch_update
+🔄 1 function call(s) processed, continuing conversation loop
+🔄 Starting conversation turn with 15 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753228258358-bfbs8nzh3 with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 35,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228258358-bfbs8nzh3 (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 15,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228258358-bfbs8nzh3 completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+🎯 Processing function call: batch_update
+🔄 1 function call(s) processed, continuing conversation loop
+🔄 Starting conversation turn with 18 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753228267210-bizspn3ig with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 36,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228267210-bizspn3ig (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 18,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228267210-bizspn3ig completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+🎯 Processing function call: batch_update
+🔄 1 function call(s) processed, continuing conversation loop
+🔄 Starting conversation turn with 21 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753228272980-qau35vsmn with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 37,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228272980-qau35vsmn (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 21,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228272980-qau35vsmn completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+🎯 Processing function call: batch_update
+🔄 1 function call(s) processed, continuing conversation loop
+🔄 Starting conversation turn with 24 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753228279392-98u1g3rxx with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 38,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228279392-98u1g3rxx (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 24,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228279392-98u1g3rxx completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+🎯 Processing function call: batch_update
+🔄 1 function call(s) processed, continuing conversation loop
+🔄 Starting conversation turn with 27 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753228285246-vwxj8t9c7 with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 39,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228285246-vwxj8t9c7 (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 27,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228285246-vwxj8t9c7 completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+🎯 Processing function call: batch_update
+🔄 1 function call(s) processed, continuing conversation loop
+🔄 Starting conversation turn with 30 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753228292887-nay5bj73k with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 40,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228292887-nay5bj73k (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 30,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228292887-nay5bj73k completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+🎯 Processing function call: batch_update
+🔄 1 function call(s) processed, continuing conversation loop
+🔄 Starting conversation turn with 33 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753228298452-edp4rcqzr with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 41,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228298452-edp4rcqzr (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 33,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228298452-edp4rcqzr completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+🎯 Processing function call: batch_update
+🔄 1 function call(s) processed, continuing conversation loop
+🔄 Starting conversation turn with 36 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753228310429-japqjjp4s with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 42,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228310429-japqjjp4s (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 36,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228310429-japqjjp4s completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+🎯 Processing function call: batch_update
+🔄 1 function call(s) processed, continuing conversation loop
+🔄 Starting conversation turn with 39 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753228319714-g3bjqd579 with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 43,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228319714-g3bjqd579 (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 39,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228319714-g3bjqd579 completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+🎯 Processing function call: display_elk_graph
+🔄 1 function call(s) processed, continuing conversation loop
+🔄 Starting conversation turn with 42 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753228323324-yr77q3gd7 with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 44,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228323324-yr77q3gd7 (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 42,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228323324-yr77q3gd7 completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+⚠️  No function calls in this turn (1/2)
+🔄 Allowing agent to continue thinking...
+🔄 Starting conversation turn with 43 items
+🔍 [req-1753227996658-t9pt34e9s] Creating OpenAI stream request...
+📥 Queued request req-1753228325182-d5hrvznqe with priority high (1 in queue)
+🔍 ConnectionManager: Current state: {
+  activeRequests: 0,
+  queuedRequests: 1,
+  completedRequests: 45,
+  failedRequests: 0,
+  totalClients: 5,
+  maxConcurrentRequests: 3
+}
+🚀 Executing request req-1753228325182-d5hrvznqe (1/3 active)
+🔍 [req-1753227996658-t9pt34e9s] Using tools: 10 functions
+🔍 [req-1753227996658-t9pt34e9s] Final request payload to OpenAI: {
+  model: 'o3',
+  inputMessages: 43,
+  tools: 10,
+  tool_choice: 'auto',
+  parallel_tool_calls: true,
+  reasoning: { effort: 'high', summary: 'detailed' },
+  stream: true
+}
+✅ Request req-1753228325182-d5hrvznqe completed successfully
+🔍 [req-1753227996658-t9pt34e9s] OpenAI stream created successfully
+⚠️  No function calls in this turn (2/2)
+✅ Conversation complete - no more function calls needed or completion indicated
+⚠️ Response stream closed (res.close)

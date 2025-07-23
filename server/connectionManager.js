@@ -244,7 +244,6 @@ class ConnectionManager extends EventEmitter {
         messages: conversation,
         tools: [], // Tools will be passed from the caller
         tool_choice: "auto",
-        parallel_tool_calls: true,
         stream: true
       });
     }, sessionId ? 'high' : 'normal');

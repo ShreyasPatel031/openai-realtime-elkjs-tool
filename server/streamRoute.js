@@ -273,10 +273,11 @@ export default async function streamHandler(req, res) {
             
             const tools = allTools.map(tool => ({
               type: "function",
-              name: tool.name,
-              description: tool.description,
-              parameters: tool.parameters,
-              strict: false
+              function: {
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.parameters
+              }
             }));
             
             console.log(`🔍 [${requestId}] Using tools: ${tools.length} functions`);
@@ -289,7 +290,6 @@ export default async function streamHandler(req, res) {
               messages: finalCleanedConversation,
               tools: tools,
               tool_choice: "auto",
-              parallel_tool_calls: true,
               stream: true
             };
             
@@ -375,13 +375,21 @@ export default async function streamHandler(req, res) {
                   console.log(`🔍 [${requestId}] Ultra-clean conversation:`, JSON.stringify(finalUltraCleanConversation, null, 2));
                   
                   // Create new stream with ultra-clean conversation
+                  const recoveryTools = allTools.map(tool => ({
+                    type: "function",
+                    function: {
+                      name: tool.name,
+                      description: tool.description,
+                      parameters: tool.parameters
+                    }
+                  }));
+                  
                   const recoveryStream = await connectionManager.executeRequest(async (client) => {
                     return client.chat.completions.create({
                       model: "o3-mini",
                       messages: finalUltraCleanConversation,
-                      tools: tools,
+                      tools: recoveryTools,
                       tool_choice: "auto",
-                      parallel_tool_calls: true,
                       stream: true
                     });
                   }, 'high');

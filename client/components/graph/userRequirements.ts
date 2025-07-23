@@ -38,52 +38,66 @@ export const process_user_requirements = (elkGraph?: any, setElkGraph?: (graph: 
   
   console.log("🎯 process_user_requirements called - collecting chat data and triggering StreamViewer");
   
-  // Collect conversation data from stored chat messages
+  // Check for direct chat input from the new flow
   let conversationData = "";
-  try {
-    const requirements: string[] = [];
-    const questions: string[] = [];
-    const answers: string[] = [];
-    
-    // Debug: Show what we're starting with
-    console.log("🔍 DEBUG: Global chat messages:", globalChatMessages.length, globalChatMessages);
-    console.log("🔍 DEBUG: Global selected options:", Object.keys(globalSelectedOptions).length, globalSelectedOptions);
-    
-    // Process stored messages
-    globalChatMessages.forEach(message => {
-      if (message.sender === 'user' || message.sender === 'assistant') {
-        if (message.type === 'radio-question' || message.type === 'checkbox-question') {
-          questions.push(message.question || message.content);
-          
-          // Get selected answer for this question
-          const selectedAnswer = globalSelectedOptions[message.id];
-          if (selectedAnswer) {
-            if (Array.isArray(selectedAnswer)) {
-              // Checkbox question - multiple selections
-              selectedAnswer.forEach(optionId => {
-                const option = message.options?.find((opt: any) => opt.id === optionId);
+  const directChatData = (window as any).chatConversationData;
+  
+  if (directChatData && typeof directChatData === 'string' && directChatData.trim()) {
+    console.log("📝 Found direct chat data:", directChatData);
+    conversationData = `
+USER REQUEST: ${directChatData}
+
+ARCHITECTURE REQUIREMENTS:
+Build a complete architecture diagram based on the user's request: "${directChatData}"
+
+Please create a detailed architecture that addresses the specific technologies, components, and requirements mentioned in the user's input. Focus on creating a practical, well-designed system architecture.
+`;
+  } else {
+    // Fallback to the old questionnaire-based flow
+    try {
+      const requirements: string[] = [];
+      const questions: string[] = [];
+      const answers: string[] = [];
+      
+      // Debug: Show what we're starting with
+      console.log("🔍 DEBUG: Global chat messages:", globalChatMessages.length, globalChatMessages);
+      console.log("🔍 DEBUG: Global selected options:", Object.keys(globalSelectedOptions).length, globalSelectedOptions);
+      
+      // Process stored messages
+      globalChatMessages.forEach(message => {
+        if (message.sender === 'user' || message.sender === 'assistant') {
+          if (message.type === 'radio-question' || message.type === 'checkbox-question') {
+            questions.push(message.question || message.content);
+            
+            // Get selected answer for this question
+            const selectedAnswer = globalSelectedOptions[message.id];
+            if (selectedAnswer) {
+              if (Array.isArray(selectedAnswer)) {
+                // Checkbox question - multiple selections
+                selectedAnswer.forEach(optionId => {
+                  const option = message.options?.find((opt: any) => opt.id === optionId);
+                  if (option) answers.push(option.text);
+                });
+              } else {
+                // Radio question - single selection
+                const option = message.options?.find((opt: any) => opt.id === selectedAnswer);
                 if (option) answers.push(option.text);
-              });
-            } else {
-              // Radio question - single selection
-              const option = message.options?.find((opt: any) => opt.id === selectedAnswer);
-              if (option) answers.push(option.text);
+              }
             }
+          } else if (message.content && !message.content.includes('Processing') && !message.content.includes('Architecture')) {
+            requirements.push(message.content);
           }
-        } else if (message.content && !message.content.includes('Processing') && !message.content.includes('Architecture')) {
-          requirements.push(message.content);
         }
-      }
-    });
-    
-    // Debug: Show what we collected
-    console.log("🔍 DEBUG: Collected requirements:", requirements);
-    console.log("🔍 DEBUG: Collected questions:", questions);
-    console.log("🔍 DEBUG: Collected answers:", answers);
-    
-    // Build conversation summary
-    if (requirements.length > 0 || questions.length > 0 || answers.length > 0) {
-      conversationData = `
+      });
+      
+      // Debug: Show what we collected
+      console.log("🔍 DEBUG: Collected requirements:", requirements);
+      console.log("🔍 DEBUG: Collected questions:", questions);
+      console.log("🔍 DEBUG: Collected answers:", answers);
+      
+      // Build conversation summary
+      if (requirements.length > 0 || questions.length > 0 || answers.length > 0) {
+        conversationData = `
 FULL CONVERSATION HISTORY:
 
 ORIGINAL USER INPUT: ${requirements.join(' | ')}
@@ -126,16 +140,20 @@ Based on the user input "${requirements.join(' ')}" and their selected answers, 
 DO NOT ask generic questions about cloud provider or basic architecture choices - these are already decided above.
 Build the specific architecture they requested.
 `;
-      console.log("📝 Collected full conversation data:", conversationData);
-    } else {
-      console.log("📝 No conversation data found, using default architecture");
+        console.log("📝 Collected full conversation data:", conversationData);
+      } else {
+        console.log("📝 No conversation data found, using default architecture prompt");
+        conversationData = "Create a sample cloud architecture diagram with common components like load balancer, web servers, database, and cache.";
+      }
+    } catch (error) {
+      console.warn("⚠️ Error collecting conversation data:", error);
+      conversationData = "Create a sample cloud architecture diagram with common components like load balancer, web servers, database, and cache.";
     }
-  } catch (error) {
-    console.warn("⚠️ Error collecting conversation data:", error);
   }
   
-  // Store conversation data globally so StreamExecutor can access it
+  // Store the final conversation data globally so StreamExecutor can access it
   (window as any).chatConversationData = conversationData;
+  console.log("📝 Final conversation data stored:", conversationData);
   
   // Always use DOM manipulation to trigger StreamViewer for consistent UI output
   // This ensures both agent calls and test button calls show streaming output in the UI

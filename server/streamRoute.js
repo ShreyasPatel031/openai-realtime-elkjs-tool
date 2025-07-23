@@ -290,7 +290,6 @@ export default async function streamHandler(req, res) {
               messages: finalCleanedConversation,
               tools: tools,
               tool_choice: "auto",
-              parallel_tool_calls: true,
               stream: true
             };
             
@@ -391,7 +390,6 @@ export default async function streamHandler(req, res) {
                       messages: finalUltraCleanConversation,
                       tools: recoveryTools,
                       tool_choice: "auto",
-                      parallel_tool_calls: true,
                       stream: true
                     });
                   }, 'high');

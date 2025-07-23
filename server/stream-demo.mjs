@@ -27,9 +27,9 @@ const initialMessages = [
 
 console.log("🚀 Starting streaming test with reasoning model...\n");
 
-const stream = await client.responses.create({
-  model: "o4-mini-2025-04-16",
-  input: initialMessages,
+const stream = await client.chat.completions.create({
+  model: "o3-mini",
+  messages: initialMessages,
   tools,
   tool_choice: "auto",
   stream: true               // ⭐️ this turns on incremental deltas

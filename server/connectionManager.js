@@ -239,13 +239,12 @@ class ConnectionManager extends EventEmitter {
     return this.queueRequest(async () => {
       console.log(`🔄 Creating OpenAI stream for session ${sessionId || 'unknown'}`);
       
-      return client.responses.create({
-        model: "o3", // Use O3 model for better architectures
-        input: conversation,
+      return client.chat.completions.create({
+        model: "o3-mini", // Use O3-mini for faster, reliable streaming
+        messages: conversation,
         tools: [], // Tools will be passed from the caller
         tool_choice: "auto",
         parallel_tool_calls: true,
-        reasoning: { effort: "high", summary: "detailed" }, // O3 supports high reasoning effort
         stream: true
       });
     }, sessionId ? 'high' : 'normal');

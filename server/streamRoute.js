@@ -285,26 +285,24 @@ export default async function streamHandler(req, res) {
             const client = connectionManager.getAvailableClient();
             
             const requestPayload = {
-              model: "o3", // Use O3 model for better architectures
-              input: finalCleanedConversation,
+              model: "o3-mini", // Use O3-mini for faster, reliable streaming
+              messages: finalCleanedConversation,
               tools: tools,
               tool_choice: "auto",
               parallel_tool_calls: true,
-              reasoning: { effort: "high", summary: "detailed" }, // O3 supports high reasoning effort
               stream: true
             };
             
             console.log(`🔍 [${requestId}] Final request payload to OpenAI:`, {
               model: requestPayload.model,
-              inputMessages: requestPayload.input.length,
+              messages: requestPayload.messages.length,
               tools: requestPayload.tools.length,
               tool_choice: requestPayload.tool_choice,
               parallel_tool_calls: requestPayload.parallel_tool_calls,
-              reasoning: requestPayload.reasoning,
               stream: requestPayload.stream
             });
             
-            return client.responses.create(requestPayload);
+            return client.chat.completions.create(requestPayload);
           }, sessionId ? 'high' : 'normal');
           
           console.log(`🔍 [${requestId}] OpenAI stream created successfully`);
@@ -378,13 +376,12 @@ export default async function streamHandler(req, res) {
                   
                   // Create new stream with ultra-clean conversation
                   const recoveryStream = await connectionManager.executeRequest(async (client) => {
-                    return client.beta.chat.completions.create({
-                      model: "o3",
-                      input: finalUltraCleanConversation,
+                    return client.chat.completions.create({
+                      model: "o3-mini",
+                      messages: finalUltraCleanConversation,
                       tools: tools,
                       tool_choice: "auto",
                       parallel_tool_calls: true,
-                      reasoning: { effort: "high", summary: "detailed" },
                       stream: true
                     });
                   }, 'high');

@@ -76,7 +76,7 @@ app.post("/chat", async (req, res) => {
     const response = await connectionManager.queueRequest(async () => {
       const client = connectionManager.getAvailableClient();
       return client.chat.completions.create({
-        model: "o3",
+        model: "o3-mini",
       messages: messages,
       tools: allTools.map(tool => ({
         type: "function",

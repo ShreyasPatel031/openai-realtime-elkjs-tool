@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { EventEmitter } from 'events';
+import { modelConfigs, timeoutConfigs } from '../client/reasoning/agentConfig';
 
 interface QueuedRequest {
   id: string;
@@ -26,10 +27,10 @@ class ConnectionManager extends EventEmitter {
   private isProcessingQueue = false;
   
   // Configuration
-  private readonly maxConcurrentRequests = 3; // Limit concurrent OpenAI requests
+  private readonly maxConcurrentRequests = timeoutConfigs.maxConcurrentRequests; // Limit concurrent OpenAI requests
   private readonly maxClientInstances = 5;    // Pool multiple client instances
-  private readonly queueTimeout = 120000;     // 2 minutes queue timeout
-  private readonly requestTimeout = 180000;   // 3 minutes per request
+  private readonly queueTimeout = timeoutConfigs.queueTimeout;     // Centralized timeout config
+  private readonly requestTimeout = timeoutConfigs.requestTimeout;   // Centralized timeout config
   private readonly retryDelays = [1000, 2000, 4000]; // Exponential backoff
 
   private stats: ConnectionStats = {
@@ -212,13 +213,13 @@ class ConnectionManager extends EventEmitter {
       console.log(`🔄 Creating OpenAI stream for session ${sessionId || 'unknown'}`);
       
       return client.responses.create({
-        model: "o4-mini-2025-04-16", // Use faster model for better throughput
+        model: modelConfigs.streaming.model,
         input: conversation,
         tools: [], // Tools will be passed from the caller
         tool_choice: "auto",
-        parallel_tool_calls: true,
-        reasoning: { effort: "medium", summary: "concise" }, // Reduced reasoning for speed
-        stream: true
+        parallel_tool_calls: modelConfigs.streaming.parallel_tool_calls,
+        reasoning: modelConfigs.streaming.reasoning,
+        stream: modelConfigs.streaming.stream
       });
     }, sessionId ? 'high' : 'normal');
   }
@@ -228,12 +229,12 @@ class ConnectionManager extends EventEmitter {
     
     return this.queueRequest(async () => {
       return client.chat.completions.create({
-        model: "o4-mini-2025-04-16",
+        model: modelConfigs.chat.model,
         messages: messages,
         tools: [],
-        tool_choice: "auto",
-        temperature: 0.2,
-        max_tokens: 4096
+        tool_choice: modelConfigs.chat.tool_choice,
+        temperature: modelConfigs.chat.temperature,
+        max_tokens: modelConfigs.chat.max_tokens
       });
     }, 'low');
   }

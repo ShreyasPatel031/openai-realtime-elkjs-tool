@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { EventEmitter } from 'events';
+import { modelConfigs, timeoutConfigs } from '../client/reasoning/agentConfig.ts';
 
 class ConnectionManager extends EventEmitter {
   static instance;
@@ -12,11 +13,11 @@ class ConnectionManager extends EventEmitter {
     this.isProcessingQueue = false;
   
   // Configuration
-    this.maxConcurrentRequests = 3; // Limit concurrent OpenAI requests
+    this.maxConcurrentRequests = timeoutConfigs.maxConcurrentRequests; // Limit concurrent OpenAI requests
     this.maxClientInstances = 5;    // Pool multiple client instances
-    this.queueTimeout = 120000;     // 2 minutes queue timeout
-    this.requestTimeout = 300000;   // 5 minutes per request (increased for O3 model)
-    this.o3Timeout = 600000;        // 10 minutes for O3 model specifically
+    this.queueTimeout = timeoutConfigs.queueTimeout;     // Centralized timeout config
+    this.requestTimeout = timeoutConfigs.requestTimeout;   // Centralized timeout config
+    this.o3Timeout = timeoutConfigs.o3Timeout;        // Centralized timeout config
     this.retryDelays = [1000, 2000, 4000]; // Exponential backoff
 
     this.stats = {
@@ -240,13 +241,13 @@ class ConnectionManager extends EventEmitter {
       console.log(`🔄 Creating OpenAI stream for session ${sessionId || 'unknown'}`);
       
       return client.responses.create({
-        model: "o3", // Use O3 model for better architectures
+        model: modelConfigs.streaming.model,
         input: conversation,
         tools: [], // Tools will be passed from the caller
         tool_choice: "auto",
-        parallel_tool_calls: true,
-        reasoning: { effort: "high", summary: "detailed" }, // O3 supports high reasoning effort
-        stream: true
+        parallel_tool_calls: modelConfigs.streaming.parallel_tool_calls,
+        reasoning: modelConfigs.streaming.reasoning,
+        stream: modelConfigs.streaming.stream
       });
     }, sessionId ? 'high' : 'normal');
   }
@@ -256,12 +257,12 @@ class ConnectionManager extends EventEmitter {
     
     return this.queueRequest(async () => {
       return client.chat.completions.create({
-        model: "o3",
+        model: modelConfigs.chat.model,
         messages: messages,
         tools: [],
-        tool_choice: "auto",
-        temperature: 0.2,
-        max_tokens: 4096
+        tool_choice: modelConfigs.chat.tool_choice,
+        temperature: modelConfigs.chat.temperature,
+        max_tokens: modelConfigs.chat.max_tokens
       });
     }, 'low');
   }

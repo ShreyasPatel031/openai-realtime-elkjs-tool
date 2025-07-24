@@ -1,6 +1,7 @@
 import { gunzipSync } from 'node:zlib';
 import { allTools } from "./toolCatalog.js";
 import ConnectionManager from './connectionManager.js';
+import { modelConfigs, timeoutConfigs } from '../client/reasoning/agentConfig.ts';
 
 const connectionManager = ConnectionManager.getInstance();
 
@@ -253,7 +254,7 @@ export default async function streamHandler(req, res) {
       let elkGraph = { id: "root", children: [], edges: [] };
       let turnCount = 0;
       let consecutiveNoFunctionCallTurns = 0;
-      const maxTurns = 30; // Allow more turns for complex architectures
+      const maxTurns = timeoutConfigs.maxTurns; // Centralized configuration
       const maxConsecutiveNoFunctionCallTurns = 2; // Reduced - agent should keep building
       
       while (turnCount < maxTurns) {
@@ -285,13 +286,13 @@ export default async function streamHandler(req, res) {
             const client = connectionManager.getAvailableClient();
             
             const requestPayload = {
-              model: "o3", // Use O3 model for better architectures
+              model: modelConfigs.reasoning.model,
               input: finalCleanedConversation,
               tools: tools,
               tool_choice: "auto",
-              parallel_tool_calls: true,
-              reasoning: { effort: "high", summary: "detailed" }, // O3 supports high reasoning effort
-              stream: true
+              parallel_tool_calls: modelConfigs.reasoning.parallel_tool_calls,
+              reasoning: modelConfigs.reasoning.reasoning,
+              stream: modelConfigs.reasoning.stream
             };
             
             console.log(`🔍 [${requestId}] Final request payload to OpenAI:`, {
@@ -379,13 +380,13 @@ export default async function streamHandler(req, res) {
                   // Create new stream with ultra-clean conversation
                   const recoveryStream = await connectionManager.executeRequest(async (client) => {
                     return client.beta.chat.completions.create({
-                      model: "o3",
+                      model: modelConfigs.recovery.model,
                       input: finalUltraCleanConversation,
                       tools: tools,
                       tool_choice: "auto",
-                      parallel_tool_calls: true,
-                      reasoning: { effort: "high", summary: "detailed" },
-                      stream: true
+                      parallel_tool_calls: modelConfigs.recovery.parallel_tool_calls,
+                      reasoning: modelConfigs.recovery.reasoning,
+                      stream: modelConfigs.recovery.stream
                     });
                   }, 'high');
                   

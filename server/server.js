@@ -9,6 +9,7 @@ import multer from 'multer';
 // Import tools from catalog
 import { allTools } from "./toolCatalog.js";
 import ConnectionManager from './connectionManager.js';
+import { modelConfigs } from '../client/reasoning/agentConfig.ts';
 
 const app = express();
 const apiKey = process.env.OPENAI_API_KEY;
@@ -72,7 +73,7 @@ app.post("/chat", async (req, res) => {
     const response = await connectionManager.queueRequest(async () => {
       const client = connectionManager.getAvailableClient();
       return client.chat.completions.create({
-        model: "o3",
+        model: modelConfigs.chat.model,
       messages: messages,
       tools: allTools.map(tool => ({
         type: "function",
@@ -82,7 +83,7 @@ app.post("/chat", async (req, res) => {
           parameters: tool.parameters
         }
       })),
-      tool_choice: "auto"
+      tool_choice: modelConfigs.chat.tool_choice
     });
     }, 'low');
 

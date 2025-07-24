@@ -311,14 +311,51 @@ export { availableIconsComprehensive as availableIcons };
 
 // Model configurations for reasoning and streaming
 export const modelConfigs = {
-// Streaming model configuration
+  // Main architecture generation model
+  reasoning: {
+    model: "o3-mini" as const,
+    temperature: 0.1,
+    max_tokens: 4096,
+    parallel_tool_calls: true,
+    reasoning: { 
+      effort: "low" as const,
+      summary: "concise" as const
+    },
+    stream: true
+  },
+  
+  
+  // Connection manager streams
   streaming: {
-  model: "o4-mini",
-  temperature: 0.1,
-  max_tokens: 4096,
-  parallel_tool_calls: true,
-  reasoning: { 
-    effort: "low"
-    }
+    model: "o3-mini" as const,
+    temperature: 0.1,
+    max_tokens: 4096,
+    parallel_tool_calls: true,
+    reasoning: { 
+      effort: "low" as const,
+      summary: "concise" as const
+    },
+    stream: true
+  },
+  
+  // Recovery/fallback streams
+  recovery: {
+    model: "o3-mini" as const,
+    temperature: 0.1,
+    parallel_tool_calls: true,
+    reasoning: { 
+      effort: "low" as const,
+      summary: "concise" as const
+    },
+    stream: true
   }
+};
+
+// Timeout configurations
+export const timeoutConfigs = {
+  requestTimeout: 180000,   // 3 minutes per request
+  o3Timeout: 300000,        // 5 minutes for O3 model with low effort
+  queueTimeout: 120000,     // 2 minutes queue timeout
+  maxTurns: 20,             // Maximum conversation turns
+  maxConcurrentRequests: 3  // Limit concurrent requests
 }; 

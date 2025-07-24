@@ -3,6 +3,7 @@ import type { APIError } from "openai";
 
 // Import allTools from the catalog
 import { allTools } from "../client/realtime/toolCatalog";
+import { modelConfigs } from "../client/reasoning/agentConfig";
 
 const client = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY,
@@ -193,7 +194,7 @@ async function runConversationLoop(
       while (retryCount < 3) {
         try {
           stream = await client.responses.create({
-            model: "o4-mini",
+            model: modelConfigs.reasoning.model,
             input: conversation,
             tools: allTools.map(tool => ({
               type: "function",
@@ -203,9 +204,9 @@ async function runConversationLoop(
               strict: false
             })),
             tool_choice: "auto",
-            parallel_tool_calls: false,
-            reasoning: { effort: "high", summary: "detailed" },
-            stream: true
+            parallel_tool_calls: modelConfigs.reasoning.parallel_tool_calls,
+            reasoning: modelConfigs.reasoning.reasoning,
+            stream: modelConfigs.reasoning.stream
           });
           break; // If successful, exit retry loop
         } catch (streamError) {

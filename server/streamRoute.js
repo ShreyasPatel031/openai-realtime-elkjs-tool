@@ -1,7 +1,7 @@
 import { gunzipSync } from 'node:zlib';
 import { allTools } from "./toolCatalog.js";
 import ConnectionManager from './connectionManager.js';
-import { modelConfigs, timeoutConfigs } from '../client/reasoning/agentConfig.ts';
+import { modelConfigs, timeoutConfigs, isReasoningModel } from '../client/reasoning/agentConfig.ts';
 
 const connectionManager = ConnectionManager.getInstance();
 
@@ -291,7 +291,9 @@ export default async function streamHandler(req, res) {
               tools: tools,
               tool_choice: "auto",
               parallel_tool_calls: modelConfigs.reasoning.parallel_tool_calls,
-              reasoning: modelConfigs.reasoning.reasoning,
+              ...(isReasoningModel(modelConfigs.reasoning.model) ? {
+                reasoning: modelConfigs.reasoning.reasoning
+              } : {}),
               stream: modelConfigs.reasoning.stream
             };
             
@@ -385,7 +387,9 @@ export default async function streamHandler(req, res) {
                       tools: tools,
                       tool_choice: "auto",
                       parallel_tool_calls: modelConfigs.recovery.parallel_tool_calls,
-                      reasoning: modelConfigs.recovery.reasoning,
+                      ...(isReasoningModel(modelConfigs.recovery.model) ? {
+                        reasoning: modelConfigs.recovery.reasoning
+                      } : {}),
                       stream: modelConfigs.recovery.stream
                     });
                   }, 'high');

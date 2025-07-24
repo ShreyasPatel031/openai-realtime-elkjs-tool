@@ -313,7 +313,7 @@ export { availableIconsComprehensive as availableIcons };
 export const modelConfigs = {
   // Main architecture generation model
   reasoning: {
-    model: "o3-mini" as const,
+    model: "gpt-4.1" as const,
     temperature: 0.1,
     max_tokens: 4096,
     parallel_tool_calls: true,
@@ -324,10 +324,17 @@ export const modelConfigs = {
     stream: true
   },
   
+  // Chat completions model
+  chat: {
+    model: "gpt-4.1" as const,
+    temperature: 0.2,
+    max_tokens: 4096,
+    tool_choice: "auto" as const
+  },
   
   // Connection manager streams
   streaming: {
-    model: "o3-mini" as const,
+    model: "gpt-4.1" as const,
     temperature: 0.1,
     max_tokens: 4096,
     parallel_tool_calls: true,
@@ -340,7 +347,7 @@ export const modelConfigs = {
   
   // Recovery/fallback streams
   recovery: {
-    model: "o3-mini" as const,
+    model: "gpt-4.1" as const,
     temperature: 0.1,
     parallel_tool_calls: true,
     reasoning: { 
@@ -358,4 +365,9 @@ export const timeoutConfigs = {
   queueTimeout: 120000,     // 2 minutes queue timeout
   maxTurns: 20,             // Maximum conversation turns
   maxConcurrentRequests: 3  // Limit concurrent requests
+};
+
+// Helper function to check if model supports reasoning
+export const isReasoningModel = (model: string): boolean => {
+  return model.includes('o3') || model.includes('o1') || model.includes('o4');
 }; 

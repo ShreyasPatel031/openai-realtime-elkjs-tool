@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { EventEmitter } from 'events';
-import { modelConfigs, timeoutConfigs } from '../client/reasoning/agentConfig.ts';
+import { modelConfigs, timeoutConfigs, isReasoningModel } from '../client/reasoning/agentConfig.ts';
 
 class ConnectionManager extends EventEmitter {
   static instance;
@@ -246,7 +246,9 @@ class ConnectionManager extends EventEmitter {
         tools: [], // Tools will be passed from the caller
         tool_choice: "auto",
         parallel_tool_calls: modelConfigs.streaming.parallel_tool_calls,
-        reasoning: modelConfigs.streaming.reasoning,
+        ...(isReasoningModel(modelConfigs.streaming.model) ? {
+          reasoning: modelConfigs.streaming.reasoning
+        } : {}),
         stream: modelConfigs.streaming.stream
       });
     }, sessionId ? 'high' : 'normal');

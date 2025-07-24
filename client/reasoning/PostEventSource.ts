@@ -104,25 +104,24 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         
         // Check if payload needs compression (over 40KB)
         const isLargePayload = payload.length > 40 * 1024;
-        const compressedPayload = isLargePayload ? await compressPayload(payload) : payload;
+        console.log('🔍 Payload size check:', payload.length, 'bytes, needs compression:', isLargePayload);
+        
+        // Skip compression due to browser CompressionStream hanging issues
+        console.log('🔄 Skipping compression due to browser compatibility issues');
+        const compressedPayload = payload;
         
         // Use JSON format for cleaner API
         requestBody = JSON.stringify({
           payload: compressedPayload,
-          isCompressed: isLargePayload
+          isCompressed: false // Always false since we disabled compression
           // NEVER include previous_response_id for multi-server compatibility
         });
         
         headers['Content-Type'] = 'application/json';
-        if (isLargePayload) {
-          headers['Content-Encoding'] = 'gzip';
-        }
+        // No compression headers since we disabled compression
         
         console.log('🔍 Original payload size:', payload.length);
-        if (isLargePayload) {
-          console.log('🔍 Compressed payload size:', compressedPayload.length);
-          console.log('🔍 Compression ratio:', (compressedPayload.length / payload.length * 100).toFixed(1) + '%');
-        }
+        console.log('🔍 Sending uncompressed payload to avoid browser hanging issues');
       }
       
       // Generate a unique session ID for tracking

@@ -1,6 +1,9 @@
-(node:42839) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
+(node:18507) ExperimentalWarning: `--experimental-loader` may be removed in the future; instead use `register()`:
 --import 'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("ts-node/esm", pathToFileURL("./"));'
 (Use `node --trace-warnings ...` to show where the warning was created)
 🔧 Initialized 5 OpenAI client instances
 WebSocket server error: Port is already in use
 🚀 Server running at http://localhost:3009
+Browserslist: browsers data (caniuse-lite) is 7 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme

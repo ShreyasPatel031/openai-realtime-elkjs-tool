@@ -1,39 +1,24 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run build",
-  "outputDirectory": "client/dist/client",
+  "buildCommand": "npm run build:vercel",
+  "outputDirectory": "client/dist",
   "installCommand": "npm install",
-  "routes": [
+  "rewrites": [
     {
-      "src": "/token",
-      "dest": "/api/token"
+      "source": "/token",
+      "destination": "/api/token"
     },
     {
-      "src": "/stream",
-      "dest": "/api/stream",
-      "headers": {
-        "x-vercel-edge-runtime": "1"
-      }
+      "source": "/stream",
+      "destination": "/api/stream"
     },
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
+      "source": "/questionnaire",
+      "destination": "/api/questionnaire"
     },
     {
-      "src": "/assets/(.*)",
-      "dest": "/assets/$1"
-    },
-    {
-      "src": "/icons/(.*)",
-      "dest": "/icons/$1"
-    },
-    {
-      "src": "/group-icons/(.*)",
-      "dest": "/group-icons/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 } 

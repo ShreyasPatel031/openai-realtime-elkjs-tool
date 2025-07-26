@@ -1,0 +1,13 @@
+client/assets/Asset-Package_*
+client/assets/azure/
+client/assets/gcp/
+client/assets/google-cloud-icons*/
+client/assets/Azure_Public_Service_Icons/
+node_modules/
+.git/
+logs/
+.vercel/
+*.log
+server/
+dist/
+build/ 

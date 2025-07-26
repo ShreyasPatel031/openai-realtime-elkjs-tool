@@ -31,8 +31,8 @@ export class QuestionnaireExecutor {
 
       console.log('📤 Sending request to server /questionnaire endpoint...');
 
-      // Use the new server /questionnaire endpoint 
-      const response = await fetch('/questionnaire', {
+      // Use the API endpoint (works for both local and prod)
+      const response = await fetch('/api/questionnaire', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

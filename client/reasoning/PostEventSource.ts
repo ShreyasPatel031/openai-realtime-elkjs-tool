@@ -129,7 +129,7 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
       headers['x-session-id'] = sessionId;
       
               // No timeout - let O3 model take as long as it needs
-        const response = await fetch('/stream', {
+        const response = await fetch('/api/stream', {
           method: 'POST',
           headers,
           body: requestBody,

@@ -2,6 +2,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --loader ts-node/esm server/server.js --dev",
+    "dev:unified": "npm run dev",
     "start": "node server/server.js",
     "build": "npm run generate-icons && npm run generate-dynamic-lists && npm run build:client",
     "build:vercel": "npm run generate-icons && npm run generate-dynamic-lists && vite build",

@@ -7,4 +7,9 @@ const path = fileURLToPath(import.meta.url);
 export default {
   root: join(dirname(path), "client"),
   plugins: [react()],
+  // Explicitly define environment variables for client-side access
+  define: {
+    // This will be replaced at build time
+    'import.meta.env.VITE_OPENAI_API_KEY': JSON.stringify(process.env.VITE_OPENAI_API_KEY)
+  }
 }; 

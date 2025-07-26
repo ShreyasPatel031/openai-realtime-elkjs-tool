@@ -149,11 +149,14 @@ const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGra
   };
 
   const start = async () => {
+    console.log('🟤 STEP 6: StreamViewer start() called');
     if (!elkGraphRef.current || !setElkGraph) {
+      console.error("❌ No graph state available in StreamViewer");
       addLine("❌ No graph state available");
       return;
     }
 
+    console.log('✅ STEP 6: StreamViewer has graph state, initializing StreamExecutor...');
     setLines([]);
     setLoopCount(0);
     setErrorCount(0);
@@ -201,10 +204,13 @@ const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGra
     };
 
     try {
+      console.log('🟫 STEP 6.5: Creating StreamExecutor instance...');
       const executor = new StreamExecutor(options);
+      console.log('🟫 STEP 6.5: StreamExecutor created, calling execute()...');
       await executor.execute();
+      console.log('✅ STEP 6.5: StreamExecutor.execute() completed successfully');
     } catch (error) {
-      console.error('StreamViewer start error:', error);
+      console.error('❌ StreamViewer start error:', error);
       addLine(`❌ Failed to start stream: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setBusy(false);
     }

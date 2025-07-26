@@ -85,20 +85,12 @@ export function findCommonAncestor(
   id1: string,
   id2: string
 ): ElkNode | null {
-  console.log(`🔍 [COMMON-ANCESTOR] Finding common ancestor for: ${id1} and ${id2}`);
-  
   const path1 = getPathToNode(layout, id1);
   const path2 = getPathToNode(layout, id2);
   
   if (!path1 || !path2) {
-    console.log(`❌ [COMMON-ANCESTOR] One or both nodes not found in graph`);
-    console.log(`  Path to ${id1}:`, path1 ? path1.map(n => n.id) : 'NOT FOUND');
-    console.log(`  Path to ${id2}:`, path2 ? path2.map(n => n.id) : 'NOT FOUND');
     return null;
   }
-  
-  console.log(`📍 [COMMON-ANCESTOR] Path to ${id1}:`, path1.map(n => n.id));
-  console.log(`📍 [COMMON-ANCESTOR] Path to ${id2}:`, path2.map(n => n.id));
   
   // Find the longest common prefix
   let commonAncestor = null;
@@ -109,8 +101,6 @@ export function findCommonAncestor(
       break;
     }
   }
-  
-  console.log(`📍 [COMMON-ANCESTOR] Common ancestor found: ${commonAncestor?.id || 'NONE'}`);
   
   return commonAncestor;
 }
@@ -135,27 +125,6 @@ function collectEdges(node: ElkNode, collection: EdgeCollection[] = []): EdgeCol
  * under the common ancestor of its endpoints.
  */
 function updateEdgesForNode(nodeId: string, layout: ElkNode): ElkNode {
-  console.log(`📍 [EDGE-REATTACH] Starting edge reattachment for node: ${nodeId}`);
-  
-  /* 
-   * 🚨 THE OLD FLAWED ALGORITHM (what caused the bug):
-   * 
-   * for (let i = edgeArr.length - 1; i >= 0; i--) {
-   *   const edge = edgeArr[i];
-   *   if (edge.sources.includes(nodeId) || edge.targets.includes(nodeId)) {
-   *     const commonAncestor = findCommonAncestor(layout, sourceId, targetId);
-   *     if (commonAncestor && parent.id !== commonAncestor.id) {
-   *       edgeArr.splice(i, 1);  // ⚠️ This could cause iteration to skip edges!
-   *       commonAncestor.edges.push(edge);
-   *     }
-   *   }
-   * }
-   * 
-   * The problem: When multiple edges needed moving from the same parent,
-   * the splice() operation could cause subsequent edges to be skipped,
-   * leaving them attached at the wrong container level.
-   */
-  
   const allEdges = collectEdges(layout);
   const edgesToMove: { edge: ElkEdge; currentParent: ElkNode; newParent: ElkNode }[] = [];
   
@@ -166,25 +135,17 @@ function updateEdgesForNode(nodeId: string, layout: ElkNode): ElkNode {
         const sourceId = edge.sources[0];
         const targetId = edge.targets[0];
         
-        console.log(`📍 [EDGE-CHECK] Found edge ${edge.id}: ${sourceId} -> ${targetId}, currently at ${parent.id}`);
-        
         const commonAncestor = findCommonAncestor(layout, sourceId, targetId);
         if (commonAncestor && parent.id !== commonAncestor.id) {
-          console.log(`🔄 Edge ${edge.id} needs to move from ${parent.id} to ${commonAncestor.id}`);
-          
           edgesToMove.push({
             edge: edge,
             currentParent: parent,
             newParent: commonAncestor
           });
-        } else {
-          console.log(`📍 [EDGE-STAY] Edge ${edge.id} staying at ${parent.id} (correct location)`);
         }
       }
     }
   }
-  
-  console.log(`📍 [EDGE-SUMMARY] Total edges to move: ${edgesToMove.length}`);
   
   // Second pass: actually move the edges
   for (const { edge, currentParent, newParent } of edgesToMove) {
@@ -198,8 +159,6 @@ function updateEdgesForNode(nodeId: string, layout: ElkNode): ElkNode {
       newParent.edges = [];
     }
     newParent.edges.push(edge);
-    
-    console.log(`✅ Successfully moved edge ${edge.id} from ${currentParent.id} to ${newParent.id}`);
   }
   
   return layout;
@@ -211,8 +170,6 @@ function updateEdgesForNode(nodeId: string, layout: ElkNode): ElkNode {
  * not just edges involving a specific node.
  */
 function reattachAllEdges(layout: ElkNode): ElkNode {
-  console.log(`📍 [REATTACH-ALL] Starting comprehensive edge reattachment...`);
-  
   const allEdges = collectEdges(layout);
   const edgesToMove: { edge: ElkEdge; currentParent: ElkNode; newParent: ElkNode }[] = [];
   
@@ -222,24 +179,16 @@ function reattachAllEdges(layout: ElkNode): ElkNode {
       const sourceId = edge.sources[0];
       const targetId = edge.targets[0];
       
-      console.log(`📍 [REATTACH-ALL] Checking edge ${edge.id}: ${sourceId} -> ${targetId}, currently at ${parent.id}`);
-      
       const commonAncestor = findCommonAncestor(layout, sourceId, targetId);
       if (commonAncestor && parent.id !== commonAncestor.id) {
-        console.log(`🔄 [REATTACH-ALL] Edge ${edge.id} needs to move from ${parent.id} to ${commonAncestor.id}`);
-        
         edgesToMove.push({
           edge: edge,
           currentParent: parent,
           newParent: commonAncestor
         });
-      } else {
-        console.log(`📍 [REATTACH-ALL] Edge ${edge.id} staying at ${parent.id} (correct location)`);
       }
     }
   }
-  
-  console.log(`📍 [REATTACH-ALL] Total edges to move: ${edgesToMove.length}`);
   
   // Second pass: actually move the edges
   for (const { edge, currentParent, newParent } of edgesToMove) {
@@ -253,11 +202,7 @@ function reattachAllEdges(layout: ElkNode): ElkNode {
       newParent.edges = [];
     }
     newParent.edges.push(edge);
-    
-    console.log(`✅ [REATTACH-ALL] Successfully moved edge ${edge.id} from ${currentParent.id} to ${newParent.id}`);
   }
-  
-  console.log(`✅ [REATTACH-ALL] Comprehensive edge reattachment completed`);
   
   return layout;
 }
@@ -348,7 +293,6 @@ export function addNode(
   if (!parent.children) parent.children = [];
   parent.children.push(newNode);
   
-  console.log(`✅ [ADD-NODE] Successfully added node ${nodename} to ${parentId}`);
   return layout;
 }
 
@@ -438,26 +382,12 @@ export function addEdge(
   layout: ElkNode,
   label?: string
 ): ElkNode {
-  console.log(`🔗 [ADD-EDGE] Adding edge ${edgeId}: ${sourceId} -> ${targetId}`);
-  
-  // Check if edge already exists anywhere in the graph
-  const allEdges = collectEdges(layout);
-  for (const { edgeArr } of allEdges) {
-    if (edgeArr.some(edge => edge.id === edgeId)) {
-      const error = `Edge ${edgeId} already exists`;
-      console.error(`❌ [ADD-EDGE] ${error}`);
-      throw new Error(error);
-    }
-  }
-  
   const commonAncestor = findCommonAncestor(layout, sourceId, targetId);
   if (!commonAncestor) {
     const error = `Common ancestor not found for nodes: ${sourceId}, ${targetId}`;
     console.error(`❌ [ADD-EDGE] ${error}`);
     throw new Error(error);
   }
-  
-  console.log(`📍 [ADD-EDGE] Edge ${edgeId} will be attached to container: ${commonAncestor.id}`);
   
   const newEdge: ElkEdge = {
     id: edgeId,
@@ -472,8 +402,6 @@ export function addEdge(
   
   if (!commonAncestor.edges) commonAncestor.edges = [];
   commonAncestor.edges.push(newEdge);
-  
-  console.log(`✅ [ADD-EDGE] Edge ${edgeId} successfully added to ${commonAncestor.id}, container now has ${commonAncestor.edges.length} edges`);
   
   return layout;
 }
@@ -515,15 +443,11 @@ export function groupNodes(
   style?: any,
   groupIconName?: string
 ): ElkNode {
-  console.log(`🏗️ [GROUP-NODES] Starting grouping operation: ${JSON.stringify(nodeIds)} -> ${groupId} under ${parentId}`);
-  
   const parent = findNodeById(layout, parentId);
   if (!parent) {
     console.error(`❌ [GROUP-NODES] Parent node not found: ${parentId}`);
     return layout;
   }
-  
-  console.log(`📍 [GROUP-NODES] Found parent: ${parentId}, has ${parent.children?.length || 0} children`);
   
   // Check if group already exists ANYWHERE in the graph
   const existingGroup = findNodeById(layout, groupId);
@@ -552,8 +476,6 @@ export function groupNodes(
     (groupNode as any).groupIconName = groupIconName;
   }
   
-  console.log(`🏗️ [GROUP-NODES] Created group node: ${groupId} with icon: ${groupIconName || 'none'}`);
-  
   // Move nodes to the group
   const movedNodes: ElkNode[] = [];
   const failedNodes: string[] = [];
@@ -564,7 +486,6 @@ export function groupNodes(
       if (nodeIndex >= 0) {
         const [node] = parent.children.splice(nodeIndex, 1);
         movedNodes.push(node);
-        console.log(`🔄 [GROUP-NODES] Moved node ${nodeId} into group ${groupId}`);
       } else {
         console.warn(`⚠️ [GROUP-NODES] Node ${nodeId} not found in parent ${parentId}`);
         failedNodes.push(nodeId);
@@ -594,10 +515,7 @@ export function groupNodes(
   if (!parent.children) parent.children = [];
   parent.children.push(groupNode);
   
-  console.log(`🏗️ [GROUP-NODES] Group ${groupId} created with ${movedNodes.length} children`);
-  
   // Log edge distribution before reattachment
-  console.log(`📊 [GROUP-NODES] Edge distribution BEFORE reattachment:`);
   const edgesBefore = collectEdges(layout);
   for (const { parent: container, edgeArr } of edgesBefore) {
     if (edgeArr.length > 0) {
@@ -606,21 +524,17 @@ export function groupNodes(
   }
   
   // Perform comprehensive edge reattachment for ALL edges
-  console.log(`🔄 [GROUP-NODES] Performing comprehensive edge reattachment...`);
-  let updatedLayout = reattachAllEdges(layout);
+  layout = reattachAllEdges(layout);
   
   // Log edge distribution after reattachment
-  console.log(`📊 [GROUP-NODES] Edge distribution AFTER reattachment:`);
-  const edgesAfter = collectEdges(updatedLayout);
+  const edgesAfter = collectEdges(layout);
   for (const { parent: container, edgeArr } of edgesAfter) {
     if (edgeArr.length > 0) {
       console.log(`  - ${container.id}: ${edgeArr.length} edges`);
     }
   }
   
-  console.log(`✅ [GROUP-NODES] Grouping operation completed for ${groupId}`);
-  
-  return updatedLayout;
+  return layout;
 }
 
 /**
@@ -628,8 +542,6 @@ export function groupNodes(
  * Removes a group node by moving its children up to the parent and updating edges.
  */
 export function removeGroup(groupId: string, layout: ElkNode): ElkNode {
-  console.log(`🗑️ [REMOVE-GROUP] Starting group removal for: ${groupId}`);
-  
   const groupNode = findNodeById(layout, groupId);
   if (!groupNode) {
     const error = `Group not found: ${groupId}`;
@@ -643,12 +555,9 @@ export function removeGroup(groupId: string, layout: ElkNode): ElkNode {
     throw new Error(error);
   }
   
-  console.log(`📍 [REMOVE-GROUP] Moving ${groupNode.children?.length || 0} children to parent: ${parent.id}`);
-  
   if (groupNode.children) {
     for (const child of groupNode.children) {
       parent.children.push(child);
-      console.log(`🔄 [REMOVE-GROUP] Moved child ${child.id} to parent ${parent.id}`);
     }
   }
   
@@ -656,10 +565,7 @@ export function removeGroup(groupId: string, layout: ElkNode): ElkNode {
   parent.children = parent.children.filter(child => child.id !== groupId);
   
   // Perform comprehensive edge reattachment since ungrouping can affect edge placement
-  console.log(`🔄 [REMOVE-GROUP] Performing comprehensive edge reattachment...`);
   layout = reattachAllEdges(layout);
-  
-  console.log(`✅ [REMOVE-GROUP] Group removal completed for ${groupId}`);
   
   return layout;
 }
@@ -673,71 +579,59 @@ export function batchUpdate(
   operations: Array<{name: string, args?: any, [key: string]: any}>,
   layout: ElkNode
 ): ElkNode {
-  console.log(`🔄 [BATCH-UPDATE] Starting batch update with ${operations.length} operations`);
-  
-  let updatedLayout = layout;
-  
   for (let i = 0; i < operations.length; i++) {
     const operation = operations[i];
-    console.log(`📍 [BATCH-UPDATE] Operation ${i + 1}/${operations.length}: ${operation.name}`);
     
     try {
       switch (operation.name) {
         case 'add_node':
-          console.log(`  🟢 Adding node: ${operation.nodename} to ${operation.parentId}`);
-          updatedLayout = addNode(
+          addNode(
             operation.nodename,
             operation.parentId,
-            updatedLayout,
+            layout,
             operation.data
           );
           break;
           
         case 'delete_node':
-          console.log(`  🔴 Deleting node: ${operation.nodeId}`);
-          updatedLayout = deleteNode(operation.nodeId, updatedLayout);
+          deleteNode(operation.nodeId, layout);
           break;
           
         case 'move_node':
-          console.log(`  🔄 Moving node: ${operation.nodeId} to ${operation.newParentId}`);
-          updatedLayout = moveNode(
+          moveNode(
             operation.nodeId,
             operation.newParentId,
-            updatedLayout
+            layout
           );
           break;
           
         case 'add_edge':
-          console.log(`  🔗 Adding edge: ${operation.edgeId} (${operation.sourceId} -> ${operation.targetId})`);
-          updatedLayout = addEdge(
+          addEdge(
             operation.edgeId,
             operation.sourceId,
             operation.targetId,
-            updatedLayout,
+            layout,
             operation.label
           );
           break;
           
         case 'delete_edge':
-          console.log(`  ❌ Deleting edge: ${operation.edgeId}`);
-          updatedLayout = deleteEdge(operation.edgeId, updatedLayout);
+          deleteEdge(operation.edgeId, layout);
           break;
           
         case 'group_nodes':
-          console.log(`  🏗️ Grouping nodes: ${JSON.stringify(operation.nodeIds)} -> ${operation.groupId}`);
-          updatedLayout = groupNodes(
+          groupNodes(
             operation.nodeIds,
             operation.parentId,
             operation.groupId,
-            updatedLayout,
+            layout,
             operation.style,
             operation.groupIconName
           );
           break;
           
         case 'remove_group':
-          console.log(`  🗑️ Removing group: ${operation.groupId}`);
-          updatedLayout = removeGroup(operation.groupId, updatedLayout);
+          removeGroup(operation.groupId, layout);
           break;
           
         default:
@@ -745,8 +639,6 @@ export function batchUpdate(
           console.error(`❌ [BATCH-UPDATE] ${error}`);
           throw new Error(error);
       }
-      
-      console.log(`  ✅ Operation ${i + 1} completed successfully`);
       
     } catch (error) {
       const errorMsg = `Operation ${i + 1}/${operations.length} (${operation.name}) failed: ${error instanceof Error ? error.message : String(error)}`;
@@ -758,9 +650,7 @@ export function batchUpdate(
     }
   }
   
-  console.log(`✅ [BATCH-UPDATE] Batch update completed successfully`);
-  
-  return updatedLayout;
+  return layout;
 }
 
 // ──────────────────────────────────────────────
@@ -771,8 +661,6 @@ export function batchUpdate(
  * Analyzes the current graph state to identify potential edge alignment issues
  */
 export function analyzeGraphState(layout: ElkNode): void {
-  console.log(`🔍 [GRAPH-ANALYSIS] Starting analysis of graph: ${layout.id}`);
-  
   const allEdges = collectEdges(layout);
   const edgeDistribution: { [containerId: string]: number } = {};
   const potentialMisalignments: string[] = [];
@@ -795,8 +683,6 @@ export function analyzeGraphState(layout: ElkNode): void {
     }
   }
   
-  console.log(`📊 [EDGE-DISTRIBUTION]`, edgeDistribution);
-  
   if (potentialMisalignments.length > 0) {
     console.log(`⚠️ [POTENTIAL-MISALIGNMENTS] Found ${potentialMisalignments.length} potential issues:`);
     potentialMisalignments.forEach(issue => console.log(`  - ${issue}`));
@@ -809,8 +695,6 @@ export function analyzeGraphState(layout: ElkNode): void {
  * Forces edge reattachment analysis for the entire graph
  */
 export function forceEdgeReattachmentAnalysis(layout: ElkNode): ElkNode {
-  console.log(`🔄 [FORCE-REATTACH] Analyzing all edges for potential reattachment...`);
-  
   const allEdges = collectEdges(layout);
   const edgesToMove: { edge: ElkEdge; currentParent: ElkNode; newParent: ElkNode }[] = [];
   
@@ -820,24 +704,16 @@ export function forceEdgeReattachmentAnalysis(layout: ElkNode): ElkNode {
       const sourceId = edge.sources[0];
       const targetId = edge.targets[0];
       
-      console.log(`📍 [FORCE-CHECK] Edge ${edge.id}: ${sourceId} -> ${targetId}, currently at ${parent.id}`);
-      
       const commonAncestor = findCommonAncestor(layout, sourceId, targetId);
       if (commonAncestor && parent.id !== commonAncestor.id) {
-        console.log(`🔄 [FORCE-MOVE] Edge ${edge.id} should move from ${parent.id} to ${commonAncestor.id}`);
-        
         edgesToMove.push({
           edge: edge,
           currentParent: parent,
           newParent: commonAncestor
         });
-      } else {
-        console.log(`✅ [FORCE-STAY] Edge ${edge.id} correctly positioned at ${parent.id}`);
       }
     }
   }
-  
-  console.log(`📍 [FORCE-SUMMARY] Total edges that need reattachment: ${edgesToMove.length}`);
   
   // Actually move the edges if any need moving
   for (const { edge, currentParent, newParent } of edgesToMove) {
@@ -851,8 +727,6 @@ export function forceEdgeReattachmentAnalysis(layout: ElkNode): ElkNode {
       newParent.edges = [];
     }
     newParent.edges.push(edge);
-    
-    console.log(`✅ [FORCE-MOVED] Successfully moved edge ${edge.id} from ${currentParent.id} to ${newParent.id}`);
   }
   
   return layout;
@@ -862,8 +736,6 @@ export function forceEdgeReattachmentAnalysis(layout: ElkNode): ElkNode {
  * Shows detailed graph structure including node hierarchy and edge distribution
  */
 export function showGraphStructure(layout: ElkNode): void {
-  console.log(`📊 [GRAPH-STRUCTURE] Complete graph structure analysis:`);
-  
   // Function to show hierarchy
   function showHierarchy(node: ElkNode, indent = 0) {
     const spacing = '  '.repeat(indent);
@@ -890,7 +762,6 @@ export function showGraphStructure(layout: ElkNode): void {
   showHierarchy(layout);
   
   // Show edge distribution summary
-  console.log(`\n📊 [GRAPH-STRUCTURE] Edge distribution summary:`);
   const allEdges = collectEdges(layout);
   let totalEdges = 0;
   for (const { parent, edgeArr } of allEdges) {
@@ -1024,8 +895,6 @@ export function diagnoseStateSynchronization(): void {
  * Clean up duplicate groups in the graph
  */
 export function cleanupDuplicateGroups(layout: ElkNode): ElkNode {
-  console.log(`🧹 [CLEANUP-DUPLICATES] Starting duplicate group cleanup`);
-  
   const seenGroupIds = new Set<string>();
   const duplicatesToRemove: { parent: ElkNode, childIndex: number }[] = [];
   
@@ -1053,16 +922,11 @@ export function cleanupDuplicateGroups(layout: ElkNode): ElkNode {
   findDuplicates(layout);
   
   // Remove duplicates
-  console.log(`🗑️ [CLEANUP-DUPLICATES] Found ${duplicatesToRemove.length} duplicates to remove`);
-  
   for (const { parent, childIndex } of duplicatesToRemove) {
     if (parent.children && childIndex < parent.children.length) {
       const removed = parent.children.splice(childIndex, 1)[0];
-      console.log(`✂️ [CLEANUP-DUPLICATES] Removed duplicate ${removed.id} from ${parent.id}`);
     }
   }
-  
-  console.log(`✅ [CLEANUP-DUPLICATES] Cleanup completed, removed ${duplicatesToRemove.length} duplicates`);
   
   return layout;
 }

@@ -36,7 +36,7 @@ export const process_user_requirements = (elkGraph?: any, setElkGraph?: (graph: 
   console.group(`[user requirements] process_user_requirements`);
   console.time("process_user_requirements");
   
-  console.log("🎯 process_user_requirements called - collecting chat data and triggering StreamViewer");
+  console.log("🟠 STEP 4: process_user_requirements called - collecting chat data and triggering StreamViewer");
   
   // Collect conversation data from stored chat messages
   let conversationData = "";
@@ -139,12 +139,15 @@ Build the specific architecture they requested.
   
   // Always use DOM manipulation to trigger StreamViewer for consistent UI output
   // This ensures both agent calls and test button calls show streaming output in the UI
+  console.log("🟣 STEP 5: Looking for StreamViewer button to trigger...");
   const streamViewerButton = document.querySelector('[data-streamviewer-trigger]') as HTMLButtonElement;
   if (streamViewerButton && !streamViewerButton.disabled) {
-    console.log("✅ Found StreamViewer button, triggering...");
+    console.log("✅ STEP 5: Found StreamViewer button, clicking it now...");
     streamViewerButton.click();
+    console.log("🚀 STEP 5: StreamViewer button clicked - should trigger StreamExecutor");
   } else {
-    console.warn("⚠️ StreamViewer button not found or disabled");
+    console.warn("❌ STEP 5: StreamViewer button not found or disabled");
+    console.log("🔍 Available buttons:", document.querySelectorAll('button').length);
   }
   
   console.timeEnd("process_user_requirements");

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Architecture Search Test</title>
+</head>
+<body>
+    <h1>Architecture Search Test</h1>
+    <script>
+        console.log('🧪 Test page loaded, starting CSV fetch test...');
+        
+        // Test if we can fetch the CSV
+        fetch('/Architecture References - Sheet1.csv')
+            .then(response => {
+                console.log('CSV Response status:', response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.text();
+            })
+            .then(text => {
+                console.log('✅ CSV loaded successfully, length:', text.length);
+                console.log('First 200 chars:', text.substring(0, 200));
+                
+                // Try to parse a few lines
+                const lines = text.split('\n');
+                console.log('Total lines:', lines.length);
+                console.log('Headers:', lines[0]);
+                if (lines.length > 1) {
+                    console.log('Sample row:', lines[1].substring(0, 100) + '...');
+                }
+                
+                // Test CSV parsing
+                let validRows = 0;
+                for (let i = 1; i < Math.min(lines.length, 10); i++) {
+                    const line = lines[i].trim();
+                    if (line) {
+                        const values = line.split(',');
+                        if (values.length >= 6) {
+                            validRows++;
+                        }
+                    }
+                }
+                console.log(`✅ Found ${validRows} valid architecture rows in first 10 lines`);
+            })
+            .catch(error => {
+                console.error('❌ CSV fetch failed:', error);
+            });
+    </script>
+</body>
+</html> 

@@ -3,6 +3,7 @@ import { createPostEventSource } from "./PostEventSource";
 import { createDeltaHandler, EventHandlerCallbacks, PendingCall } from "./EventHandlers";
 import { executeFunctionCall, GraphState } from "./FunctionExecutor";
 import { addProcessCompleteMessage, closeChatWindow, sendArchitectureCompleteToRealtimeAgent } from "../utils/chatUtils";
+import { architectureSearchService } from "../utils/architectureSearchService";
 
 export interface StreamExecutorOptions {
   elkGraph: any;
@@ -50,6 +51,7 @@ export class StreamExecutor {
   async execute(): Promise<void> {
     const { addLine, setBusy } = this.options;
     
+    console.log('🔴 STEP 6: StreamExecutor.execute() called - starting architecture generation');
     setBusy(true);
     this.resetState();
     
@@ -87,81 +89,110 @@ export class StreamExecutor {
       // Combine conversation data with additional text input
       const combinedContent = [conversationData, additionalTextInput].filter(content => content.trim()).join('\n\n');
       
+      // Search for matching reference architecture
+      let referenceArchitecture = "";
+      console.log(`🔍 STEP 7: Starting architecture search for input: "${combinedContent.trim()}"`);
+      console.log(`📏 Combined content length: ${combinedContent.length} characters`);
       if (combinedContent.trim()) {
-        userContent = `${combinedContent}
+        try {
+          const searchInput = combinedContent.toLowerCase();
+          console.log(`🔍 Searching for reference architecture matching: "${searchInput}"`);
+          
+          // Check if service is ready
+          const availableArchs = architectureSearchService.getAvailableArchitectures();
+          console.log(`📊 Architecture service has ${availableArchs.length} architectures loaded`);
+          
+          if (availableArchs.length === 0) {
+            console.warn('⚠️ No architectures loaded in service yet, trying to wait and retry...');
+            addLine(`⚠️ Architecture database not ready, waiting...`);
+            
+            // Wait a bit and retry once
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            const retryArchs = architectureSearchService.getAvailableArchitectures();
+            console.log(`🔄 Retry: Architecture service now has ${retryArchs.length} architectures loaded`);
+            
+            if (retryArchs.length === 0) {
+              console.warn('⚠️ Still no architectures after retry, proceeding without reference');
+              addLine(`⚠️ Architecture database still loading, proceeding without reference`);
+            } else {
+              const matchedArch = await architectureSearchService.findMatchingArchitecture(searchInput);
+              
+              if (matchedArch) {
+                referenceArchitecture = `\n\nREFERENCE ARCHITECTURE:
+This is a reference architecture for the use case. Please replicate it:
+${matchedArch.architecture}`;
+                
+                // Enhanced logging with URL
+                console.log(`✅ Using reference architecture: ${matchedArch.subgroup}`);
+                console.log(`📋 Description: ${matchedArch.description}`);
+                console.log(`🔗 Source URL: ${matchedArch.source}`);
+                console.log(`☁️ Cloud Provider: ${matchedArch.cloud.toUpperCase()}`);
+                console.log(`📁 Category: ${matchedArch.group} > ${matchedArch.subgroup}`);
+                
+                addLine(`🏗️ Found reference architecture: ${matchedArch.subgroup}`);
+                addLine(`🔗 Reference URL: ${matchedArch.source}`);
+              }
+            }
+          } else {
+            const matchedArch = await architectureSearchService.findMatchingArchitecture(searchInput);
+          
+            if (matchedArch) {
+              referenceArchitecture = `\n\nREFERENCE ARCHITECTURE:
+This is a reference architecture for the use case. Please replicate it:
+${matchedArch.architecture}`;
+              
+              // Enhanced logging with URL
+              console.log(`✅ Using reference architecture: ${matchedArch.subgroup}`);
+              console.log(`📋 Description: ${matchedArch.description}`);
+              console.log(`🔗 Source URL: ${matchedArch.source}`);
+              console.log(`☁️ Cloud Provider: ${matchedArch.cloud.toUpperCase()}`);
+              console.log(`📁 Category: ${matchedArch.group} > ${matchedArch.subgroup}`);
+              
+              addLine(`🏗️ Found reference architecture: ${matchedArch.subgroup}`);
+              addLine(`🔗 Reference URL: ${matchedArch.source}`);
+            }
+          }
+        } catch (error) {
+          console.warn("⚠️ Architecture search failed:", error);
+        }
+      }
+      
+      if (combinedContent.trim()) {
+        userContent = `${combinedContent}${referenceArchitecture}
 
-CRITICAL: The user has already provided specific requirements above. DO NOT ask generic questions about cloud provider, deployment type, or basic architecture choices - these requirements are final.
+${hasImages ? `The user has provided ${storedImages.length} image(s) showing the exact architecture to replicate. REPLICATE and MIMIC the architecture shown in the image(s) as closely as possible.` : ''}
 
-${hasImages ? `
-CRITICAL: The user has provided ${storedImages.length} image(s) that show the exact architecture to replicate. REPLICATE and MIMIC the architecture shown in the image(s) as closely as possible.
-
-When building the architecture:
-1. Use the conversation data for functional requirements
-2. REPLICATE the visual architecture structure, components, and connections shown in the image(s)
-3. Match the component layout, grouping, and relationships depicted in the image(s)
-4. Combine conversation requirements with the exact visual structure from the image(s)
-5. **CRITICAL**: ONLY use icon names from your available icon list - do NOT invent or create new icon names based on what you see in the image
-` : ''}
-
-**🚨 CRITICAL EXECUTION INSTRUCTIONS 🚨**
-DO NOT STOP after calling display_elk_graph() once. You MUST continue building the complete architecture:
-
-STEP 1: Call display_elk_graph() to see current state
-STEP 2: Use batch_update to create FIRST logical group with ALL its nodes and edges
-STEP 3: Use batch_update to create SECOND logical group with ALL its nodes and edges  
-STEP 4: Continue with batch_update for EACH logical group until ALL requirements are satisfied
-STEP 5: Keep building - do NOT stop after just one or two groups
-STEP 6: ONLY call display_elk_graph() again after ALL groups are complete
-
-**CRITICAL: BUILD THE COMPLETE ARCHITECTURE, NOT JUST ONE GROUP!**
-
-Build a complete architecture following these EXACT requirements using proper group icon theming:
-- Available Group Icons: Use groupIconName parameter for all group_nodes operations
-- AWS: aws_vpc, aws_region, aws_account for AWS-based architectures
-- GCP: gcp_system (neutral), gcp_user_default (frontend), gcp_infrastructure_system (APIs), gcp_logical_grouping_services_instances (services), gcp_external_saas_providers (external)
-- Azure: azure_subscription_filled, azure_resource_group_filled for Azure architectures
-
-Remember: DO NOT acknowledge or explain. Execute multiple function calls to build the complete architecture.`;
+Build a complete architecture based on the above requirements.`;
       } else {
-        userContent = `Build a complete cloud architecture following this structure:
+        userContent = `Build a complete cloud architecture.${referenceArchitecture}
 
-${hasImages ? `
-CRITICAL: The user has provided ${storedImages.length} image(s) showing the exact architecture to replicate. REPLICATE and MIMIC the architecture shown in the image(s) as closely as possible. Do not build a generic architecture - build exactly what is shown in the image(s).
-**CRITICAL**: ONLY use icon names from your available icon list - do NOT invent or create new icon names based on what you see in the image.
-` : ''}
-
-**🚨 CRITICAL EXECUTION INSTRUCTIONS 🚨**
-DO NOT STOP after calling display_elk_graph() once. You MUST continue building the complete architecture:
-
-STEP 1: Call display_elk_graph() to see current state
-STEP 2: Use batch_update to create FIRST logical group (frontend/users) with ALL its nodes and edges
-STEP 3: Use batch_update to create SECOND logical group (api/gateway) with ALL its nodes and edges  
-STEP 4: Use batch_update to create THIRD logical group (backend services) with ALL its nodes and edges
-STEP 5: Use batch_update to create FOURTH logical group (data layer) with ALL its nodes and edges
-STEP 6: Continue until ALL groups are built (6-10 groups total)
-STEP 7: ONLY call display_elk_graph() again after ALL groups are complete
-
-**CRITICAL: BUILD THE COMPLETE ARCHITECTURE, NOT JUST ONE GROUP!**
-
-Example edge relationships:
-- Frontend components → API Gateway
-- API Gateway → Business Services
-- Business Services → Data Layer
-- All components → Infrastructure services
-
-CRITICAL: Always specify groupIconName parameter for group_nodes operations - it's required for proper visual theming!
-
-Remember: Do NOT acknowledge or explain. Execute multiple function calls to build the complete architecture.`;
+${hasImages ? `The user has provided ${storedImages.length} image(s) showing the exact architecture to replicate. REPLICATE and MIMIC the architecture shown in the image(s) as closely as possible.` : ''}`;
       }
       
       // Clear stored text input after using it
       (window as any).chatTextInput = '';
       
-      // Create the conversation payload
+      // Get current graph state for context using the same format as "Show ELK Data"
+      const currentGraphState = this.getStructuralData(this.elkGraphRef.current);
+      const currentGraphJSON = JSON.stringify(currentGraphState, null, 2);
+      console.log("📊 Current graph state being sent to agent:", currentGraphState);
+      
+      // Create the conversation payload with current graph state
+      const systemContent = `${elkGraphDescription}
+
+## CURRENT GRAPH STATE
+The following is your current graph state (same format as display_elk_graph). Use this to understand what nodes and edges already exist:
+
+\`\`\`json
+${currentGraphJSON}
+\`\`\`
+
+**IMPORTANT**: Before making any function calls, study the current graph state above. Only create edges between nodes that exist and share a common parent container. Do not create duplicate nodes or edges.`;
+
       const conversationPayload = [
         { 
           role: "system", 
-          content: elkGraphDescription
+          content: systemContent
         },
         { 
           role: "user", 
@@ -246,6 +277,53 @@ Remember: Do NOT acknowledge or explain. Execute multiple function calls to buil
     this.toolCallParent.current.clear();
     this.sentOutput.current.clear();
     this.pendingCalls.current.clear();
+  }
+
+  // Extract structural data (same as InteractiveCanvas getStructuralData)
+  private getStructuralData(graph: any): any {
+    if (!graph) return null;
+    
+    const extractStructuralData = (obj: any): any => {
+      if (!obj || typeof obj !== 'object') return obj;
+      
+      if (Array.isArray(obj)) {
+        return obj.map(extractStructuralData);
+      }
+      
+      const structural: any = {};
+      
+      // Only keep core structural properties that define the graph's logical state
+      const allowedProperties = [
+        'id',           // Node/Edge identification
+        'type',         // Node/Edge type
+        'children',     // Hierarchical structure
+        'edges',        // Edge connections
+        'source',       // Edge source
+        'target',       // Edge target
+        'sourcePort',   // Edge source port
+        'targetPort',   // Edge target port
+        'labels',       // Text labels
+        'properties',   // Custom properties
+        'data',         // Custom data
+        'text'          // Label text
+      ];
+      
+      for (const [key, value] of Object.entries(obj)) {
+        // Only include explicitly allowed structural properties
+        if (allowedProperties.includes(key)) {
+          // Recursively process objects and arrays
+          if (typeof value === 'object' && value !== null) {
+            structural[key] = extractStructuralData(value);
+          } else {
+            structural[key] = value;
+          }
+        }
+      }
+      
+      return structural;
+    };
+    
+    return extractStructuralData(graph);
   }
 
   private async createMainStream(payload: string | FormData, isFormData: boolean): Promise<void> {
@@ -352,12 +430,31 @@ Remember: Do NOT acknowledge or explain. Execute multiple function calls to buil
         // Handle premature close errors more gracefully
         if (errorDetails?.type === 'premature_close' || errorDetails?.message?.includes('Premature close')) {
           console.warn('⚠️ Stream closed prematurely - attempting to continue gracefully');
-          addLine(`⚠️ Stream connection interrupted - this may be due to server issues`);
+          addLine(`⚠️ Stream connection interrupted - checking for completion`);
           
           // Don't increment error count for premature close - it's often transient
           if (this.errorRef.current < this.MAX_ERRORS) {
-            addLine(`🔄 Will attempt to continue processing any remaining function calls`);
-            this.options.setBusy(false);
+            // Check if we have pending function calls to process
+            const pendingCallsCount = this.queueRef.current.length;
+            const activePendingCalls = this.pendingCalls.current.size;
+            
+            if (pendingCallsCount === 0 && activePendingCalls === 0) {
+              addLine(`✅ No pending calls - treating as successful completion`);
+              this.options.setBusy(false);
+              
+              // Trigger completion workflow like [DONE] would
+              this.options.onComplete?.();
+              setTimeout(() => {
+                addProcessCompleteMessage();
+              }, 500);
+              setTimeout(() => {
+                sendArchitectureCompleteToRealtimeAgent();
+              }, 1000);
+            } else {
+              addLine(`🔄 ${pendingCallsCount} queued calls + ${activePendingCalls} active calls - will continue processing`);
+              this.options.setBusy(false);
+            }
+            
             resolve(); // Resolve instead of reject for premature close
             return;
           }
@@ -508,8 +605,14 @@ Remember: Do NOT acknowledge or explain. Execute multiple function calls to buil
       try {
         const parsedResult = JSON.parse(result);
         if (parsedResult.success) {
+          // Include current graph state in follow-up
+          const currentGraphState = this.getStructuralData(this.elkGraphRef.current);
+          const currentGraphJSON = JSON.stringify(currentGraphState, null, 2);
+          
           outputContent = JSON.stringify({
             ...parsedResult,
+            current_graph_state: currentGraphState,
+            graph_state_info: `CURRENT GRAPH STATE: Here is the updated graph state after the last operation:\n\`\`\`json\n${currentGraphJSON}\n\`\`\`\n\nUse this state information for your next function call. Only create edges between existing nodes that share a common parent.`,
             next_action: "Continue building the architecture. Call the next required function without any explanation.",
             reminder: "Do not acknowledge this result. Just execute the next function."
           });

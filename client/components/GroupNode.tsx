@@ -4,6 +4,7 @@ import { baseHandleStyle } from './graph/handles';
 import { getStyle } from './graph/styles';
 import { getGroupIconHex, allGroupIcons } from '../generated/groupIconColors';
 import { cn } from '../lib/utils';
+import { iconFallbackService } from '../utils/iconFallbackService';
 
 interface GroupNodeProps {
   data: {
@@ -30,6 +31,7 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
   const [iconLoaded, setIconLoaded] = useState(false);
   const [iconError, setIconError] = useState(false);
   const [finalIconSrc, setFinalIconSrc] = useState<string | undefined>(undefined);
+  const [fallbackAttempted, setFallbackAttempted] = useState(false);
   
   // Use the icon from the data if it exists
   const iconName = data.icon || '';
@@ -39,6 +41,7 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
     if (data.icon) {
       setIconLoaded(false);
       setIconError(false);
+      setFallbackAttempted(false);
       
       // Try loading SVG first
       const svgSrc = `/assets/canvas/${data.icon}.svg`;
@@ -64,7 +67,61 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
             setIconLoaded(true);
           };
           imgJpg.onerror = () => {
-            setIconError(true);
+            // Try AI fallback before giving up (async without blocking render)
+            if (!fallbackAttempted) {
+              setFallbackAttempted(true);
+                                    // console.log(`🤖 Attempting AI fallback for group icon: ${data.icon}`);
+              
+              // Run fallback search asynchronously without blocking
+              iconFallbackService.findFallbackIcon(data.icon)
+                .then((fallbackIcon) => {
+                  if (fallbackIcon && fallbackIcon !== data.icon) {
+                    // console.log(`🎯 AI suggested group fallback: ${data.icon} → ${fallbackIcon}`);
+                    
+                    // Try loading the fallback icon with all formats
+                    const tryFallback = (src: string) => new Promise<void>((resolve, reject) => {
+                      const img = new Image();
+                      img.onload = () => {
+                        setFinalIconSrc(src);
+                        setIconLoaded(true);
+                        resolve();
+                      };
+                      img.onerror = reject;
+                      img.src = src;
+                    });
+                    
+                    // Try SVG first, then PNG, then JPEG
+                    tryFallback(`/assets/canvas/${fallbackIcon}.svg`)
+                      .then(() => {
+                        console.log(`✅ Successfully loaded fallback group icon: ${fallbackIcon}`);
+                      })
+                      .catch(() => {
+                        tryFallback(`/assets/canvas/${fallbackIcon}.png`)
+                          .then(() => {
+                            console.log(`✅ Successfully loaded fallback group icon: ${fallbackIcon}`);
+                          })
+                          .catch(() => {
+                            tryFallback(`/assets/canvas/${fallbackIcon}.jpeg`)
+                              .then(() => {
+                                console.log(`✅ Successfully loaded fallback group icon: ${fallbackIcon}`);
+                              })
+                              .catch(() => {
+                                // console.warn(`❌ All formats failed for fallback: ${fallbackIcon}`);
+                                setIconError(true);
+                              });
+                          });
+                      });
+                  } else {
+                    setIconError(true);
+                  }
+                })
+                .catch((fallbackError) => {
+                  console.warn(`❌ Group icon fallback search failed for ${data.icon}:`, fallbackError);
+                  setIconError(true);
+                });
+            } else {
+              setIconError(true);
+            }
           };
           imgJpg.src = jpgSrc;
         };

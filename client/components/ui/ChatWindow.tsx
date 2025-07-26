@@ -332,7 +332,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
   };
 
   const handleProcessClick = async () => {
-    console.log('🔄 Process button clicked - collecting conversation data');
+    console.log('🟢 STEP 1: Process button clicked - starting architecture generation flow');
+    console.log('📊 Current state:', {
+      messagesCount: messages.length,
+      selectedOptionsCount: Object.keys(selectedOptions).length,
+      textInputLength: textInput.trim().length,
+      imagesCount: selectedImages.length
+    });
     
     // Send single processing message to real-time agent
     if (window.realtimeAgentSendTextMessage && typeof window.realtimeAgentSendTextMessage === 'function') {
@@ -382,6 +388,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
     };
     
     console.log('📊 Collected processing data:', processingData);
+    console.log('🟡 STEP 2: About to call process_user_requirements()');
     
     try {
       // If we have images, store them globally for the StreamExecutor to access
@@ -396,8 +403,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
       }
       
       // Always call process_user_requirements to trigger StreamViewer
+      console.log('🔵 STEP 3: Calling process_user_requirements()...');
       const result = process_user_requirements();
-      console.log('✅ Processing initiated:', result);
+      console.log('✅ STEP 3 Complete: process_user_requirements returned:', result);
       
       // Clear selected images and text input after processing starts
       if (selectedImages.length > 0) {

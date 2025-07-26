@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Handle, Position } from 'reactflow';
 import { baseHandleStyle } from './graph/handles';
 import { iconLists } from '../generated/iconLists';
+import { iconFallbackService } from '../utils/iconFallbackService';
 
 interface CustomNodeProps {
   data: {
@@ -23,11 +24,13 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
   const [iconLoaded, setIconLoaded] = useState(false);
   const [iconError, setIconError] = useState(false);
   const [finalIconSrc, setFinalIconSrc] = useState<string | undefined>(undefined);
+  const [fallbackAttempted, setFallbackAttempted] = useState(false);
   
   useEffect(() => {
     if (data.icon) {
       setIconLoaded(false);
       setIconError(false);
+      setFallbackAttempted(false);
       
       // Function to find which category an icon belongs to
       const findIconCategory = (provider: string, iconName: string): string | null => {
@@ -98,10 +101,43 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
         .then((path) => {
           setFinalIconSrc(path);
           setIconLoaded(true);
+          setFallbackAttempted(false);
         })
         .catch(() => {
           console.warn(`Failed to load icon: ${data.icon}`);
-          setIconError(true);
+          
+          // Try to find a fallback icon using AI embeddings (async without blocking render)
+          if (!fallbackAttempted) {
+            setFallbackAttempted(true);
+                              // console.log(`🤖 Attempting AI fallback for: ${data.icon}`);
+            
+            // Run fallback search asynchronously without blocking
+            iconFallbackService.findFallbackIcon(data.icon)
+              .then(async (fallbackIcon) => {
+                if (fallbackIcon && fallbackIcon !== data.icon) {
+                                      // console.log(`🎯 AI suggested fallback: ${data.icon} → ${fallbackIcon}`);
+                  
+                  try {
+                    // Try loading the fallback icon
+                    const fallbackPath = await tryLoadIcon(fallbackIcon);
+                    setFinalIconSrc(fallbackPath);
+                    setIconLoaded(true);
+                                          // console.log(`✅ Successfully loaded fallback icon: ${fallbackIcon}`);
+                    return;
+                  } catch (fallbackLoadError) {
+                    console.warn(`❌ Failed to load fallback icon: ${fallbackIcon}`, fallbackLoadError);
+                  }
+                }
+                // If no fallback found or fallback failed to load
+                setIconError(true);
+              })
+              .catch((fallbackError) => {
+                console.warn(`❌ Fallback search failed for ${data.icon}:`, fallbackError);
+                setIconError(true);
+              });
+          } else {
+            setIconError(true);
+          }
         });
     }
   }, [data.icon]);

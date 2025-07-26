@@ -292,10 +292,20 @@ export function handleFunctionCall(
     // Create detailed error result for the agent
     const errorMessage = err instanceof Error ? err.message : String(err);
     
-    // Add specific guidance for batch_update errors
+    // Add specific guidance for different types of batch_update errors
     let specificGuidance = '';
-    if (name === 'batch_update' && errorMessage.includes('graph object')) {
-      specificGuidance = '\n\n🔥 CRITICAL: You MUST use the operations array format:\nbatch_update({ operations: [{ name: "add_node", nodename: "my-node", parentId: "root" }] })\n\nNEVER pass graph objects like { id: "...", children: [...] }!';
+    if (name === 'batch_update') {
+      if (errorMessage.includes('graph object')) {
+        specificGuidance = '\n\n🔥 CRITICAL: You MUST use the operations array format:\nbatch_update({ operations: [{ name: "add_node", nodename: "my-node", parentId: "root" }] })\n\nNEVER pass graph objects like { id: "...", children: [...] }!';
+      } else if (errorMessage.includes('Common ancestor not found')) {
+        specificGuidance = '\n\n🔥 EDGE ERROR: Cannot create edge between nodes that do not share a common parent container.\n\n' +
+          '🔧 SOLUTION: Before adding an edge, ensure both source and target nodes exist and are in related containers.\n' +
+          '✅ CORRECT APPROACH:\n' +
+          '1. First add both nodes\n' +
+          '2. Group related nodes into the same container if needed\n' +
+          '3. Then add edges between nodes that share a common ancestor\n\n' +
+          '❌ AVOID: Adding edges between nodes in completely separate, unrelated containers.';
+      }
     }
     
     result = { 
@@ -303,7 +313,8 @@ export function handleFunctionCall(
       operation: name,
       error: errorMessage,
       message: `❌ OPERATION FAILED: ${name} - ${errorMessage}${specificGuidance}`,
-      details: `The operation '${name}' could not be completed. Please check the error message and retry with corrected parameters.`
+      details: `The operation '${name}' could not be completed. Please check the error message and retry with corrected parameters.`,
+      retry_instructions: specificGuidance ? "Please follow the guidance above and retry the operation." : "Please correct the parameters and retry."
     };
     
     safeSend({

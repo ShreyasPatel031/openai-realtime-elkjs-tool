@@ -13,6 +13,9 @@ import InteractiveCanvas from "./ui/InteractiveCanvas";
 import { elkGraphDescription, agentInstruction } from "../realtime/agentConfig";
 import { useChatSession } from "../hooks/useChatSession";
 import { RtcClient } from "../realtime/RtcClient";
+// Import test functions to make them available in console
+import "../utils/testIconFallback";
+import "../utils/testArchitectureSearch";
 
 
 // Model configuration

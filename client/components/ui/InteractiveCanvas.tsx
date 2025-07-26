@@ -179,6 +179,40 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     onConnect,
     
   } = useElkToReactflowGraphConverter(getInitialElkGraph());
+
+  // Ref to store ReactFlow instance for auto-zoom functionality
+  const reactFlowRef = useRef<any>(null);
+
+  // Track previous node count for auto-zoom on new components
+  const prevNodeCountRef = useRef(0);
+
+  // Auto-zoom and fit to screen when new components are added
+  useEffect(() => {
+    const currentNodeCount = nodes.length;
+    const hasNewNodes = currentNodeCount > prevNodeCountRef.current;
+    
+    if (hasNewNodes && currentNodeCount > 0 && reactFlowRef.current) {
+      console.log(`🎯 Auto-fitting view: ${prevNodeCountRef.current} → ${currentNodeCount} nodes`);
+      
+      // Small delay to ensure nodes are rendered before fitting view
+      const timeoutId = setTimeout(() => {
+        reactFlowRef.current.fitView({
+          padding: 0.2,
+          duration: 800, // Smooth animation duration
+          maxZoom: 1.5,  // Don't zoom in too much
+          minZoom: 0.1   // Allow zooming out for large graphs
+        });
+      }, 150);
+
+      // Update the previous count
+      prevNodeCountRef.current = currentNodeCount;
+
+      return () => clearTimeout(timeoutId);
+    } else if (currentNodeCount !== prevNodeCountRef.current) {
+      // Update count even if we didn't trigger fitView
+      prevNodeCountRef.current = currentNodeCount;
+    }
+  }, [nodes.length]);
   
   // Handler for ELK debug toggle with auto-copy
   const handleElkDebugToggle = useCallback(() => {
@@ -798,12 +832,16 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         {useReactFlow && (
           <div className="absolute inset-0 h-full w-full z-0">
             <ReactFlow 
+              ref={reactFlowRef}
               nodes={nodes} 
               edges={edges}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               onSelectionChange={onSelectionChange}
+              onInit={(instance) => {
+                reactFlowRef.current = instance;
+              }}
               nodeTypes={memoizedNodeTypes}
               edgeTypes={memoizedEdgeTypes}
               className="w-full h-full bg-gray-50 dark:bg-gray-950"

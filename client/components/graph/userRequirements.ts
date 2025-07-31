@@ -46,8 +46,7 @@ export const process_user_requirements = (elkGraph?: any, setElkGraph?: (graph: 
     const answers: string[] = [];
     
     // Debug: Show what we're starting with
-    console.log("🔍 DEBUG: Global chat messages:", globalChatMessages.length, globalChatMessages);
-    console.log("🔍 DEBUG: Global selected options:", Object.keys(globalSelectedOptions).length, globalSelectedOptions);
+      // Processing chat messages and selected options
     
     // Process stored messages
     globalChatMessages.forEach(message => {
@@ -77,9 +76,7 @@ export const process_user_requirements = (elkGraph?: any, setElkGraph?: (graph: 
     });
     
     // Debug: Show what we collected
-    console.log("🔍 DEBUG: Collected requirements:", requirements);
-    console.log("🔍 DEBUG: Collected questions:", questions);
-    console.log("🔍 DEBUG: Collected answers:", answers);
+    // Requirements, questions, and answers collected
     
     // Build conversation summary
     if (requirements.length > 0 || questions.length > 0 || answers.length > 0) {

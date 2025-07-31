@@ -70,9 +70,7 @@ export class StreamExecutor {
       const hasImages = storedImages.length > 0;
       
       // Debug what conversation data, text input, and images we're using
-      console.log("🔍 DEBUG: Retrieved conversation data:", conversationData);
-      console.log("🔍 DEBUG: Conversation data length:", conversationData.length);
-      console.log("🔍 DEBUG: Additional text input:", additionalTextInput);
+      // Retrieved conversation data and additional input
       console.log("📸 DEBUG: Found stored images:", storedImages.length);
       
       // Clear any potentially cached fake data
@@ -378,11 +376,7 @@ ${currentGraphJSON}
         const delta = JSON.parse(e.data);
         
         if (e.data === '[DONE]') {
-          console.log(`🔍 DEBUG: [DONE] received - checking state:`);
-          console.log(`🔍 DEBUG: Queue length: ${this.queueRef.current.length}`);
-          console.log(`🔍 DEBUG: Pending calls: ${this.pendingCalls.current.size}`);
-          console.log(`🔍 DEBUG: Loop count: ${this.loopRef.current}`);
-          console.log(`🔍 DEBUG: Queue contents:`, this.queueRef.current);
+                  // [DONE] marker received - finalizing execution
           
           addLine('🏁 Stream finished - [DONE] received');
           console.log('🏁 Architecture generation complete - [DONE] marker received');
@@ -496,7 +490,7 @@ ${currentGraphJSON}
   }
 
   private pushCall(pc: PendingCall): void {
-    console.log(`🔍 DEBUG: pushCall called for ${pc.call.name} (${pc.call.call_id})`);
+          // Function call queued for processing
     
     if (this.handledCallsRef.current.has(pc.call.call_id)) {
       console.log(`🚫 Skipping already handled call_id: ${pc.call.call_id}`);
@@ -524,7 +518,7 @@ ${currentGraphJSON}
   }
 
   private async processQueue(): Promise<void> {
-    console.log(`🔍 DEBUG: processQueue called - queue length: ${this.queueRef.current.length}, isProcessing: ${this.isProcessingRef.current}`);
+    // Processing function call queue
     
     if (this.isProcessingRef.current) return;
     if (this.queueRef.current.length === 0) return;
@@ -774,12 +768,7 @@ ${currentGraphJSON}
     const pendingCallsCount = this.pendingCalls.current.size;
     const isInInitialStream = queueLength === 0 && pendingCallsCount === 0;
     
-    console.log(`🔍 DEBUG: Server managed detection:`, {
-      queueLength,
-      pendingCallsCount,
-      isInInitialStream,
-      loopCount: this.loopRef.current
-    });
+    // Server managed mode detection for function execution
     
     // If we're getting function calls during the initial stream (not as a result
     // of our follow-up), it's likely server-managed

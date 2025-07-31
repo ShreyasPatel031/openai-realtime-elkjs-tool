@@ -1,7 +1,6 @@
 import { join, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import react from "@vitejs/plugin-react";
-import vercel from 'vite-plugin-vercel';
 
 const path = fileURLToPath(import.meta.url);
 
@@ -11,10 +10,10 @@ export default {
     port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
   },
   build: {
-    outDir: 'dist',
+    outDir: '../dist',
     emptyOutDir: true
   },
-  plugins: [react(), vercel()],
+  plugins: [react()],
   // Explicitly define environment variables for client-side access
   define: {
     // This will be replaced at build time

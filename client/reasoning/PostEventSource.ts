@@ -128,8 +128,13 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
       const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       headers['x-session-id'] = sessionId;
       
-              // No timeout - let O3 model take as long as it needs
-        const response = await fetch('/api/stream', {
+              // Use relative URL - let the browser/vercel handle routing
+        let apiUrl = '/api/stream';
+        
+        console.log(`🌐 PostEventSource making request to: ${apiUrl}`);
+        
+        // No timeout - let O3 model take as long as it needs
+        const response = await fetch(apiUrl, {
           method: 'POST',
           headers,
           body: requestBody,
@@ -198,6 +203,8 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         }
         
         const chunk = decoder.decode(value, { stream: true });
+        console.log(`📨 PostEventSource received chunk: ${chunk.length} chars`);
+        console.log(`📨 First 100 chars: ${chunk.substring(0, 100)}`);
         buffer += chunk;
         
         // Process complete SSE messages

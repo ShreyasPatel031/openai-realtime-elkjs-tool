@@ -296,7 +296,7 @@ export function handleFunctionCall(
     let specificGuidance = '';
     if (name === 'batch_update') {
       if (errorMessage.includes('graph object')) {
-        specificGuidance = '\n\n🔥 CRITICAL: You MUST use the operations array format:\nbatch_update({ operations: [{ name: "add_node", nodename: "my-node", parentId: "root" }] })\n\nNEVER pass graph objects like { id: "...", children: [...] }!';
+      specificGuidance = '\n\n🔥 CRITICAL: You MUST use the operations array format:\nbatch_update({ operations: [{ name: "add_node", nodename: "my-node", parentId: "root" }] })\n\nNEVER pass graph objects like { id: "...", children: [...] }!';
       } else if (errorMessage.includes('Common ancestor not found')) {
         specificGuidance = '\n\n🔥 EDGE ERROR: Cannot create edge between nodes that do not share a common parent container.\n\n' +
           '🔧 SOLUTION: Before adding an edge, ensure both source and target nodes exist and are in related containers.\n' +

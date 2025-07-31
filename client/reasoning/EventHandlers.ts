@@ -19,6 +19,11 @@ export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdR
   const { addLine, appendToTextLine, appendToReasoningLine, appendToArgsLine, pushCall, setBusy, onComplete } = callbacks;
   
   return (delta: any, pendingCalls: Map<string, any>, handledCalls: Set<string>) => {
+    // Debug: Log all delta types to see what we're getting
+    if (delta && delta.type) {
+      console.log(`🔍 DEBUG: Received delta type: ${delta.type}`, delta);
+    }
+    
     // Handle [DONE] marker from server
     if (delta === '[DONE]') {
       addLine('🏁 Stream finished - [DONE] received');

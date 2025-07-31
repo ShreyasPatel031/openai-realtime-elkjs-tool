@@ -378,6 +378,12 @@ ${currentGraphJSON}
         const delta = JSON.parse(e.data);
         
         if (e.data === '[DONE]') {
+          console.log(`🔍 DEBUG: [DONE] received - checking state:`);
+          console.log(`🔍 DEBUG: Queue length: ${this.queueRef.current.length}`);
+          console.log(`🔍 DEBUG: Pending calls: ${this.pendingCalls.current.size}`);
+          console.log(`🔍 DEBUG: Loop count: ${this.loopRef.current}`);
+          console.log(`🔍 DEBUG: Queue contents:`, this.queueRef.current);
+          
           addLine('🏁 Stream finished - [DONE] received');
           console.log('🏁 Architecture generation complete - [DONE] marker received');
           ev.close();
@@ -490,11 +496,25 @@ ${currentGraphJSON}
   }
 
   private pushCall(pc: PendingCall): void {
+    console.log(`🔍 DEBUG: pushCall called for ${pc.call.name} (${pc.call.call_id})`);
+    
     if (this.handledCallsRef.current.has(pc.call.call_id)) {
       console.log(`🚫 Skipping already handled call_id: ${pc.call.call_id}`);
       return;
     }
     
+    // Check if we're in server-managed mode (Vercel dev) by detecting if we're getting
+    // function calls without client-initiated follow-up streams
+    const isServerManaged = this.isServerManagedConversation();
+    
+    if (isServerManaged) {
+      console.log(`📥 Server-managed mode: Executing ${pc.call.name} locally without follow-up stream`);
+      this.executeCallDirectly(pc.call);
+      return;
+    }
+    
+    // Client-managed mode (npm run dev) - traditional flow
+    console.log(`📥 Client-managed mode: Queuing ${pc.call.name} for traditional flow`);
     // NEVER store response IDs for multi-server compatibility
     this.toolCallParent.current.set(pc.call.call_id, null);
     this.pendingCalls.current.set(pc.call.call_id, pc.call);
@@ -504,6 +524,8 @@ ${currentGraphJSON}
   }
 
   private async processQueue(): Promise<void> {
+    console.log(`🔍 DEBUG: processQueue called - queue length: ${this.queueRef.current.length}, isProcessing: ${this.isProcessingRef.current}`);
+    
     if (this.isProcessingRef.current) return;
     if (this.queueRef.current.length === 0) return;
 
@@ -566,7 +588,9 @@ ${currentGraphJSON}
       }
 
       // Pass null instead of parentId to ensure no response ID is used
+      console.log(`🔍 DEBUG: About to open follow-up stream for call ${callId}`);
       await this.openFollowUpStream(null, callId, typeof result === 'string' ? result : JSON.stringify(result));
+      console.log(`🔍 DEBUG: Follow-up stream completed for call ${callId}`);
       
     } catch (error) {
       console.error('Error processing queue item:', error);
@@ -637,9 +661,12 @@ ${currentGraphJSON}
         using_response_id: undefined,
         responseId_param: responseId
       });
+      console.log(`🔍 DEBUG: Follow-up payload preview:`, followUpPayload.substring(0, 300) + '...');
       
       // DON'T pass responseId - let the server handle conversation state
+      console.log(`🔍 DEBUG: About to create PostEventSource for follow-up`);
       const ev = createPostEventSource(followUpPayload, undefined);
+      console.log(`🔍 DEBUG: PostEventSource created for follow-up, setting up handlers...`);
       const responseIdRef = { current: null };
 
       const callbacks: EventHandlerCallbacks = {
@@ -678,14 +705,17 @@ ${currentGraphJSON}
       };
       
       ev.onerror = (error) => {
-        console.error('Follow-up EventSource error:', error);
-        console.error('Follow-up EventSource error details:', {
+        console.error('🚨 Follow-up EventSource error:', error);
+        console.error('🚨 Follow-up EventSource error details:', {
           error,
           callId,
           responseId: 'NOT_USED',
           errorType: error && (error as any).error?.name,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          payload: followUpPayload.substring(0, 200) + '...',
+          payloadLength: followUpPayload.length
         });
+        console.error('🚨 This is likely the Vercel dev issue - follow-up stream failed to connect');
         ev.close();
         
         if (error && (error as any).error?.name === 'AbortError') {
@@ -734,6 +764,48 @@ ${currentGraphJSON}
 
   private resetError(): void {
     this.errorRef.current = 0;
+  }
+
+  private isServerManagedConversation(): boolean {
+    // Server-managed mode (Vercel) sends multiple function calls in one stream
+    // without expecting client follow-up streams. We can detect this by checking
+    // if we've received multiple calls without sending any follow-up streams yet.
+    const queueLength = this.queueRef.current.length;
+    const pendingCallsCount = this.pendingCalls.current.size;
+    const isInInitialStream = queueLength === 0 && pendingCallsCount === 0;
+    
+    console.log(`🔍 DEBUG: Server managed detection:`, {
+      queueLength,
+      pendingCallsCount,
+      isInInitialStream,
+      loopCount: this.loopRef.current
+    });
+    
+    // If we're getting function calls during the initial stream (not as a result
+    // of our follow-up), it's likely server-managed
+    return isInInitialStream;
+  }
+
+  private async executeCallDirectly(call: { name: string; arguments: string; call_id: string }): Promise<void> {
+    try {
+      console.log(`🔧 Executing ${call.name} directly in server-managed mode`);
+      
+      const result = await executeFunctionCall(
+        call,
+        { elkGraph: this.elkGraphRef.current, setElkGraph: this.options.setElkGraph },
+        { addLine: this.options.addLine },
+        this.elkGraphRef
+      );
+      
+      // Mark as handled but don't send follow-up stream
+      this.handledCallsRef.current.add(call.call_id);
+      
+      console.log(`✅ Executed ${call.name} locally in server-managed mode`);
+      
+    } catch (error) {
+      console.error(`❌ Error executing ${call.name} in server-managed mode:`, error);
+      this.options.addLine(`❌ Error executing ${call.name}: ${error}`);
+    }
   }
 }
 

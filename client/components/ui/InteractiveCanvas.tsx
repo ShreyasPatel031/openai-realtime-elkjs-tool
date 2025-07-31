@@ -179,7 +179,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     onConnect,
     
   } = useElkToReactflowGraphConverter(getInitialElkGraph());
-
+  
   // Ref to store ReactFlow instance for auto-zoom functionality
   const reactFlowRef = useRef<any>(null);
 

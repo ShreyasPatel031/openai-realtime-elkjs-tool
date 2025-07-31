@@ -21,9 +21,11 @@ class IconFallbackService {
     // Get API key from multiple sources (dev: window global, prod: env var)
     let apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY || (window as any).__OPENAI_API_KEY__;
 
-    // Debug logging
-    // Debug logging removed to reduce console noise
-
+    // If no API key is available, disable the service gracefully
+    if (!apiKey) {
+      console.warn('⚠️ IconFallbackService: No OpenAI API key found. Icon fallback disabled. Set VITE_OPENAI_API_KEY environment variable to enable.');
+      return;
+    }
 
     try {
       this.client = new OpenAI({
@@ -31,7 +33,7 @@ class IconFallbackService {
         dangerouslyAllowBrowser: true
       });
       this.initializeProviderIconSets();
-      // console.log('✅ IconFallbackService initialized with OpenAI embeddings');
+      console.log('✅ IconFallbackService initialized with OpenAI embeddings');
     } catch (error) {
       console.warn('⚠️ Failed to initialize IconFallbackService:', error);
     }

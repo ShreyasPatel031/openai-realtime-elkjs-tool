@@ -5,6 +5,7 @@ import { getStyle } from './graph/styles';
 import { getGroupIconHex, allGroupIcons } from '../generated/groupIconColors';
 import { cn } from '../lib/utils';
 import { iconFallbackService } from '../utils/iconFallbackService';
+import { useApiEndpoint, buildAssetUrl } from '../contexts/ApiEndpointContext';
 
 interface GroupNodeProps {
   data: {
@@ -32,6 +33,7 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
   const [iconError, setIconError] = useState(false);
   const [finalIconSrc, setFinalIconSrc] = useState<string | undefined>(undefined);
   const [fallbackAttempted, setFallbackAttempted] = useState(false);
+  const apiEndpoint = useApiEndpoint();
   
   // Use the icon from the data if it exists
   const iconName = data.icon || '';
@@ -45,17 +47,19 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
       
       // Try loading SVG first
       const svgSrc = `/assets/canvas/${data.icon}.svg`;
+      const fullSvgUrl = buildAssetUrl(svgSrc, apiEndpoint);
       const imgSvg = new Image();
       imgSvg.onload = () => {
-        setFinalIconSrc(svgSrc);
+        setFinalIconSrc(fullSvgUrl);
         setIconLoaded(true);
       };
       imgSvg.onerror = () => {
         // Try PNG if SVG fails
         const pngSrc = `/assets/canvas/${data.icon}.png`;
+        const fullPngUrl = buildAssetUrl(pngSrc, apiEndpoint);
         const imgPng = new Image();
         imgPng.onload = () => {
-          setFinalIconSrc(pngSrc);
+          setFinalIconSrc(fullPngUrl);
           setIconLoaded(true);
         };
         imgPng.onerror = () => {
@@ -91,17 +95,17 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
                     });
                     
                     // Try SVG first, then PNG, then JPEG
-                    tryFallback(`/assets/canvas/${fallbackIcon}.svg`)
+                    tryFallback(buildAssetUrl(`/assets/canvas/${fallbackIcon}.svg`, apiEndpoint))
                       .then(() => {
                         console.log(`✅ Successfully loaded fallback group icon: ${fallbackIcon}`);
                       })
                       .catch(() => {
-                        tryFallback(`/assets/canvas/${fallbackIcon}.png`)
+                        tryFallback(buildAssetUrl(`/assets/canvas/${fallbackIcon}.png`, apiEndpoint))
                           .then(() => {
                             console.log(`✅ Successfully loaded fallback group icon: ${fallbackIcon}`);
                           })
                           .catch(() => {
-                            tryFallback(`/assets/canvas/${fallbackIcon}.jpeg`)
+                            tryFallback(buildAssetUrl(`/assets/canvas/${fallbackIcon}.jpeg`, apiEndpoint))
                               .then(() => {
                                 console.log(`✅ Successfully loaded fallback group icon: ${fallbackIcon}`);
                               })
@@ -125,9 +129,9 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
           };
           imgJpg.src = jpgSrc;
         };
-        imgPng.src = pngSrc;
+        imgPng.src = fullPngUrl;
       };
-      imgSvg.src = svgSrc;
+              imgSvg.src = fullSvgUrl;
     }
   }, [data.icon]);
 

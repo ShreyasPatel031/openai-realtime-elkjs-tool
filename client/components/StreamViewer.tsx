@@ -7,13 +7,14 @@ interface StreamViewerProps {
   setElkGraph?: (graph: any) => void;
   isVisible?: boolean;
   onToggleVisibility?: () => void;
+  apiEndpoint?: string;
 }
 
 export interface StreamViewerHandle {
   start: () => void;
 }
 
-const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGraph, setElkGraph, isVisible = false, onToggleVisibility }, ref) => {
+const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGraph, setElkGraph, isVisible = false, onToggleVisibility, apiEndpoint }, ref) => {
   const [lines, setLines] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [loopCount, setLoopCount] = useState(0);
@@ -200,7 +201,8 @@ const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGra
         if (currentFunctionMessageIdRef.current) {
           updateStreamingMessage(currentFunctionMessageIdRef.current, currentFunctionContentRef.current, true, currentFunctionNameRef.current);
         }
-      }
+      },
+      apiEndpoint
     };
 
     try {

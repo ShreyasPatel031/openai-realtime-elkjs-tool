@@ -39,6 +39,7 @@ export interface InteractiveCanvasProps {
   sendTextMessage?: (message: string) => void;
   sendClientEvent?: (message: any) => void;
   events?: any[]; // Add events from the server
+  apiEndpoint?: string; // API endpoint for backend calls
 }
 
 export interface ElkLabel {

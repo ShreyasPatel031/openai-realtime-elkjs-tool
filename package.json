@@ -9,6 +9,7 @@
     "build:full": "npm run generate-icons && npm run generate-dynamic-lists && npm run build:client && npm run build:server",
     "build:client": "vite build --outDir dist/client --ssrManifest",
     "build:server": "vite build --outDir dist/server --ssr ../server/server.js",
+    "build:embeddable": "vite build --config vite.embeddable.config.ts",
     "devinstall": "zx ../../devinstall.mjs -- node server.js --dev",
     "lint": "eslint . --ext .js,.jsx --fix",
     "test": "jest",

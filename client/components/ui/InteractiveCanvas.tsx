@@ -48,6 +48,7 @@ import Chatbox from "./Chatbox"
 import ChatWindow from "./ChatWindow"
 // import DebugGeometry from '../DebugGeometry'
 import { diagnoseStateSynchronization, cleanupDuplicateGroups } from '../../utils/graph_helper_functions'
+import { ApiEndpointProvider } from '../../contexts/ApiEndpointContext'
 
 const ChatBox = Chatbox as React.ComponentType<ChatBoxProps>
 
@@ -76,6 +77,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   sendTextMessage = () => {},
   sendClientEvent = () => {},
   events = [],
+  apiEndpoint,
 }) => {
   // State for DevPanel visibility
   const [showDev, setShowDev] = useState(false);
@@ -811,7 +813,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   }, [useReactFlow, handleSvgZoom]);
 
   return (
-    <div className="w-full h-full flex flex-col overflow-hidden bg-white dark:bg-black">
+    <ApiEndpointProvider apiEndpoint={apiEndpoint}>
+      <div className="w-full h-full flex flex-col overflow-hidden bg-white dark:bg-black">
       {/* Connection status indicator - moved to top-left */}
       <div className="absolute top-4 left-4 z-[101]">
         <ConnectionStatus 
@@ -1027,6 +1030,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           ref={streamViewerRef}
           isVisible={showStreamViewer}
           onToggleVisibility={() => setShowStreamViewer(p => !p)}
+          apiEndpoint={apiEndpoint}
         />
         
         {/* Debug panel to show structural ELK data */}
@@ -1087,8 +1091,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             }
           }}
         />
+        </div>
       </div>
-    </div>
+    </ApiEndpointProvider>
   )
 }
 

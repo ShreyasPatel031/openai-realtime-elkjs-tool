@@ -15,6 +15,7 @@ export interface StreamExecutorOptions {
   setBusy: (busy: boolean) => void;
   onComplete?: () => void;
   onError?: (error: any) => void;
+  apiEndpoint?: string;
 }
 
 export class StreamExecutor {
@@ -345,7 +346,7 @@ ${currentGraphJSON}
         }
       }
       
-      const ev = createPostEventSource(payload, undefined);
+      const ev = createPostEventSource(payload, undefined, this.options.apiEndpoint);
       const responseIdRef = { current: null as string | null };
 
       const callbacks: EventHandlerCallbacks = {

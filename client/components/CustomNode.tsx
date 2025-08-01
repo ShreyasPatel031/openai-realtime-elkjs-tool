@@ -3,6 +3,7 @@ import { Handle, Position } from 'reactflow';
 import { baseHandleStyle } from './graph/handles';
 import { iconLists } from '../generated/iconLists';
 import { iconFallbackService } from '../utils/iconFallbackService';
+import { useApiEndpoint, buildAssetUrl } from '../contexts/ApiEndpointContext';
 
 // Heuristic fallback mapping for common icon patterns
 const getHeuristicFallback = (iconName: string): string | null => {
@@ -75,6 +76,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
   const [iconError, setIconError] = useState(false);
   const [finalIconSrc, setFinalIconSrc] = useState<string | undefined>(undefined);
   const [fallbackAttempted, setFallbackAttempted] = useState(false);
+  const apiEndpoint = useApiEndpoint();
   
   useEffect(() => {
     if (data.icon) {
@@ -105,14 +107,15 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
           const category = findIconCategory(provider, actualIconName);
           if (category) {
             const iconPath = `/icons/${provider}/${category}/${actualIconName}.png`;
+            const fullIconUrl = buildAssetUrl(iconPath, apiEndpoint);
             try {
               const img = new Image();
               await new Promise((resolve, reject) => {
                 img.onload = resolve;
                 img.onerror = reject;
-                img.src = iconPath;
+                img.src = fullIconUrl;
               });
-              return iconPath;
+              return fullIconUrl;
             } catch {
               // Fall through to legacy paths
             }
@@ -130,14 +133,15 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
         ];
         
         for (const legacyPath of legacyPaths) {
+          const fullUrl = buildAssetUrl(legacyPath, apiEndpoint);
           try {
             const img = new Image();
             await new Promise((resolve, reject) => {
               img.onload = resolve;
               img.onerror = reject;
-              img.src = legacyPath;
+              img.src = fullUrl;
             });
-            return legacyPath;
+            return fullUrl;
           } catch {
             // Continue to next path
           }

@@ -46,7 +46,7 @@ const compressPayload = async (payload: string): Promise<string> => {
 };
 
 // Helper to create EventSource-like object using POST + SSE parsing
-export const createPostEventSource = (payload: string | FormData, prevId?: string): PostEventSource => {
+export const createPostEventSource = (payload: string | FormData, prevId?: string, apiEndpoint?: string): PostEventSource => {
   const controller = new AbortController();
   
   // NEVER use responseId in multi-server scenarios - always start fresh
@@ -124,12 +124,13 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         console.log('🔍 Sending uncompressed payload to avoid browser hanging issues');
       }
       
-      // Generate a unique session ID for tracking
-      const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      headers['x-session-id'] = sessionId;
+      // Generate a unique session ID for tracking (commented out due to CORS restrictions)
+      // const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      // headers['x-session-id'] = sessionId;
       
-              // Use relative URL - let the browser/vercel handle routing
-        let apiUrl = '/api/stream';
+              // Use provided apiEndpoint or default to relative URL
+        console.log(`🔍 DEBUG: apiEndpoint parameter:`, apiEndpoint);
+        let apiUrl = apiEndpoint ? `${apiEndpoint}/api/stream` : '/api/stream';
         
         console.log(`🌐 PostEventSource making request to: ${apiUrl}`);
         

@@ -7,7 +7,7 @@ import "dotenv/config";
 import cors from 'cors';
 import multer from 'multer';
 // Import tools from catalog
-import { allTools } from "./toolCatalog.js";
+import { allTools } from "../api/toolCatalog.js";
 import ConnectionManager from './connectionManager.js';
 import { modelConfigs } from '../client/reasoning/agentConfig.ts';
 

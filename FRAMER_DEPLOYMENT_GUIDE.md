@@ -38,7 +38,26 @@ Local Development → Git Push → Vercel Auto-Deploy → Framer Code Component 
 
 ---
 
-## 🛠️ **Local Development Setup**
+## ⚡ **What's New: Unified Environment** 
+> 🎯 **Major Improvement**: Local development and production environments are now **100% identical**
+
+### **Key Changes Made:**
+- ✅ `npm run dev` now builds embeddable component automatically
+- ✅ `npm run build` command unified for both local and Vercel
+- ✅ Environment variables standardized (see `.env.example`)
+- ✅ No more separate configurations for local vs production
+- ✅ Eliminated preview vs production environment differences
+
+### **Benefits:**
+- 🚫 **No more environment-specific bugs**
+- 🔄 **Consistent behavior** across all environments  
+- ⚡ **Faster debugging** - what works locally works in production
+- 📦 **Single source of truth** for build process
+
+---
+
+## 🛠️ **Unified Development Setup**
+> ⚠️ **Important**: Local development and production now use **identical** configurations to prevent environment-specific issues.
 
 ### **Environment Requirements**
 ```bash
@@ -46,27 +65,33 @@ Node.js >= 18
 npm >= 8
 ```
 
-### **Environment Variables**
-Create `.env` file:
+### **Environment Variables (Unified for Local & Production)**
+Create `.env` file (copy from `.env.example`):
 ```bash
 OPENAI_API_KEY=your_openai_api_key_here
 VITE_OPENAI_API_KEY=your_openai_api_key_here  # For Vite builds
 ```
 
-### **Development Commands**
+### **Unified Development Commands**
 ```bash
 # Install dependencies
 npm install
 
-# Start local development server (localhost:3010)
+# Start unified development server (builds embeddable + starts server)
 npm run dev
+# This automatically:
+# 1. Builds the embeddable component (same as production)
+# 2. Starts the development server on localhost:3010
+# 3. Ensures local setup matches production exactly
 
-# Build embeddable component for testing
-npm run build:embeddable
+# Build everything for production (same command Vercel uses)
+npm run build
 
 # Generate icons and dynamic lists (run after icon changes)
 npm run generate-icons && npm run generate-dynamic-lists
 ```
+
+> 🎯 **Unified Environment**: Local development now uses the **identical** build process as production, eliminating environment-specific issues.
 
 ### **Local Testing URL**
 - **Main App**: `http://localhost:3010`

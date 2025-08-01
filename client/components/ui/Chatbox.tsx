@@ -1,247 +1,134 @@
 "use client"
 
-import React, { useState, useRef, useCallback, useEffect } from "react"
+import React, { useState, useRef, useEffect } from "react"
 import { Input } from "./input"
 import { Button } from "./button"
-import { Send, Mic, X, Loader2 } from "lucide-react"
+import { Send, Loader2 } from "lucide-react"
 import { cn } from "../../lib/utils"
-import { QuestionnaireExecutor } from "../../questionnaire/QuestionnaireExecutor"
+import { process_user_requirements } from "../graph/userRequirements"
 
 interface ChatBoxProps {
-  onSubmit: (message: string) => void;
-  isSessionActive?: boolean;
-  isConnecting?: boolean;
-  isAgentReady?: boolean;
-  onStartSession?: () => void;
-  onStopSession?: () => void;
-  onTriggerReasoning?: () => void;
+  onSubmit?: (message: string) => void; // Keep for compatibility but won't use complex logic
 }
 
-const ChatBox: React.FC<ChatBoxProps> = ({ 
-  onSubmit, 
-  isSessionActive = false, 
-  isConnecting = false,
-  isAgentReady = false,
-  onStartSession, 
-  onStopSession,
-  onTriggerReasoning
-}) => {
-  const [message, setMessage] = useState("")
-  const [isExpanded, setIsExpanded] = useState(false)
-  const [isTransitioning, setIsTransitioning] = useState(false)
-  const [showControls, setShowControls] = useState(false)
-  const [showMic, setShowMic] = useState(true)
+const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
+  const [textInput, setTextInput] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Auto-expand when agent is ready
+  // Auto-focus input when component mounts
   useEffect(() => {
-    if (isAgentReady && !isExpanded && !isTransitioning) {
-      console.log('🤖 Agent is ready - auto-expanding chat');
-      toggleExpand();
+    if (inputRef.current) {
+      inputRef.current.focus();
     }
-  }, [isAgentReady]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (message.trim() && !isProcessing) {
+    if (textInput.trim() && !isProcessing) {
       setIsProcessing(true);
       
       try {
-        console.log('🔧 Starting reasoning agent with user input:', message);
+        console.log('🟢 Processing user input:', textInput.trim());
         
-        // Use questionnaire executor for text-only
-        const executor = new QuestionnaireExecutor();
-
-        await executor.execute(
-          message,
-          () => {
-            console.log('🚀 Questionnaire agent started');
-          },
-          (questions) => {
-            console.log('✅ Questions received:', questions);
-            console.log('✅ Questionnaire completed, triggering reasoning agent...');
-            setIsProcessing(false);
-            
-            // Trigger reasoning agent after questions are displayed
-            if (onTriggerReasoning) {
-              setTimeout(() => {
-                onTriggerReasoning();
-              }, 2000); // 2 second delay to let user see questions
-            }
-          },
-          (error) => {
-            console.error('❌ Questionnaire agent failed:', error);
-            setIsProcessing(false);
-          }
-        );
+        // Store text input globally for reasoning agent (same as ChatWindow does)
+        if (textInput.trim()) {
+          (window as any).chatTextInput = textInput.trim();
+          console.log('📝 Stored text input for reasoning agent:', textInput.trim());
+        } else {
+          (window as any).chatTextInput = '';
+        }
         
-        // Clear the input
-        setMessage("");
+        // Clear images (in case any were stored before)
+        (window as any).selectedImages = [];
+        
+        // Call process_user_requirements to trigger the architecture generation
+        console.log('🔵 Calling process_user_requirements()...');
+        const result = process_user_requirements();
+        console.log('✅ process_user_requirements returned:', result);
+        
+        // Clear the input after processing starts
+        setTextInput("");
+        
+        // Optional: call onSubmit for any parent component compatibility
+        if (onSubmit) {
+          onSubmit(textInput.trim());
+        }
         
       } catch (error) {
-        console.error('❌ Failed to execute:', error);
-        setIsProcessing(false);
+        console.error('Failed to process input:', error);
+      } finally {
+        // Reset processing state after a short delay to show feedback
+        setTimeout(() => {
+          setIsProcessing(false);
+        }, 1000);
       }
     }
   }
 
-  const toggleExpand = () => {
-    // Don't toggle if already transitioning
-    if (isTransitioning) return;
-    
-    setIsTransitioning(true);
-
-    if (isExpanded) {
-      // Closing animation sequence
-      setShowControls(false);
-      setTimeout(() => {
-        setIsExpanded(false);
-        setTimeout(() => {
-          setShowMic(true);
-          setIsTransitioning(false);
-        }, 400); // Wait for closing animation to complete
-      }, 100); // Small delay before starting to collapse
-    } else {
-      // Opening animation sequence
-      setShowMic(false);
-      setIsExpanded(true);
-      // Wait for expansion animation to complete before showing controls
-      setTimeout(() => {
-        setShowControls(true);
-        setTimeout(() => {
-          setIsTransitioning(false);
-          if (inputRef.current) inputRef.current.focus();
-        }, 100); // Short delay after showing controls
-      }, 500); // Wait a bit longer for full expansion before showing controls
-    }
-  };
-
-  const handleMicClick = () => {
-    // Start the real-time session when the start button is clicked
-    if (!isExpanded && !isTransitioning) {
-      if (onStartSession) {
-        console.log('🎤 Start button clicked - starting real-time session');
-        onStartSession();
-      }
-      toggleExpand();
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(e as any);
     }
   }
-
-  const handleCancelClick = () => {
-    // Stop session when cancel is clicked if active
-    if (isSessionActive && onStopSession) {
-      onStopSession();
-    }
-    // Then collapse the chat input
-    toggleExpand();
-  }
-
-  // Simple button appearance - red like it used to be
-  const getButtonState = () => {
-    return {
-      color: "#ef4444", // red-500
-      borderColor: "border-red-500", 
-      hoverColor: "hover:bg-red-600",
-      icon: null, // No icon
-      disabled: false
-    };
-  };
-
-  const buttonState = getButtonState();
 
   return (
-    <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 z-50 pointer-events-auto">
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          transition: "all 400ms cubic-bezier(0.4, 0, 0.2, 1)",
-        }}
-        className={cn(
-          "flex items-center justify-between bg-white rounded-full border border-gray-200 overflow-hidden",
-          isExpanded 
-            ? "w-[70vw] p-2" 
-            : "w-[140px] h-14 p-0",
-        )}
-      >
-        {isExpanded ? (
-          <>
-            {(isExpanded && showControls) && (
-              <Button
-                type="button"
-                style={{
-                  transition: "opacity 300ms cubic-bezier(0, 0, 0.2, 1)",
-                  background: "transparent",
-                }}
-                className={cn(
-                  "h-14 w-14 rounded-full border-2 border-red-500 flex-shrink-0 flex items-center justify-center p-0",
-                  "opacity-100",
-                  "hover:bg-gray-100"
-                )}
-                onClick={handleCancelClick}
-              >
-                <X className="h-6 w-6 text-red-500 hover:text-red-300" />
-              </Button>
-            )}
-            
-            <Input
-              ref={inputRef}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder={isProcessing ? "Processing..." : "Describe your architecture requirements..."}
-              disabled={isProcessing}
-              style={{
-                transition: "opacity 300ms cubic-bezier(0, 0, 0.2, 1)",
-              }}
-              className={cn(
-                "flex-grow mx-4 rounded-full border-none focus-visible:ring-0 focus-visible:ring-offset-0 text-center",
-                showControls ? "opacity-100" : "opacity-0",
-                isProcessing && "cursor-not-allowed opacity-75"
-              )}
-            />
-            <Button
-              type="submit"
-              disabled={isProcessing || !message.trim()}
-              style={{
-                transition: "opacity 300ms cubic-bezier(0, 0, 0.2, 1)",
-                background: isProcessing ? "#6b7280" : "#000",
-              }}
-              className={cn(
-                "h-14 w-14 rounded-full border-2 border-black text-white hover:bg-gray-800 flex-shrink-0 flex items-center justify-center p-0",
-                showControls ? "opacity-100" : "opacity-0",
-                isProcessing && "cursor-not-allowed"
-              )}
+    <div className="w-full p-4">
+      <form onSubmit={handleSubmit} className="w-full">
+        <div className="flex items-center gap-3 bg-white rounded-xl border border-gray-200 shadow-sm p-3 hover:shadow-md transition-shadow">
+          {/* Input field */}
+          <Input
+            ref={inputRef}
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder={isProcessing ? "Processing..." : "Describe your architecture requirements..."}
+            disabled={isProcessing}
+            className="flex-grow border-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-base placeholder:text-gray-500"
+          />
+          
+          {/* Clear button (when there's text) */}
+          {textInput.trim() && !isProcessing && (
+            <button
+              type="button"
+              onClick={() => setTextInput('')}
+              className="text-gray-400 hover:text-gray-600 text-xs px-2 py-1 rounded hover:bg-gray-100 transition-colors"
             >
-              {isProcessing ? (
-                <Loader2 className="h-6 w-6 animate-spin" />
-              ) : (
-                <Send className="h-6 w-6" />
-              )}
-            </Button>
-          </>
-        ) : (
+              Clear
+            </button>
+          )}
+          
+          {/* Submit button */}
           <Button
-            onClick={handleMicClick}
-            type="button"
-            disabled={buttonState.disabled}
-            style={{
-              transition: "all 400ms cubic-bezier(0.4, 0, 0.2, 1)",
-              background: buttonState.color,
-            }}
+            type="submit"
+            disabled={isProcessing || !textInput.trim()}
             className={cn(
-              "h-14 w-full rounded-full border-2 flex items-center justify-center",
-              buttonState.borderColor,
-              buttonState.hoverColor,
-              showMic ? "opacity-100" : "opacity-0",
-              buttonState.disabled && "cursor-not-allowed opacity-75"
+              "h-10 w-10 rounded-lg flex-shrink-0 flex items-center justify-center p-0 transition-all",
+              textInput.trim() && !isProcessing
+                ? "bg-blue-500 hover:bg-blue-600 text-white" 
+                : "bg-gray-100 text-gray-400 cursor-not-allowed"
             )}
           >
-            <span className="text-white font-medium">Start</span>
+            {isProcessing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
           </Button>
-        )}
+        </div>
+        
+        {/* Simple helper text */}
+        <div className="mt-2 text-xs text-gray-500 text-center">
+          {isProcessing 
+            ? "Generating your architecture..." 
+            : "Type your requirements and press Enter to generate architecture"
+          }
+        </div>
       </form>
     </div>
   )
 }
 
 export default ChatBox
+

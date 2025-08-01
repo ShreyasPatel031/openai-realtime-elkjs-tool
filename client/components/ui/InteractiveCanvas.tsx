@@ -963,64 +963,22 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           </div>
         </div>
 
-        {/* Dev Panel Toggle Button and Visualization Toggle */}
-        <div className="absolute top-4 right-4 z-[100] flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowStreamViewer((p) => !p)}
-              className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"
-            >
-              {showStreamViewer ? 'Hide Stream' : 'Show Stream'}
-            </button>
-          
+        {/* Single Dev Panel Toggle - Replace all 5 buttons with one sleek toggle */}
+        <div className="absolute top-4 right-4 z-[100]">
           <button
-            onClick={() => setShowDev((p) => !p)}
-            className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"
-          >
-            {showDev ? 'Hide Dev Panel' : 'Show Dev Panel'}
-          </button>
-          </div>
-          
-          <div className="flex items-center gap-2">
-          {/* Visualization Toggle */}
-          <div className="w-36 h-10 flex items-center bg-white rounded-md shadow-sm border border-gray-200 px-3 py-2">
-            <label className="inline-flex items-center cursor-pointer w-full">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  className="sr-only peer"
-                  checked={useReactFlow}
-                  onChange={() => handleToggleVisMode(!useReactFlow)}
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-              </div>
-              <span className="ml-3 text-sm font-medium text-gray-900">
-                {useReactFlow ? 'ReactFlow' : 'SVG'}
-              </span>
-            </label>
-          </div>
-          
-          {/* Graph Sync Button */}
-          <button
-            onClick={handleGraphSync}
-            disabled={isSyncing}
-            className={`w-32 h-10 px-3 py-2 rounded-md shadow-sm border text-sm font-medium flex items-center justify-center ${
-              isSyncing 
-                ? 'bg-gray-300 text-gray-500 border-gray-300 cursor-not-allowed' 
-                : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+            onClick={() => setShowDev((prev) => !prev)}
+            className={`w-10 h-10 flex items-center justify-center rounded-lg shadow-lg border transition-all duration-200 ${
+              showDev 
+                ? 'bg-blue-500 text-white border-blue-600 shadow-blue-200' 
+                : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:shadow-md'
             }`}
+            title="Toggle Dev Panel"
           >
-            {isSyncing ? 'Syncing...' : 'Sync Graph'}
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
           </button>
-          
-          {/* Debug Output Toggle */}
-          <button
-            onClick={handleElkDebugToggle}
-            className="w-36 h-10 px-3 py-2 bg-white text-gray-700 rounded-md shadow-sm border border-gray-200 hover:bg-gray-50 text-sm font-medium flex items-center justify-center"
-          >
-            {showElkDebug ? 'Hide ELK Data' : 'Show ELK Data'}
-          </button>
-          </div>
         </div>
         
         {/* StreamViewer - moved outside the button group */}
@@ -1062,16 +1020,102 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           </div>
         )}
         
-        {/* Dev Panel */}
+        {/* Comprehensive Dev Panel - Contains all developer tools */}
         {showDev && (
-          <div className="absolute top-16 right-4 z-50">
-            <DevPanel 
-              elkGraph={rawGraph} 
-              onGraphChange={handleGraphChange}
-              onToggleVisMode={handleToggleVisMode}
-              useReactFlow={useReactFlow}
-              onSvgGenerated={handleSvgGenerated}
-            />
+          <div className="absolute top-16 right-4 z-50 w-80">
+            <div className="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
+              {/* Panel Header */}
+              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900">Developer Panel</h3>
+                  <button 
+                    onClick={() => setShowDev(false)}
+                    className="p-1 rounded hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              
+              {/* Panel Content */}
+              <div className="p-4 space-y-4">
+                {/* Streaming Controls */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">AI Streaming</label>
+                  <button
+                    onClick={() => setShowStreamViewer((p) => !p)}
+                    className={`w-full px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      showStreamViewer 
+                        ? 'bg-blue-100 text-blue-700 border border-blue-200' 
+                        : 'bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200'
+                    }`}
+                  >
+                    {showStreamViewer ? 'Hide AI Stream' : 'Show AI Stream'}
+                  </button>
+                </div>
+                
+                {/* Visualization Mode */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Visualization Mode</label>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+                    <span className="text-sm text-gray-600">
+                      {useReactFlow ? 'Interactive (ReactFlow)' : 'Static (SVG)'}
+                    </span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="sr-only peer"
+                        checked={useReactFlow}
+                        onChange={() => handleToggleVisMode(!useReactFlow)}
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                </div>
+                
+                {/* Graph Operations */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Graph Operations</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={handleGraphSync}
+                      disabled={isSyncing}
+                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                        isSyncing 
+                          ? 'bg-gray-200 text-gray-500 cursor-not-allowed' 
+                          : 'bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-200'
+                      }`}
+                    >
+                      {isSyncing ? 'Syncing...' : 'Sync Graph'}
+                    </button>
+                    
+                    <button
+                      onClick={handleElkDebugToggle}
+                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                        showElkDebug 
+                          ? 'bg-green-100 text-green-700 border border-green-200' 
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                      }`}
+                    >
+                      {showElkDebug ? 'Hide Debug' : 'Show Debug'}
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Original Dev Panel Content */}
+                <div className="border-t pt-4">
+                  <DevPanel 
+                    elkGraph={rawGraph} 
+                    onGraphChange={handleGraphChange}
+                    onToggleVisMode={handleToggleVisMode}
+                    useReactFlow={useReactFlow}
+                    onSvgGenerated={handleSvgGenerated}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

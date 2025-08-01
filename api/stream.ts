@@ -14,7 +14,7 @@ async function decompressPayload(base64String: string): Promise<string> {
 
 export default async function handler(req: any, res: any) {
   try {
-    console.log('=== VERCEL STREAM REQUEST ===');
+    console.log('=== VERCEL STREAM REQUEST (with CORS fix) ===');
     console.log('Method:', req.method);
     console.log('Content-Type:', req.headers['content-type']);
     

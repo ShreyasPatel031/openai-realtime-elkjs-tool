@@ -213,15 +213,15 @@ class ConnectionManager extends EventEmitter {
       console.log(`🔄 Creating OpenAI stream for session ${sessionId || 'unknown'}`);
       
       return client.responses.create({
-        model: modelConfigs.streaming.model,
+        model: modelConfigs.reasoning.model,
         input: conversation,
         tools: [], // Tools will be passed from the caller
         tool_choice: "auto",
-        parallel_tool_calls: modelConfigs.streaming.parallel_tool_calls,
-        ...(isReasoningModel(modelConfigs.streaming.model) ? {
-          reasoning: modelConfigs.streaming.reasoning
+        parallel_tool_calls: modelConfigs.reasoning.parallel_tool_calls,
+        ...(isReasoningModel(modelConfigs.reasoning.model) ? {
+          reasoning: modelConfigs.reasoning.reasoning
         } : {}),
-        stream: modelConfigs.streaming.stream
+        stream: modelConfigs.reasoning.stream
       });
     }, sessionId ? 'high' : 'normal');
   }
@@ -231,12 +231,12 @@ class ConnectionManager extends EventEmitter {
     
     return this.queueRequest(async () => {
       return client.chat.completions.create({
-        model: modelConfigs.chat.model,
+        model: modelConfigs.reasoning.model,
         messages: messages,
         tools: [],
-        tool_choice: modelConfigs.chat.tool_choice,
-        temperature: modelConfigs.chat.temperature,
-        max_tokens: modelConfigs.chat.max_tokens
+        tool_choice: "auto",
+        temperature: modelConfigs.reasoning.temperature,
+        max_tokens: modelConfigs.reasoning.max_tokens
       });
     }, 'low');
   }

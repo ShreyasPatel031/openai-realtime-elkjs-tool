@@ -42,11 +42,8 @@ app.use(cors());
 app.use(express.json());                     // for application/json
 app.use(express.urlencoded({ extended: false })); // for x-www-form-urlencoded
 
-// Stream route for development (legacy)
-import streamHandler from './streamRoute.js';
-app.post("/stream", upload.array('images', 5), streamHandler);
-
-// API routes - same endpoints as Vercel functions
+// API routes - Import from the main API directory
+import streamHandler from '../api/stream.ts';
 app.post("/api/stream", upload.array('images', 5), streamHandler);
 app.post("/api/questionnaire", async (req, res) => {
   try {
@@ -123,162 +120,11 @@ app.post("/api/questionnaire", async (req, res) => {
   }
 });
 
-// Connection manager stats endpoint
-app.get("/api/connection-stats", (req, res) => {
-  const stats = connectionManager.getStats();
-  res.json({
-    ...stats,
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
+// Connection manager stats endpoint removed - not needed for real-time agent
 
-// API route for chat completions - MUST be before Vite middleware
-app.post("/chat", async (req, res) => {
-  try {
-    console.log("Received chat request:", req.body);
-    const { messages } = req.body;
 
-    if (!messages || !Array.isArray(messages)) {
-      console.error("Invalid messages format:", messages);
-      return res.status(400).json({ error: "Messages must be an array" });
-    }
 
-    console.log("Calling OpenAI with messages:", messages);
-
-    // Use connection manager for chat completions
-    const response = await connectionManager.queueRequest(async () => {
-      const client = connectionManager.getAvailableClient();
-      return client.chat.completions.create({
-        model: modelConfigs.chat.model,
-      messages: messages,
-      tools: allTools.map(tool => ({
-        type: "function",
-        function: {
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.parameters
-        }
-      })),
-      tool_choice: modelConfigs.chat.tool_choice
-    });
-    }, 'low');
-
-    console.log("OpenAI response received:", response);
-
-    // Convert Chat Completions response to match expected format
-    const output = [];
-    
-    if (response.choices?.[0]?.message?.tool_calls) {
-      // Handle new tools format
-      const toolCall = response.choices[0].message.tool_calls[0];
-      output.push({
-        type: "function_call",
-        function_call: {
-          name: toolCall.function.name,
-          arguments: toolCall.function.arguments
-        },
-        call_id: toolCall.id
-      });
-    } else if (response.choices?.[0]?.message?.content) {
-      output.push({
-        type: "message",
-        content: response.choices[0].message.content
-      });
-    }
-
-    // Return the response
-    return res.json({
-      output: output,
-      output_text: response.choices?.[0]?.message?.content || ""
-    });
-
-  } catch (error) {
-    console.error('OpenAI API error:', error);
-    console.error('Error details:', error.message);
-    console.error('Error stack:', error.stack);
-    return res.status(500).json({ 
-      error: 'Error calling OpenAI API',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-// API route for questionnaire agent - uses GPT-4o and forces log_requirements_and_generate_questions
-app.post("/questionnaire", async (req, res) => {
-  try {
-    console.log("Received questionnaire request:", req.body);
-    const { messages } = req.body;
-
-    if (!messages || !Array.isArray(messages)) {
-      console.error("Invalid messages format:", messages);
-      return res.status(400).json({ error: "Messages must be an array" });
-    }
-
-    console.log("Calling OpenAI with questionnaire agent messages:", messages);
-
-    // Use connection manager for questionnaire completions
-    const response = await connectionManager.queueRequest(async () => {
-      const client = connectionManager.getAvailableClient();
-      return client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: messages,
-      tools: allTools.map(tool => ({
-        type: "function",
-        function: {
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.parameters
-        }
-      })),
-      tool_choice: {
-        type: "function",
-        function: { name: "log_requirements_and_generate_questions" }
-      },
-      temperature: 0.2,
-      max_tokens: 4096
-    });
-    }, 'normal');
-
-    console.log("OpenAI questionnaire response received:", response);
-
-    // Convert Chat Completions response to match expected format
-    const output = [];
-    
-    if (response.choices?.[0]?.message?.tool_calls) {
-      // Handle new tools format
-      const toolCall = response.choices[0].message.tool_calls[0];
-      output.push({
-        type: "function_call",
-        function_call: {
-          name: toolCall.function.name,
-          arguments: toolCall.function.arguments
-        },
-        call_id: toolCall.id
-      });
-    } else if (response.choices?.[0]?.message?.content) {
-      output.push({
-        type: "message",
-        content: response.choices[0].message.content
-      });
-    }
-
-    // Return the response
-    return res.json({
-      output: output,
-      output_text: response.choices?.[0]?.message?.content || ""
-    });
-
-  } catch (error) {
-    console.error('OpenAI questionnaire API error:', error);
-    console.error('Error details:', error.message);
-    console.error('Error stack:', error.stack);
-    return res.status(500).json({ 
-      error: 'Error calling OpenAI questionnaire API',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
+// Duplicate questionnaire endpoint removed - using /api/questionnaire instead
 
 // Configure Vite middleware for React client
 const vite = await createViteServer({

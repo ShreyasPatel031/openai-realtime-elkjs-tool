@@ -10,7 +10,7 @@ interface FramerEmbeddableProps {
 }
 
 function FramerEmbeddable({
-  apiEndpoint = 'https://arch-gcb01yjn2-shreyaspatel031s-projects.vercel.app',
+  apiEndpoint = 'https://archgen-ecru.vercel.app',
   width = '100%',
   height = '800px',
   style = {}
@@ -66,7 +66,7 @@ export const FramerEmbeddablePropertyControls = {
   apiEndpoint: {
     type: 'string' as const,
     title: 'API Endpoint',
-    defaultValue: 'https://arch-gcb01yjn2-shreyaspatel031s-projects.vercel.app'
+    defaultValue: 'https://archgen-ecru.vercel.app'
   },
   width: {
     type: 'string' as const,

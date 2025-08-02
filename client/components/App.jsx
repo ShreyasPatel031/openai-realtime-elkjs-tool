@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react";
 import ErrorBoundary from "./console/ErrorBoundary";
 import InteractiveCanvas from "./ui/InteractiveCanvas";
 import { elkGraphDescription, agentInstruction } from "../realtime/agentConfig";
-import { useChatSession } from "../hooks/useChatSession";
 import { RtcClient } from "../realtime/RtcClient";
 // Import test functions to make them available in console
 import "../utils/testIconFallback";
@@ -26,9 +25,6 @@ export default function App() {
   const [events, setEvents] = useState([]);
 
   const rtcClientRef = useRef(null);
-
-  // Chat session hook
-  const chatSession = useChatSession();
 
   const startSession = () => {
     if (isConnecting || isSessionActive) return;

@@ -1,78 +1,50 @@
-import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
-import { StreamExecutor, StreamExecutorOptions } from "../reasoning/StreamExecutor";
-import { addReasoningMessage, addFunctionCallingMessage, addProcessCompleteMessage, updateStreamingMessage } from "../utils/chatUtils";
+import React, { useState, useRef, useEffect } from "react";
+import { StreamExecutor } from "../reasoning/StreamExecutor";
+import { addReasoningMessage, updateStreamingMessage, addFunctionCallingMessage } from "../utils/chatUtils";
 
-interface StreamViewerProps {
-  elkGraph?: any;
-  setElkGraph?: (graph: any) => void;
-  isVisible?: boolean;
-  onToggleVisibility?: () => void;
-  apiEndpoint?: string;
-}
-
-export interface StreamViewerHandle {
-  start: () => void;
-}
-
-const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGraph, setElkGraph, isVisible = false, onToggleVisibility, apiEndpoint }, ref) => {
+const StreamViewer: React.FC<{ elkGraph: any; setElkGraph: (graph: any) => void; apiEndpoint?: string }> = ({ elkGraph, setElkGraph, apiEndpoint }) => {
   const [lines, setLines] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [loopCount, setLoopCount] = useState(0);
-  const [errorCount, setErrorCount] = useState(0);
-  
-  // Use ref to track current graph state and avoid stale closures
-  const elkGraphRef = useRef(elkGraph);
-  
-  // Track chat message IDs for streaming and accumulated content
+  const [isStreaming, setBusy] = useState(false);
+
+  // Refs for tracking streaming messages
   const reasoningMessageIdRef = useRef<string | null>(null);
-  const currentFunctionMessageIdRef = useRef<string | null>(null);
   const reasoningContentRef = useRef<string>("");
-  const currentFunctionContentRef = useRef<string>("");
-  const currentFunctionNameRef = useRef<string>("");
   
+  // Track function calls by item ID
+  const functionCallsRef = useRef<Map<string, { messageId: string; content: string; name?: string }>>(new Map());
+
+  // Handle graph updates
   useEffect(() => {
-    elkGraphRef.current = elkGraph;
-    console.log("🔄 StreamViewer elkGraphRef updated:", elkGraphRef.current);
+    console.log('🔄 StreamViewer elkGraphRef updated:', elkGraph);
   }, [elkGraph]);
-  
+
   const addLine = (line: string) => {
     setLines(ls => [...ls, line]);
     
-    // Check if this is a function call line - extract actual function name
-    if (line.includes('🔄 Loop') && line.includes('Processing:')) {
-      // Extract function name from "Processing: function_name"
-      const functionMatch = line.match(/Processing:\s+(\w+)/);
-      if (functionMatch) {
-        const functionName = functionMatch[1];
-        
-        // Complete previous function if different
-        if (currentFunctionNameRef.current && currentFunctionNameRef.current !== functionName) {
-          if (currentFunctionMessageIdRef.current) {
-            updateStreamingMessage(currentFunctionMessageIdRef.current, currentFunctionContentRef.current, true, currentFunctionNameRef.current);
-          }
-          // Reset for new function
-          currentFunctionMessageIdRef.current = null;
-          currentFunctionContentRef.current = "";
+    // Check for function call patterns
+    const functionMatch = line.match(/🔧 (\w+) \(/);
+    if (functionMatch) {
+      const functionName = functionMatch[1];
+      
+      // Complete previous function call if exists
+      const currentCalls = functionCallsRef.current;
+      for (const [itemId, callInfo] of currentCalls.entries()) {
+        if (callInfo.messageId) {
+          updateStreamingMessage(callInfo.messageId, callInfo.content, true, callInfo.name);
         }
-        
-        // Create new function message if needed
-        if (!currentFunctionMessageIdRef.current) {
-          currentFunctionMessageIdRef.current = addFunctionCallingMessage();
-          currentFunctionContentRef.current = "";
-        }
-        
-        currentFunctionNameRef.current = functionName;
-        
-        // Add the processing line to the function content
-        currentFunctionContentRef.current += line + '\n';
-        updateStreamingMessage(currentFunctionMessageIdRef.current, currentFunctionContentRef.current, false, currentFunctionNameRef.current);
       }
+      // Clear previous calls
+      functionCallsRef.current.clear();
     }
     // Check for other function-related lines
     else if (line.includes('🟢') || line.includes('🔴') || line.includes('➡️') || line.includes('🔧')) {
-      if (currentFunctionMessageIdRef.current) {
-        currentFunctionContentRef.current += line + '\n';
-        updateStreamingMessage(currentFunctionMessageIdRef.current, currentFunctionContentRef.current, false, currentFunctionNameRef.current);
+      // Add to any active function calls
+      const currentCalls = functionCallsRef.current;
+      for (const [itemId, callInfo] of currentCalls.entries()) {
+        if (callInfo.messageId) {
+          callInfo.content += line + '\n';
+          updateStreamingMessage(callInfo.messageId, callInfo.content, false, callInfo.name);
+        }
       }
     }
   };
@@ -102,7 +74,7 @@ const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGra
     updateStreamingMessage(reasoningMessageIdRef.current, reasoningContentRef.current, false);
   };
 
-  const appendToArgsLine = (text: string) => {
+  const appendToArgsLine = (text: string, itemId?: string) => {
     setLines(ls => {
       const newLines = [...ls];
       const lastLineIndex = newLines.length - 1;
@@ -116,11 +88,24 @@ const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGra
       return newLines;
     });
     
-    // This is function argument building - add to current function message
-    if (currentFunctionMessageIdRef.current) {
-      // Don't show "building_args" as function name, keep the actual function name
-      currentFunctionContentRef.current += text;
-      updateStreamingMessage(currentFunctionMessageIdRef.current, currentFunctionContentRef.current, false, currentFunctionNameRef.current);
+    // Handle function call arguments with item ID tracking
+    if (itemId) {
+      let callInfo = functionCallsRef.current.get(itemId);
+      
+      if (!callInfo) {
+        // Create new function call message
+        const messageId = addFunctionCallingMessage();
+        callInfo = {
+          messageId,
+          content: '',
+          name: undefined
+        };
+        functionCallsRef.current.set(itemId, callInfo);
+      }
+      
+      // Accumulate function call content
+      callInfo.content += text;
+      updateStreamingMessage(callInfo.messageId, callInfo.content, false, callInfo.name);
     }
   };
 
@@ -128,139 +113,116 @@ const StreamViewer = forwardRef<StreamViewerHandle, StreamViewerProps>(({ elkGra
     setLines(ls => {
       const newLines = [...ls];
       const lastLineIndex = newLines.length - 1;
-      if (lastLineIndex >= 0 && newLines[lastLineIndex].startsWith('💭 ')) {
-        // Append to existing text line
+      if (lastLineIndex >= 0 && 
+          !newLines[lastLineIndex].startsWith('🧠 ') && 
+          !newLines[lastLineIndex].startsWith('🔄 ') &&
+          !newLines[lastLineIndex].includes('🎯') &&
+          !newLines[lastLineIndex].includes('📝')) {
+        // Append to existing non-special line
         newLines[lastLineIndex] += text;
       } else {
-        // Start new text line
-        newLines.push(`💭 ${text}`);
+        // Start new line
+        newLines.push(text);
       }
       return newLines;
     });
-    
-    // Stream to chat reasoning message - properly accumulate content
-    if (!reasoningMessageIdRef.current) {
-      reasoningMessageIdRef.current = addReasoningMessage();
-      reasoningContentRef.current = "";
-    }
-    
-    // Accumulate reasoning content as sentences, not individual tokens
-    reasoningContentRef.current += text;
-    updateStreamingMessage(reasoningMessageIdRef.current, reasoningContentRef.current, false);
   };
 
-  const start = async () => {
-    console.log('🟤 STEP 6: StreamViewer start() called');
-    if (!elkGraphRef.current || !setElkGraph) {
-      console.error("❌ No graph state available in StreamViewer");
-      addLine("❌ No graph state available");
-      return;
-    }
-
-    console.log('✅ STEP 6: StreamViewer has graph state, initializing StreamExecutor...');
-    setLines([]);
-    setLoopCount(0);
-    setErrorCount(0);
+  // Create StreamExecutor instance and execute
+  const executeStream = () => {
+    console.log('🔄 Starting StreamExecutor with graph:', elkGraph);
     
-    // Reset chat message refs and content
-    reasoningMessageIdRef.current = null;
-    currentFunctionMessageIdRef.current = null;
-    reasoningContentRef.current = "";
-    currentFunctionContentRef.current = "";
-    currentFunctionNameRef.current = "";
-    
-    const options: StreamExecutorOptions = {
-      elkGraph: elkGraphRef.current,
-      setElkGraph: setElkGraph,
+    const streamExecutor = new StreamExecutor({
+      elkGraph,
+      setElkGraph,
       addLine,
       appendToTextLine,
       appendToReasoningLine,
       appendToArgsLine,
       setBusy,
       onComplete: () => {
-        // Simple completion - just log it, no fancy UI stuff
-        addLine("✅ Architecture generation completed!");
-        console.log('✅ StreamViewer: Architecture generation finished');
-        
+        console.log('✅ StreamExecutor completed');
         // Complete any remaining streaming messages
         if (reasoningMessageIdRef.current) {
           updateStreamingMessage(reasoningMessageIdRef.current, reasoningContentRef.current, true);
+          reasoningMessageIdRef.current = null;
+          reasoningContentRef.current = "";
         }
-        if (currentFunctionMessageIdRef.current) {
-          updateStreamingMessage(currentFunctionMessageIdRef.current, currentFunctionContentRef.current, true, currentFunctionNameRef.current);
-        }
-      },
-      onError: (error) => {
-        addLine(`❌ Stream execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        console.error('❌ StreamViewer onError called:', error);
         
-        // Mark streaming as complete even on error
-        if (reasoningMessageIdRef.current) {
-          updateStreamingMessage(reasoningMessageIdRef.current, reasoningContentRef.current, true);
+        // Complete any remaining function calls
+        const currentCalls = functionCallsRef.current;
+        for (const [itemId, callInfo] of currentCalls.entries()) {
+          if (callInfo.messageId) {
+            updateStreamingMessage(callInfo.messageId, callInfo.content, true, callInfo.name);
+          }
         }
-        if (currentFunctionMessageIdRef.current) {
-          updateStreamingMessage(currentFunctionMessageIdRef.current, currentFunctionContentRef.current, true, currentFunctionNameRef.current);
-        }
+        functionCallsRef.current.clear();
       },
       apiEndpoint
-    };
+    });
 
-    try {
-      console.log('🟫 STEP 6.5: Creating StreamExecutor instance...');
-      const executor = new StreamExecutor(options);
-      console.log('🟫 STEP 6.5: StreamExecutor created, calling execute()...');
-      await executor.execute();
-      console.log('✅ STEP 6.5: StreamExecutor.execute() completed successfully');
-    } catch (error) {
-      console.error('❌ StreamViewer start error:', error);
-      addLine(`❌ Failed to start stream: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setBusy(false);
-    }
+    // Reset streaming message refs when starting new stream
+    reasoningMessageIdRef.current = null;
+    reasoningContentRef.current = "";
+    functionCallsRef.current.clear();
+
+    streamExecutor.execute();
   };
 
-  // Expose start method via ref
-  useImperativeHandle(ref, () => ({
-    start
-  }));
+  // Auto-execute when component mounts or elkGraph changes (if needed)
+  // Commented out to prevent auto-execution
+  // useEffect(() => {
+  //   executeStream();
+  // }, []);
 
   return (
-    <div className={`fixed bottom-0 right-4 z-50 transition-all duration-300 ease-in-out ${isVisible ? 'translate-y-0' : 'translate-y-full'}`}>
-      <div className="w-[600px] bg-white dark:bg-gray-800 rounded-t-lg shadow-lg border border-gray-200 dark:border-gray-700">
-        {/* Header with toggle button */}
-        <div className="flex items-center justify-between p-2 border-b border-gray-200 dark:border-gray-700">
+    <div className="h-full flex flex-col bg-white">
+      <div className="flex items-center justify-between p-3 border-b">
+        <h2 className="text-lg font-semibold">AI Stream</h2>
+        <div className="flex items-center gap-2">
           <button
-            onClick={onToggleVisibility}
-            className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+            onClick={executeStream}
+            disabled={isStreaming}
+            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+              isStreaming 
+                ? 'bg-gray-200 text-gray-500 cursor-not-allowed' 
+                : 'bg-blue-500 text-white hover:bg-blue-600'
+            }`}
           >
-            {isVisible ? '▼' : '▲'} Stream Viewer
+            {isStreaming ? 'Processing...' : 'Start Stream'}
           </button>
-        <button 
-          onClick={start} 
-          disabled={busy || !elkGraphRef.current || !setElkGraph} 
-            className="px-4 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-md disabled:opacity-50 text-sm"
-          data-streamviewer-trigger
-        >
-          {busy ? "Streaming..." : "Stream + Execute"}
-        </button>
+          <button
+            onClick={() => setLines([])}
+            className="px-3 py-1 rounded text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+          >
+            Clear
+          </button>
         </div>
-
-        {/* Content */}
-        <div className="p-2 flex flex-col" style={{ height: '40vh', maxHeight: '40vh' }}>
-          <div className="flex items-center gap-4 mb-2 flex-shrink-0">
-        <span className="text-sm text-gray-600 flex-shrink-0">
-          {busy ? "🔴 Streaming active" : !elkGraphRef.current ? "⚪ No graph state" : "⚪ Ready"}
-        </span>
       </div>
       
-      <pre className="bg-gray-100 dark:bg-gray-900 p-3 rounded-lg flex-1 overflow-auto text-xs border whitespace-pre-wrap break-words break-all min-h-0 w-full" style={{ maxHeight: '35vh', maxWidth: '100%' }}>
-        {lines.join("\n")}
-      </pre>
-        </div>
+      <div className="flex-1 overflow-y-auto p-3 font-mono text-sm">
+        {lines.length === 0 ? (
+          <div className="text-gray-500 italic">Stream output will appear here...</div>
+        ) : (
+          lines.map((line, index) => (
+            <div
+              key={index}
+              className={`mb-1 ${
+                line.startsWith('🧠') ? 'text-purple-600' :
+                line.startsWith('🔄') ? 'text-blue-600' :
+                line.includes('🎯') ? 'text-green-600' :
+                line.includes('❌') ? 'text-red-600' :
+                line.includes('✅') ? 'text-green-500' :
+                'text-gray-800'
+              }`}
+            >
+              {line}
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
-});
-
-StreamViewer.displayName = 'StreamViewer';
+};
 
 export default StreamViewer;

@@ -1,6 +1,6 @@
 import { elkGraphDescription } from "./agentConfig";
 import { createPostEventSource } from "./PostEventSource";
-import { createDeltaHandler, EventHandlerCallbacks, PendingCall } from "./EventHandlers";
+import { createDeltaHandler, DeltaHandlerCallbacks, PendingCall } from "./EventHandlers";
 import { executeFunctionCall, GraphState } from "./FunctionExecutor";
 import { addProcessCompleteMessage, closeChatWindow, sendArchitectureCompleteToRealtimeAgent } from "../utils/chatUtils";
 import { architectureSearchService } from "../utils/architectureSearchService";
@@ -11,7 +11,8 @@ export interface StreamExecutorOptions {
   addLine: (line: string) => void;
   appendToTextLine: (text: string) => void;
   appendToReasoningLine: (text: string) => void;
-  appendToArgsLine: (text: string) => void;
+  appendToArgsLine: (text: string, itemId?: string) => void;
+  completeFunctionCall?: (itemId: string, functionName?: string) => void;
   setBusy: (busy: boolean) => void;
   onComplete?: () => void;
   onError?: (error: any) => void;
@@ -349,12 +350,16 @@ ${currentGraphJSON}
       const ev = createPostEventSource(payload, undefined, this.options.apiEndpoint);
       const responseIdRef = { current: null as string | null };
 
-      const callbacks: EventHandlerCallbacks = {
+      const callbacks: DeltaHandlerCallbacks = {
         addLine: this.options.addLine,
         appendToTextLine: this.options.appendToTextLine,
         appendToReasoningLine: this.options.appendToReasoningLine,
         appendToArgsLine: this.options.appendToArgsLine,
-        pushCall: (pc: PendingCall) => this.pushCall(pc),
+        completeFunctionCall: this.options.completeFunctionCall,
+        pushCall: (params: { call: any; responseId: string }) => this.pushCall({
+          call: params.call,
+          responseId: params.responseId
+        }),
         setBusy: this.options.setBusy,
         onComplete: () => {
           // Trigger completion when EventHandlers detects the done signal
@@ -664,12 +669,16 @@ ${currentGraphJSON}
       console.log(`🔍 DEBUG: PostEventSource created for follow-up, setting up handlers...`);
       const responseIdRef = { current: null };
 
-      const callbacks: EventHandlerCallbacks = {
+      const callbacks: DeltaHandlerCallbacks = {
         addLine: this.options.addLine,
         appendToTextLine: this.options.appendToTextLine,
         appendToReasoningLine: this.options.appendToReasoningLine,
         appendToArgsLine: this.options.appendToArgsLine,
-        pushCall: (pc: PendingCall) => this.pushCall(pc),
+        completeFunctionCall: this.options.completeFunctionCall,
+        pushCall: (params: { call: any; responseId: string }) => this.pushCall({
+          call: params.call,
+          responseId: params.responseId
+        }),
         setBusy: this.options.setBusy,
         onComplete: () => {
           // Follow-up streams should not trigger completion

@@ -1,155 +1,212 @@
-/**
- * This file contains the process_user_requirements function which returns
- * sample architecture diagram instructions.
- */
+import { StreamExecutor } from "../../reasoning/StreamExecutor";
+import { addReasoningMessage, addFunctionCallingMessage, updateStreamingMessage, addProcessCompleteMessage } from "../../utils/chatUtils";
 
-// Global variable to store chat messages for the StreamExecutor
-let globalChatMessages: any[] = [];
-let globalSelectedOptions: Record<string, string | string[]> = {};
-
-/**
- * Clear all cached conversation data and reset global variables
- */
-export const clearCachedConversationData = () => {
-  globalChatMessages = [];
-  globalSelectedOptions = {};
-  (window as any).chatConversationData = "";
-  console.log("🧹 Cleared all cached conversation data");
-};
-
-/**
- * Store chat messages and selected options for use by StreamExecutor
- */
-export const storeChatData = (messages: any[], selectedOptions: Record<string, string | string[]>) => {
-  globalChatMessages = messages;
-  globalSelectedOptions = selectedOptions;
-  console.log("📝 Stored chat data:", { messages: messages.length, selectedOptions: Object.keys(selectedOptions).length });
-};
-
-/**
- * Process user requirements and return sample architecture diagram instructions
- * Returns an array of instructions for building an architecture diagram
- * 
- * Always triggers StreamViewer via DOM manipulation for consistent UI output
- */
-export const process_user_requirements = (elkGraph?: any, setElkGraph?: (graph: any) => void) => {
-  console.group(`[user requirements] process_user_requirements`);
+export function process_user_requirements(): void {
+  console.log("[user requirements] process_user_requirements");
+  
   console.time("process_user_requirements");
-  
   console.log("🟠 STEP 4: process_user_requirements called - collecting chat data and triggering StreamViewer");
+
+  // Step 1: Try to get conversation data from the current chat
+  let conversationData: any[] = [];
+  let textInput = "";
+  let images: string[] = [];
   
-  // Collect conversation data from stored chat messages
-  let conversationData = "";
   try {
-    const requirements: string[] = [];
-    const questions: string[] = [];
-    const answers: string[] = [];
-    
-    // Debug: Show what we're starting with
-      // Processing chat messages and selected options
-    
-    // Process stored messages
-    globalChatMessages.forEach(message => {
-      if (message.sender === 'user' || message.sender === 'assistant') {
-        if (message.type === 'radio-question' || message.type === 'checkbox-question') {
-          questions.push(message.question || message.content);
-          
-          // Get selected answer for this question
-          const selectedAnswer = globalSelectedOptions[message.id];
-          if (selectedAnswer) {
-            if (Array.isArray(selectedAnswer)) {
-              // Checkbox question - multiple selections
-              selectedAnswer.forEach(optionId => {
-                const option = message.options?.find((opt: any) => opt.id === optionId);
-                if (option) answers.push(option.text);
-              });
-            } else {
-              // Radio question - single selection
-              const option = message.options?.find((opt: any) => opt.id === selectedAnswer);
-              if (option) answers.push(option.text);
-            }
-          }
-        } else if (message.content && !message.content.includes('Processing') && !message.content.includes('Architecture')) {
-          requirements.push(message.content);
-        }
-      }
-    });
-    
-    // Debug: Show what we collected
-    // Requirements, questions, and answers collected
-    
-    // Build conversation summary
-    if (requirements.length > 0 || questions.length > 0 || answers.length > 0) {
-      conversationData = `
-FULL CONVERSATION HISTORY:
-
-ORIGINAL USER INPUT: ${requirements.join(' | ')}
-
-FOLLOW-UP QUESTIONS AND ANSWERS:
-${questions.map((question, index) => {
-  const relatedAnswers = [];
-  // Find answers for this question
-  globalChatMessages.forEach(message => {
-    if (message.type === 'radio-question' || message.type === 'checkbox-question') {
-      if (message.question === question || message.content === question) {
-        const selectedAnswer = globalSelectedOptions[message.id];
-        if (selectedAnswer) {
-          if (Array.isArray(selectedAnswer)) {
-            selectedAnswer.forEach(optionId => {
-              const option = message.options?.find((opt: any) => opt.id === optionId);
-              if (option) relatedAnswers.push(option.text);
-            });
-          } else {
-            const option = message.options?.find((opt: any) => opt.id === selectedAnswer);
-            if (option) relatedAnswers.push(option.text);
-          }
-        }
-      }
+    // Get text input from global storage (set by ChatBox or other input components)
+    const globalTextInput = (window as any).chatTextInput;
+    if (globalTextInput && typeof globalTextInput === 'string') {
+      textInput = globalTextInput.trim();
+      console.log("📝 Found text input:", textInput);
     }
-  });
-  
-  return `
-Question ${index + 1}: ${question}
-Selected Answer(s): ${relatedAnswers.join(', ') || 'Not answered yet'}`;
-}).join('')}
 
-ARCHITECTURE REQUIREMENTS:
-Based on the user input "${requirements.join(' ')}" and their selected answers, build a complete architecture that specifically addresses:
-1. The exact technologies they mentioned (${requirements.filter(req => req.includes('GCP') || req.includes('AWS') || req.includes('Azure') || req.includes('Kubernetes') || req.includes('microservices')).join(', ')})
-2. The components they selected: ${answers.join(', ')}
-3. Integration with the services they chose
-4. The use case and scaling approach they specified
-
-DO NOT ask generic questions about cloud provider or basic architecture choices - these are already decided above.
-Build the specific architecture they requested.
-`;
-      console.log("📝 Collected full conversation data:", conversationData);
-    } else {
-      console.log("📝 No conversation data found, using default architecture");
+    // Get images from global storage
+    const globalImages = (window as any).selectedImages;
+    if (globalImages && Array.isArray(globalImages)) {
+      images = globalImages;
+      console.log("🖼️ Found images:", images.length);
     }
+
+    // Try to get conversation data from chat session
+    const chatMessages = (window as any).getChatMessages?.() || [];
+    console.log("💬 Found chat messages:", chatMessages.length);
+    
+    if (chatMessages.length > 0) {
+      // Convert chat messages to conversation format
+      conversationData = chatMessages.map((msg: any) => ({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.content || msg.question || '',
+        type: msg.type
+      }));
+    }
+
+    // If we have text input but no conversation data, create a simple conversation
+    if (textInput && conversationData.length === 0) {
+      conversationData = [
+        {
+          role: 'user',
+          content: textInput
+        }
+      ];
+    }
+
+    console.log("🔍 Final conversation data:", conversationData.length, "items");
+    
   } catch (error) {
     console.warn("⚠️ Error collecting conversation data:", error);
   }
   
-  // Store conversation data globally so StreamExecutor can access it
-  (window as any).chatConversationData = conversationData;
+  // Default to simple architecture request if no conversation data
+  if (conversationData.length === 0) {
+    console.log("📝 No conversation data found, using default architecture");
+    conversationData = [
+      {
+        role: 'user',
+        content: textInput || 'Create a cloud architecture'
+      }
+    ];
+  }
   
-  // Always use DOM manipulation to trigger StreamViewer for consistent UI output
-  // This ensures both agent calls and test button calls show streaming output in the UI
-  console.log("🟣 STEP 5: Looking for StreamViewer button to trigger...");
-  const streamViewerButton = document.querySelector('[data-streamviewer-trigger]') as HTMLButtonElement;
-  if (streamViewerButton && !streamViewerButton.disabled) {
-    console.log("✅ STEP 5: Found StreamViewer button, clicking it now...");
-    streamViewerButton.click();
-    console.log("🚀 STEP 5: StreamViewer button clicked - should trigger StreamExecutor");
-  } else {
-    console.warn("❌ STEP 5: StreamViewer button not found or disabled");
-    console.log("🔍 Available buttons:", document.querySelectorAll('button').length);
+  // Store conversation data globally so StreamExecutor can access it
+  // Convert array to string format that StreamExecutor expects
+  let conversationString = "";
+  if (conversationData.length > 0) {
+    conversationString = conversationData.map(msg => {
+      const role = msg.role === 'user' ? 'USER' : 'ASSISTANT';
+      const content = typeof msg.content === 'string' ? msg.content : String(msg.content || '');
+      return `${role}: ${content}`;
+    }).join('\n\n');
+  }
+  
+  (window as any).chatConversationData = conversationString;
+  
+  // Get current graph state
+  const currentGraph = (window as any).getCurrentGraph?.() || { id: "root", children: [], edges: [] };
+  console.log("🗂️ Current graph state:", currentGraph);
+  
+  // Track active streaming messages with accumulated content
+  let reasoningMessageId: string | null = null;
+  let reasoningContent = "";
+  
+  const functionCallMessages = new Map<string, { messageId: string; content: string }>(); // itemId -> {messageId, accumulated content}
+  
+  // Directly instantiate and execute StreamExecutor
+  console.log("🟣 STEP 5: Creating StreamExecutor directly...");
+  
+  try {
+    const streamExecutor = new StreamExecutor({
+      elkGraph: currentGraph,
+      setElkGraph: (newGraph: any) => {
+        console.log("📊 StreamExecutor updating graph:", newGraph);
+        // Try to update the graph via the global function
+        const setGraphFunction = (window as any).setElkGraph;
+        if (setGraphFunction && typeof setGraphFunction === 'function') {
+          setGraphFunction(newGraph);
+        } else {
+          console.warn("⚠️ No setElkGraph function available");
+        }
+      },
+      addLine: (line: string) => {
+        console.log("📝 Stream:", line);
+      },
+      appendToTextLine: (text: string) => {
+        console.log("📝 Text:", text);
+      },
+      appendToReasoningLine: (text: string) => {
+        console.log("🧠 Reasoning:", text);
+        
+        // Create reasoning message if it doesn't exist
+        if (!reasoningMessageId) {
+          reasoningMessageId = addReasoningMessage();
+          reasoningContent = "";
+        }
+        
+        // Accumulate reasoning content
+        reasoningContent += text;
+        
+        // Update the streaming reasoning message with accumulated content
+        updateStreamingMessage(reasoningMessageId, reasoningContent, false);
+      },
+      appendToArgsLine: (text: string, itemId?: string) => {
+        console.log("🔄 Args:", text, itemId);
+        
+        if (itemId) {
+          // Get or create function call message for this itemId
+          let callInfo = functionCallMessages.get(itemId);
+          if (!callInfo) {
+            const messageId = addFunctionCallingMessage();
+            callInfo = { messageId, content: "" };
+            functionCallMessages.set(itemId, callInfo);
+          }
+          
+          // Accumulate function call content
+          callInfo.content += text;
+          
+          // Update the streaming function call message with accumulated content
+          updateStreamingMessage(callInfo.messageId, callInfo.content, false);
+        }
+      },
+      completeFunctionCall: (itemId: string, functionName?: string) => {
+        console.log("✅ Function call complete:", itemId, functionName);
+        
+        // Mark this specific function call as complete
+        const callInfo = functionCallMessages.get(itemId);
+        if (callInfo) {
+          updateStreamingMessage(callInfo.messageId, callInfo.content, true, functionName);
+          functionCallMessages.delete(itemId);
+        }
+      },
+      setBusy: (busy: boolean) => {
+        console.log("⏳ Busy:", busy);
+      },
+      onComplete: () => {
+        console.log("✅ StreamExecutor completed!");
+        
+        // Mark any remaining active messages as complete
+        if (reasoningMessageId) {
+          updateStreamingMessage(reasoningMessageId, reasoningContent, true);
+          reasoningMessageId = null;
+          reasoningContent = "";
+        }
+        
+        // Any remaining function calls should be marked complete
+        // (Individual function calls should already be closed by completeFunctionCall)
+        functionCallMessages.forEach((callInfo, itemId) => {
+          console.log("⚠️ Marking remaining function call as complete:", itemId);
+          updateStreamingMessage(callInfo.messageId, callInfo.content, true);
+        });
+        functionCallMessages.clear();
+        
+        // Only add completion message if no active streaming is happening
+        if (functionCallMessages.size === 0 && !reasoningMessageId) {
+          addProcessCompleteMessage();
+        }
+      },
+      onError: (error: any) => {
+        console.error("❌ StreamExecutor error:", error);
+        
+        // Mark all active messages as complete on error
+        if (reasoningMessageId) {
+          updateStreamingMessage(reasoningMessageId, reasoningContent, true);
+          reasoningMessageId = null;
+          reasoningContent = "";
+        }
+        
+        functionCallMessages.forEach((callInfo, itemId) => {
+          updateStreamingMessage(callInfo.messageId, callInfo.content, true);
+        });
+        functionCallMessages.clear();
+      },
+      apiEndpoint: undefined // Use default endpoint
+    });
+
+    console.log("🚀 STEP 5: Executing StreamExecutor...");
+    streamExecutor.execute();
+    console.log("✅ STEP 5: StreamExecutor execution started");
+    
+  } catch (error) {
+    console.error("❌ STEP 5: Failed to execute StreamExecutor:", error);
   }
   
   console.timeEnd("process_user_requirements");
-  console.groupEnd();
-  
-  const result: string[] = [];
-  return result;
-}; 
+} 

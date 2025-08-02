@@ -42,7 +42,7 @@ import GroupNode from "../GroupNode"
 import StepEdge from "../StepEdge"
 import ConnectionStatus from "../ConnectionStatus"
 import DevPanel from "../DevPanel"
-import StreamViewer, { StreamViewerHandle } from "../StreamViewer"
+import StreamViewer from "../StreamViewer"
 
 import Chatbox from "./Chatbox"
 import ChatWindow from "./ChatWindow"
@@ -158,8 +158,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     });
   }, []);
   
-  // Ref to access StreamViewer's start method directly
-  const streamViewerRef = useRef<StreamViewerHandle | null>(null);
+  // StreamViewer is now standalone and doesn't need refs
   
   // Use the new ElkFlow hook instead of managing ELK state directly
   const {
@@ -350,6 +349,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       // Also expose the current graph for direct access
       (window as any).getCurrentGraph = () => {
         return rawGraph;
+      };
+      
+      // Expose setElkGraph for StreamExecutor
+      (window as any).setElkGraph = (newGraph: any) => {
+        console.log('🔄 Global setElkGraph called with:', newGraph);
+        setRawGraph(newGraph);
       };
       
       // Expose state synchronization diagnostic and cleanup function
@@ -985,9 +990,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         <StreamViewer 
           elkGraph={rawGraph} 
           setElkGraph={setRawGraph} 
-          ref={streamViewerRef}
-          isVisible={showStreamViewer}
-          onToggleVisibility={() => setShowStreamViewer(p => !p)}
           apiEndpoint={apiEndpoint}
         />
         
@@ -1099,9 +1101,27 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
                       }`}
                     >
-                      {showElkDebug ? 'Hide Debug' : 'Show Debug'}
+                      {showElkDebug ? 'Hide Debug' : 'ELK Debug'}
                     </button>
                   </div>
+                </div>
+                
+                {/* Test Functions */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Test Functions</label>
+                  <button
+                    onClick={() => {
+                      // Store test input
+                      (window as any).chatTextInput = 'Create a simple web application with frontend and backend';
+                      // Trigger processing
+                      import("../graph/userRequirements").then(module => {
+                        module.process_user_requirements();
+                      });
+                    }}
+                    className="w-full px-3 py-2 rounded-md text-sm font-medium bg-yellow-100 text-yellow-700 hover:bg-yellow-200 border border-yellow-200 transition-colors"
+                  >
+                    🧪 Test Function Calls
+                  </button>
                 </div>
                 
                 {/* Original Dev Panel Content */}
@@ -1130,9 +1150,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           onStartSession={startSession}
           onStopSession={stopSession}
           onTriggerReasoning={() => {
-            if (streamViewerRef && streamViewerRef.current && streamViewerRef.current.start) {
-              streamViewerRef.current.start();
-            }
+            console.log("Reasoning trigger - now handled directly by process_user_requirements");
           }}
         />
         </div>

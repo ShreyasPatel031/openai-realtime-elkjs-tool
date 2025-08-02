@@ -54,7 +54,7 @@ const extractGraphState = (graph: any) => {
 };
 
 export const executeFunctionCall = async (
-  functionCall: any, 
+  functionCall: any,
   graphState: GraphState,
   callbacks: FunctionExecutorCallbacks,
   elkGraphRef: React.MutableRefObject<any>

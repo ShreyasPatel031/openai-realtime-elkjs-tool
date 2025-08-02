@@ -231,9 +231,9 @@ Always build complete architectures using multiple batch_update function calls. 
           input: finalCleanedConversation,
           tools: allTools.map(tool => ({
             type: "function",
-            name: tool.function.name,
-            description: tool.function.description,
-            parameters: tool.function.parameters,
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.parameters,
             strict: false
           })),
           tool_choice: "auto",

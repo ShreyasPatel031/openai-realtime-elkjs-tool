@@ -4,81 +4,153 @@ export interface PendingCall {
   responseId: string;
 }
 
-export interface EventHandlerCallbacks {
+export interface DeltaHandlerCallbacks {
   addLine: (line: string) => void;
   appendToTextLine: (text: string) => void;
   appendToReasoningLine: (text: string) => void;
-  appendToArgsLine: (text: string) => void;
-  pushCall: (pc: PendingCall) => void;
+  appendToArgsLine: (text: string, itemId?: string) => void;
+  completeFunctionCall?: (itemId: string, functionName?: string) => void; // New callback for individual completion
+  pushCall: (params: { call: any; responseId: string }) => void;
   setBusy: (busy: boolean) => void;
-  onComplete?: () => void; // Add completion callback
+  onComplete: () => void;
 }
 
 // Function to handle different delta types from the API response
-export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdRef: { current: string | null }) => {
-  const { addLine, appendToTextLine, appendToReasoningLine, appendToArgsLine, pushCall, setBusy, onComplete } = callbacks;
+export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdRef: { current: string | null }) => {
+  const { addLine, appendToTextLine, appendToReasoningLine, appendToArgsLine, completeFunctionCall, pushCall, setBusy, onComplete } = callbacks;
   
-  return (delta: any, pendingCalls: Map<string, any>, handledCalls: Set<string>) => {
-    // Process delta types without debug logging
-    
-    // Handle [DONE] marker from server
-    if (delta === '[DONE]') {
-      addLine('🏁 Stream finished - [DONE] received');
-      setBusy(false);
-      return 'close';
-    }
-    
-    // Update response ID tracking
-    if (delta.type === "response.started" || delta.type === "response.created") {
-      responseIdRef.current = delta.response?.id ?? responseIdRef.current;
-    }
+  // Track active function calls by item_id
+  const activeFunctionCalls = new Map<string, { name?: string; arguments: string }>();
+  const handledCalls = new Set<string>();
+  const pendingCalls = new Set<string>();
 
-    // Handle different delta types from the Responses API
-    if (delta.type === "response.delta") {
-      // Main response content
-      if (delta.delta?.content) {
-        appendToTextLine(delta.delta.content);
-      }
-    } else if (delta.type === "response.output_text.delta") {
-      // Handle text output deltas (common type)
-      if (delta.delta) {
-        appendToTextLine(delta.delta);
-      }
-    } else if (delta.type === "reasoning.delta") {
-      // Reasoning text
-      if (delta.delta) {
-        appendToReasoningLine(delta.delta);
-      }
-    } else if (delta.type === "reasoning.summary_text.delta") {
-      // Reasoning summary text
-      if (delta.delta) {
-        appendToReasoningLine(delta.delta);
-      }
-    } else if (delta.type === "response.reasoning_summary_text.delta") {
-      // Response reasoning summary text (actual API format)
-      if (delta.delta) {
-        appendToReasoningLine(delta.delta);
-      }
-    } else if (delta.type === "function_call.delta") {
-      // Function call arguments being built
-      if (delta.delta?.arguments) {
-        appendToArgsLine(delta.delta.arguments);
-      }
-    } else if (delta.type === "response.function_call_arguments.delta") {
-      // Response function call arguments being built (actual API format)
-      if (delta.delta) {
-        appendToArgsLine(delta.delta);
-      }
-    } else if (delta.type === "function_call.done") {
-      // Complete function call
-      const funcCall = delta.function_call;
-      if (funcCall) {
+  return (delta: any) => {
+    console.log('📨 Event received:', delta.type, delta.delta ? `"${delta.delta.slice(0, 50)}..."` : '(no delta)');
+    
+    try {
+      if (delta.type === "response.done") {
+        console.log("🏁 Stream completed");
+        setBusy(false);
+        if (onComplete) {
+          onComplete();
+        }
+      } else if (delta.type === "response.output_text.delta") {
+        // Handle text output deltas (common type)
+        if (delta.delta) {
+          appendToTextLine(delta.delta);
+        }
+      } else if (delta.type === "response.text.delta") {
+        // Handle response text deltas (another common format)
+        if (delta.delta) {
+          console.log('🧠 Routing response.text.delta to reasoning:', delta.delta.slice(0, 30));
+          appendToReasoningLine(delta.delta);
+        }
+      } else if (delta.type === "reasoning.delta") {
+        // Reasoning text
+        if (delta.delta) {
+          console.log('🧠 Reasoning delta received:', delta.delta.slice(0, 30));
+          appendToReasoningLine(delta.delta);
+        }
+      } else if (delta.type === "reasoning.summary_text.delta") {
+        // Reasoning summary text
+        if (delta.delta) {
+          console.log('🧠 Reasoning summary delta received:', delta.delta.slice(0, 30));
+          appendToReasoningLine(delta.delta);
+        }
+      } else if (delta.type === "response.reasoning_summary_text.delta") {
+        // Response reasoning summary text (actual API format)
+        if (delta.delta) {
+          console.log('🧠 Response reasoning summary delta received:', delta.delta.slice(0, 30));
+          appendToReasoningLine(delta.delta);
+        }
+      } else if (delta.type === "response.reasoning.delta") {
+        // Response reasoning delta (another possible format)
+        if (delta.delta) {
+          console.log('🧠 Response reasoning delta received:', delta.delta.slice(0, 30));
+          appendToReasoningLine(delta.delta);
+        }
+      } else if (delta.type === "function_call.delta") {
+        // Function call arguments being built
+        if (delta.delta?.arguments) {
+          appendToArgsLine(delta.delta.arguments);
+        }
+      } else if (delta.type === "response.function_call_arguments.delta") {
+        // Response function call arguments being built (actual API format)
+        if (delta.delta && delta.item_id) {
+          // Track this function call
+          if (!activeFunctionCalls.has(delta.item_id)) {
+            activeFunctionCalls.set(delta.item_id, { arguments: '' });
+          }
+          
+          const functionCall = activeFunctionCalls.get(delta.item_id)!;
+          functionCall.arguments += delta.delta;
+          
+          // Pass the item_id to appendToArgsLine so it can create/update the appropriate message
+          appendToArgsLine(delta.delta, delta.item_id);
+        }
+      } else if (delta.type === "response.output_item.added" && delta.item?.type === "function_call") {
+        // Function call started - track the name
+        if (delta.item.id && delta.item.name) {
+          if (!activeFunctionCalls.has(delta.item.id)) {
+            activeFunctionCalls.set(delta.item.id, { arguments: '' });
+          }
+          const functionCall = activeFunctionCalls.get(delta.item.id)!;
+          functionCall.name = delta.item.name;
+          
+          // Notify that we have a function call with a name
+          addLine(`🎯 Function call: ${delta.item.name}`);
+        }
+      } else if (delta.type === "function_call.done") {
+        // Complete function call
+        const funcCall = delta.function_call;
+        if (funcCall) {
+          addLine(`🎯 Function call: ${funcCall.name}`);
+          addLine(`📝 Args: ${funcCall.arguments}`);
+          
+          // Guard against duplicate tool calls
+          if (pendingCalls.has(funcCall.call_id) || handledCalls.has(funcCall.call_id)) {
+            console.log('🔁 duplicate tool-call ignored (function_call.done)');
+            return;
+          }
+          
+          // Queue the function call with the correct response ID
+          if (responseIdRef.current) {
+            pushCall({
+              call: {
+                name: funcCall.name,
+                arguments: funcCall.arguments,
+                call_id: funcCall.call_id || funcCall.id
+              },
+              responseId: responseIdRef.current
+            });
+          } else {
+            addLine("❌ No response ID available for function call");
+          }
+        }
+      } else if (delta.type === "response.function_call_arguments.done") {
+        // Response function call arguments complete (actual API format)
+        if (delta.item_id && activeFunctionCalls.has(delta.item_id)) {
+          const functionCall = activeFunctionCalls.get(delta.item_id)!;
+          addLine(`🎯 Function call complete: ${functionCall.name || 'Unknown'}`);
+          addLine(`📝 Final args: ${functionCall.arguments}`);
+          
+          // Mark this specific function call as complete in the UI
+          if (completeFunctionCall) {
+            completeFunctionCall(delta.item_id, functionCall.name);
+          }
+          
+          // Clean up tracking
+          activeFunctionCalls.delete(delta.item_id);
+        }
+      } else if (delta.type === "response.output_item.done" && delta.item?.type === "function_call") {
+        // Alternative function call format (if the API uses this)
+        const funcCall = delta.item;
         addLine(`🎯 Function call: ${funcCall.name}`);
         addLine(`📝 Args: ${funcCall.arguments}`);
         
         // Guard against duplicate tool calls
         if (pendingCalls.has(funcCall.call_id) || handledCalls.has(funcCall.call_id)) {
-          console.log('🔁 duplicate tool-call ignored (function_call.done)');
+          console.log('🔁 duplicate tool-call ignored (response.output_item.done)');
           return;
         }
         
@@ -88,151 +160,101 @@ export const createDeltaHandler = (callbacks: EventHandlerCallbacks, responseIdR
             call: {
               name: funcCall.name,
               arguments: funcCall.arguments,
-              call_id: funcCall.call_id || funcCall.id
+              call_id: funcCall.call_id
             },
             responseId: responseIdRef.current
           });
         } else {
           addLine("❌ No response ID available for function call");
         }
-      }
-    } else if (delta.type === "response.function_call_arguments.done") {
-      // Response function call arguments complete (actual API format)
-      const funcCall = delta.function_call;
-      if (funcCall) {
-        addLine(`🎯 Function call: ${funcCall.name}`);
-        addLine(`📝 Args: ${funcCall.arguments}`);
+      } else if (delta.type === "function_call_output") {
+        // Handle function call output events from the server
+        console.log(`📨 Function output received: ${delta.call_id}`);
         
-        // Guard against duplicate tool calls
-        if (pendingCalls.has(funcCall.call_id) || handledCalls.has(funcCall.call_id)) {
-          console.log('🔁 duplicate tool-call ignored (response.function_call_arguments.done)');
-          return;
+        // Mark this call as handled to prevent the StreamExecutor from trying to send another output
+        if (handledCalls) {
+          handledCalls.add(delta.call_id);
+        }
+      } else if (delta.type === "error") {
+        // Handle error events from the server
+        const errorMessage = delta.error || 'Unknown error';
+        
+        // Enhance error messages with recovery information but still show them
+        let displayMessage = errorMessage;
+        let recoveryInfo = '';
+        
+        // Add context for 404 errors
+        if (errorMessage.includes('404') && errorMessage.includes('not found')) {
+          const isResponseIdError = errorMessage.includes('rs_') || errorMessage.includes('response');
+          const isFunctionCallError = errorMessage.includes('fc_') || errorMessage.includes('function');
+          const isMessageIdError = errorMessage.includes('msg_') || errorMessage.includes('message');
+          const isOtherOpenAIId = errorMessage.match(/(run_|thread_|asst_|chatcmpl_)/);
+          
+          if (isResponseIdError || isFunctionCallError || isMessageIdError || isOtherOpenAIId) {
+            recoveryInfo = ' (Server attempting automatic recovery with fresh conversation)';
+          }
         }
         
-        // Queue the function call with the correct response ID
-        if (responseIdRef.current) {
-          pushCall({
-            call: {
-              name: funcCall.name,
-              arguments: funcCall.arguments,
-              call_id: funcCall.call_id || funcCall.id
-            },
-            responseId: responseIdRef.current
-          });
-        } else {
-          addLine("❌ No response ID available for function call");
+        // Add context for connection errors
+        if (errorMessage.includes('Socket timeout')) {
+          recoveryInfo = ' (Automatic reconnection in progress - O3 model processing time)';
+        } else if (errorMessage.includes('Premature close')) {
+          recoveryInfo = ' (Automatic reconnection in progress - connection issue)';
+        } else if (errorMessage.includes('session may have expired')) {
+          recoveryInfo = ' (Server creating fresh conversation session)';
         }
-      }
-    } else if (delta.type === "response.output_item.done" && delta.item?.type === "function_call") {
-      // Alternative function call format (if the API uses this)
-      const funcCall = delta.item;
-      addLine(`🎯 Function call: ${funcCall.name}`);
-      addLine(`📝 Args: ${funcCall.arguments}`);
-      
-      // Guard against duplicate tool calls
-      if (pendingCalls.has(funcCall.call_id) || handledCalls.has(funcCall.call_id)) {
-        console.log('🔁 duplicate tool-call ignored (response.output_item.done)');
-        return;
-      }
-      
-      // Queue the function call with the correct response ID
-      if (responseIdRef.current) {
-        pushCall({
-          call: {
-            name: funcCall.name,
-            arguments: funcCall.arguments,
-            call_id: funcCall.call_id
-          },
-          responseId: responseIdRef.current
+        
+        // Show all errors with enhanced context
+        addLine(`❌ Error: ${displayMessage}${recoveryInfo}`);
+        console.error('❌ Stream error:', delta);
+        console.error('❌ Stream error details:', {
+          errorType: delta.type,
+          errorMessage,
+          recoveryInfo,
+          fullDelta: delta,
+          timestamp: new Date().toISOString()
         });
-      } else {
-        addLine("❌ No response ID available for function call");
-      }
-    } else if (delta.type === "function_call_output") {
-      // Handle function call output events from the server
-      console.log(`📨 Function output received: ${delta.call_id}`);
-      
-      // Mark this call as handled to prevent the StreamExecutor from trying to send another output
-      if (handledCalls) {
-        handledCalls.add(delta.call_id);
-      }
-    } else if (delta.type === "error") {
-      // Handle error events from the server
-      const errorMessage = delta.error || 'Unknown error';
-      
-      // Enhance error messages with recovery information but still show them
-      let displayMessage = errorMessage;
-      let recoveryInfo = '';
-      
-      // Add context for 404 errors
-      if (errorMessage.includes('404') && errorMessage.includes('not found')) {
-        const isResponseIdError = errorMessage.includes('rs_') || errorMessage.includes('response');
-        const isFunctionCallError = errorMessage.includes('fc_') || errorMessage.includes('function');
-        const isMessageIdError = errorMessage.includes('msg_') || errorMessage.includes('message');
-        const isOtherOpenAIId = errorMessage.match(/(run_|thread_|asst_|chatcmpl_)/);
+      } else if (delta.type === "response.completed" || delta.type === "response.done") {
+        // Keep the id
+        if (!responseIdRef.current && delta.response?.id) {
+          responseIdRef.current = delta.response.id;
+        }
+
+        const usage = delta.response?.usage || delta.usage;
+        if (usage?.reasoning_tokens) {
+          addLine(`🧠 Reasoning tokens: ${usage.reasoning_tokens}`);
+        }
+        if (usage?.total_tokens) {
+          addLine(`📊 Total tokens: ${usage.total_tokens}`);
+        }
         
-        if (isResponseIdError || isFunctionCallError || isMessageIdError || isOtherOpenAIId) {
-          recoveryInfo = ' (Server attempting automatic recovery with fresh conversation)';
+        // Leave the stream open; the server will send [DONE] when truly finished
+        // The backend manages the conversation loop and will close when done
+      } else if (delta.type === "done" && delta.data === "[DONE]") {
+        // Handle the final completion message
+        addLine('🏁 Architecture generation completed - done signal received');
+        console.log('🏁 Architecture generation complete - done type received with [DONE] data');
+        setBusy(false);
+        // Trigger completion callback which adds the completion message and closes chat
+        if (onComplete) {
+          onComplete();
+        }
+        // Send architecture complete notification to real-time agent
+        setTimeout(() => {
+          // sendArchitectureCompleteToRealtimeAgent();
+        }, 1500);
+        return 'close';
+      } else if (delta.type?.includes('.done') || delta.type?.includes('.delta')) {
+        // Silently handle common .done and .delta types that don't need processing
+        // This prevents log spam for response.output_text.done, response.content_part.done, etc.
+      } else {
+        // Only log truly unknown/unexpected delta types
+        if (delta.type && !delta.type.startsWith('response.')) {
+          console.log(`📡 Unknown delta type: ${delta.type}`);
         }
       }
-      
-      // Add context for connection errors
-      if (errorMessage.includes('Socket timeout')) {
-        recoveryInfo = ' (Automatic reconnection in progress - O3 model processing time)';
-      } else if (errorMessage.includes('Premature close')) {
-        recoveryInfo = ' (Automatic reconnection in progress - connection issue)';
-      } else if (errorMessage.includes('session may have expired')) {
-        recoveryInfo = ' (Server creating fresh conversation session)';
-      }
-      
-      // Show all errors with enhanced context
-      addLine(`❌ Error: ${displayMessage}${recoveryInfo}`);
-      console.error('❌ Stream error:', delta);
-      console.error('❌ Stream error details:', {
-        errorType: delta.type,
-        errorMessage,
-        recoveryInfo,
-        fullDelta: delta,
-        timestamp: new Date().toISOString()
-      });
-    } else if (delta.type === "response.completed" || delta.type === "response.done") {
-      // Keep the id
-      if (!responseIdRef.current && delta.response?.id) {
-        responseIdRef.current = delta.response.id;
-      }
-
-      const usage = delta.response?.usage || delta.usage;
-      if (usage?.reasoning_tokens) {
-        addLine(`🧠 Reasoning tokens: ${usage.reasoning_tokens}`);
-      }
-      if (usage?.total_tokens) {
-        addLine(`📊 Total tokens: ${usage.total_tokens}`);
-      }
-      
-      // Leave the stream open; the server will send [DONE] when truly finished
-      // The backend manages the conversation loop and will close when done
-    } else if (delta.type === "done" && delta.data === "[DONE]") {
-      // Handle the final completion message
-      addLine('🏁 Architecture generation completed - done signal received');
-      console.log('🏁 Architecture generation complete - done type received with [DONE] data');
-      setBusy(false);
-      // Trigger completion callback which adds the completion message and closes chat
-      if (onComplete) {
-        onComplete();
-      }
-      // Send architecture complete notification to real-time agent
-      setTimeout(() => {
-        // sendArchitectureCompleteToRealtimeAgent();
-      }, 1500);
-      return 'close';
-    } else if (delta.type?.includes('.done') || delta.type?.includes('.delta')) {
-      // Silently handle common .done and .delta types that don't need processing
-      // This prevents log spam for response.output_text.done, response.content_part.done, etc.
-    } else {
-      // Only log truly unknown/unexpected delta types
-      if (delta.type && !delta.type.startsWith('response.')) {
-        console.log(`📡 Unknown delta type: ${delta.type}`);
-      }
+    } catch (e) {
+      console.error('❌ Error processing delta:', delta, e);
     }
   };
 };

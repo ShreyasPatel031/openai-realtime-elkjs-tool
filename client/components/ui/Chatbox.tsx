@@ -8,7 +8,7 @@ import { cn } from "../../lib/utils"
 import { process_user_requirements } from "../graph/userRequirements"
 
 interface ChatBoxProps {
-  onSubmit?: (message: string) => void; // Keep for compatibility but won't use complex logic
+  onSubmit?: (message: string) => void;
 }
 
 const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
@@ -16,12 +16,53 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
   const [isProcessing, setIsProcessing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Example use cases
+  const exampleUseCases = [
+    "GCP microservices with Kubernetes",
+    "AWS serverless web application", 
+    "Multi-cloud data pipeline"
+  ];
+
   // Auto-focus input when component mounts
   useEffect(() => {
     if (inputRef.current) {
       inputRef.current.focus();
     }
   }, []);
+
+  const handleExampleClick = async (example: string) => {
+    if (isProcessing) return; // Prevent multiple clicks during processing
+    
+    setTextInput(example);
+    setIsProcessing(true);
+    
+    try {
+      console.log('🟢 Processing example:', example);
+      
+      // Store text input globally for reasoning agent
+      (window as any).chatTextInput = example;
+      (window as any).selectedImages = [];
+      
+      // Call process_user_requirements to trigger the architecture generation
+      process_user_requirements();
+      
+      // Clear the input after processing starts
+      setTextInput("");
+      
+      // Optional: call onSubmit for any parent component compatibility
+      if (onSubmit) {
+        onSubmit(example);
+      }
+      
+    } catch (error) {
+      console.error('Failed to process example:', error);
+    } finally {
+      // Reset processing state after a short delay
+      setTimeout(() => {
+        setIsProcessing(false);
+      }, 1000);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,21 +72,12 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
       try {
         console.log('🟢 Processing user input:', textInput.trim());
         
-        // Store text input globally for reasoning agent (same as ChatWindow does)
-        if (textInput.trim()) {
-          (window as any).chatTextInput = textInput.trim();
-          console.log('📝 Stored text input for reasoning agent:', textInput.trim());
-        } else {
-          (window as any).chatTextInput = '';
-        }
-        
-        // Clear images (in case any were stored before)
+        // Store text input globally for reasoning agent
+        (window as any).chatTextInput = textInput.trim();
         (window as any).selectedImages = [];
         
         // Call process_user_requirements to trigger the architecture generation
-        console.log('🔵 Calling process_user_requirements()...');
-        const result = process_user_requirements();
-        console.log('✅ process_user_requirements returned:', result);
+        process_user_requirements();
         
         // Clear the input after processing starts
         setTextInput("");
@@ -58,7 +90,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
       } catch (error) {
         console.error('Failed to process input:', error);
       } finally {
-        // Reset processing state after a short delay to show feedback
+        // Reset processing state after a short delay
         setTimeout(() => {
           setIsProcessing(false);
         }, 1000);
@@ -75,6 +107,20 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
 
   return (
     <div className="w-full p-4">
+      {/* Example use cases pills - above the input */}
+      <div className="mb-3 flex flex-wrap gap-2 justify-center">
+        {exampleUseCases.map((example, index) => (
+          <button
+            key={index}
+            onClick={() => handleExampleClick(example)}
+            disabled={isProcessing}
+            className="text-xs px-4 py-2 rounded-full bg-gradient-to-r from-gray-50 to-gray-100 hover:from-blue-50 hover:to-blue-100 text-gray-700 hover:text-blue-700 border border-gray-200 hover:border-blue-200 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md transform hover:scale-105 flex items-center"
+          >
+            {example}
+          </button>
+        ))}
+      </div>
+
       <form onSubmit={handleSubmit} className="w-full">
         <div className="flex items-center gap-3 bg-white rounded-xl border border-gray-200 shadow-sm p-3 hover:shadow-md transition-shadow">
           {/* Input field */}
@@ -83,9 +129,9 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder={isProcessing ? "Processing..." : "Describe your architecture requirements..."}
+            placeholder="Describe your architecture requirements"
             disabled={isProcessing}
-            className="flex-grow border-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-base placeholder:text-gray-500"
+            className="flex-grow border-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-base placeholder:text-gray-400"
           />
           
           {/* Clear button (when there's text) */}
@@ -99,16 +145,10 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
             </button>
           )}
           
-          {/* Submit button */}
+          {/* Submit button - Always enabled, black color */}
           <Button
             type="submit"
-            disabled={isProcessing || !textInput.trim()}
-            className={cn(
-              "h-10 w-10 rounded-lg flex-shrink-0 flex items-center justify-center p-0 transition-all",
-              textInput.trim() && !isProcessing
-                ? "bg-blue-500 hover:bg-blue-600 text-white" 
-                : "bg-gray-100 text-gray-400 cursor-not-allowed"
-            )}
+            className="h-10 w-10 rounded-lg flex-shrink-0 flex items-center justify-center p-0 bg-gray-900 hover:bg-gray-800 text-white transition-all"
           >
             {isProcessing ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -116,14 +156,6 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
               <Send className="h-4 w-4" />
             )}
           </Button>
-        </div>
-        
-        {/* Simple helper text */}
-        <div className="mt-2 text-xs text-gray-500 text-center">
-          {isProcessing 
-            ? "Generating your architecture..." 
-            : "Type your requirements and press Enter to generate architecture"
-          }
         </div>
       </form>
     </div>

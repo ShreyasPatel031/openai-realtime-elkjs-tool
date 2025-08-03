@@ -25,7 +25,16 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
   const pendingCalls = new Set<string>();
 
   return (delta: any) => {
-    console.log('📨 Event received:', delta.type, delta.delta ? `"${delta.delta.slice(0, 50)}..."` : '(no delta)');
+    // Only log truly important events - NO token-by-token logging
+    const isImportantEvent = delta.type === 'response.output_item.added' || 
+                            delta.type === 'response.function_call_arguments.done' ||
+                            delta.type === 'function_call.done' ||
+                            delta.type === 'response.completed' ||
+                            delta.type === 'error';
+    
+    if (isImportantEvent) {
+      console.log('📨 Event received:', delta.type);
+    }
     
     try {
       if (delta.type === "response.done") {
@@ -113,19 +122,15 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
             return;
           }
           
-          // Queue the function call with the correct response ID
-          if (responseIdRef.current) {
-            pushCall({
-              call: {
-                name: funcCall.name,
-                arguments: funcCall.arguments,
-                call_id: funcCall.call_id || funcCall.id
-              },
-              responseId: responseIdRef.current
-            });
-          } else {
-            addLine("❌ No response ID available for function call");
-          }
+          // Queue ALL function calls for local execution (remove responseId dependency)
+          pushCall({
+            call: {
+              name: funcCall.name,
+              arguments: funcCall.arguments,
+              call_id: funcCall.call_id
+            },
+            responseId: responseIdRef.current || 'no-response-id'
+          });
         }
       } else if (delta.type === "response.function_call_arguments.done") {
         // Response function call arguments complete (actual API format)
@@ -154,19 +159,15 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
           return;
         }
         
-        // Queue the function call with the correct response ID
-        if (responseIdRef.current) {
-          pushCall({
-            call: {
-              name: funcCall.name,
-              arguments: funcCall.arguments,
-              call_id: funcCall.call_id
-            },
-            responseId: responseIdRef.current
-          });
-        } else {
-          addLine("❌ No response ID available for function call");
-        }
+        // Queue ALL function calls for local execution (remove responseId dependency)
+        pushCall({
+          call: {
+            name: funcCall.name,
+            arguments: funcCall.arguments,
+            call_id: funcCall.call_id
+          },
+          responseId: responseIdRef.current || 'no-response-id'
+        });
       } else if (delta.type === "function_call_output") {
         // Handle function call output events from the server
         console.log(`📨 Function output received: ${delta.call_id}`);

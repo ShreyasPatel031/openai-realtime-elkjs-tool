@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { StreamExecutor } from "../reasoning/StreamExecutor";
 import { addReasoningMessage, updateStreamingMessage, addFunctionCallingMessage } from "../utils/chatUtils";
 
@@ -74,19 +74,9 @@ const StreamViewer: React.FC<{ elkGraph: any; setElkGraph: (graph: any) => void;
     updateStreamingMessage(reasoningMessageIdRef.current, reasoningContentRef.current, false);
   };
 
-  const appendToArgsLine = (text: string, itemId?: string) => {
-    setLines(ls => {
-      const newLines = [...ls];
-      const lastLineIndex = newLines.length - 1;
-      if (lastLineIndex >= 0 && newLines[lastLineIndex].startsWith('🔄 Building args: ')) {
-        // Append to existing args line
-        newLines[lastLineIndex] += text;
-      } else {
-        // Start new args line
-        newLines.push(`🔄 Building args: ${text}`);
-      }
-      return newLines;
-    });
+  const appendToArgsLine = useCallback((text: string, itemId?: string) => {
+    // Suppress verbose token-by-token logging
+    // Only accumulate content for UI display without logging each token
     
     // Handle function call arguments with item ID tracking
     if (itemId) {
@@ -107,7 +97,7 @@ const StreamViewer: React.FC<{ elkGraph: any; setElkGraph: (graph: any) => void;
       callInfo.content += text;
       updateStreamingMessage(callInfo.messageId, callInfo.content, false, callInfo.name);
     }
-  };
+  }, []);
 
   const appendToTextLine = (text: string) => {
     setLines(ls => {

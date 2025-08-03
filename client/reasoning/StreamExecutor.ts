@@ -57,6 +57,18 @@ export class StreamExecutor {
     setBusy(true);
     this.resetState();
     
+    // START TIMING ANALYSIS
+    const timingStart = performance.now();
+    let lastTiming = timingStart;
+    
+    const logTiming = (stage: string) => {
+      const now = performance.now();
+      const stageTime = now - lastTiming;
+      const totalTime = now - timingStart;
+      console.log(`⏱️ TIMING: ${stage} took ${stageTime.toFixed(2)}ms (total: ${totalTime.toFixed(2)}ms)`);
+      lastTiming = now;
+    };
+    
     try {
       // Update elkGraphRef to current state
       this.elkGraphRef.current = this.options.elkGraph;
@@ -75,6 +87,8 @@ export class StreamExecutor {
       // Retrieved conversation data and additional input
       console.log("📸 DEBUG: Found stored images:", storedImages.length);
       
+      logTiming("Initial data collection");
+      
       // Clear any potentially cached fake data
       if (conversationData.includes('Which GCP services do you plan to use') || 
           conversationData.includes('Dataflow. Cloud Storage. Web applications')) {
@@ -89,10 +103,13 @@ export class StreamExecutor {
       // Combine conversation data with additional text input
       const combinedContent = [conversationData, additionalTextInput].filter(content => content.trim()).join('\n\n');
       
+      logTiming("Data preparation");
+      
       // Search for matching reference architecture
       let referenceArchitecture = "";
       console.log(`🔍 STEP 7: Starting architecture search for input: "${combinedContent.trim()}"`);
       console.log(`📏 Combined content length: ${combinedContent.length} characters`);
+      
       if (combinedContent.trim()) {
         try {
           const searchInput = combinedContent.toLowerCase();
@@ -103,37 +120,10 @@ export class StreamExecutor {
           console.log(`📊 Architecture service has ${availableArchs.length} architectures loaded`);
           
           if (availableArchs.length === 0) {
-            console.warn('⚠️ No architectures loaded in service yet, trying to wait and retry...');
-            addLine(`⚠️ Architecture database not ready, waiting...`);
-            
-            // Wait a bit and retry once
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            const retryArchs = architectureSearchService.getAvailableArchitectures();
-            console.log(`🔄 Retry: Architecture service now has ${retryArchs.length} architectures loaded`);
-            
-            if (retryArchs.length === 0) {
-              console.warn('⚠️ Still no architectures after retry, proceeding without reference');
-              addLine(`⚠️ Architecture database still loading, proceeding without reference`);
-            } else {
-              const matchedArch = await architectureSearchService.findMatchingArchitecture(searchInput);
-              
-              if (matchedArch) {
-                referenceArchitecture = `\n\nREFERENCE ARCHITECTURE:
-This is a reference architecture for the use case. Please replicate it:
-${matchedArch.architecture}`;
-                
-                // Enhanced logging with URL
-                console.log(`✅ Using reference architecture: ${matchedArch.subgroup}`);
-                console.log(`📋 Description: ${matchedArch.description}`);
-                console.log(`🔗 Source URL: ${matchedArch.source}`);
-                console.log(`☁️ Cloud Provider: ${matchedArch.cloud.toUpperCase()}`);
-                console.log(`📁 Category: ${matchedArch.group} > ${matchedArch.subgroup}`);
-                
-                addLine(`🏗️ Found reference architecture: ${matchedArch.subgroup}`);
-                addLine(`🔗 Reference URL: ${matchedArch.source}`);
-              }
-            }
+            console.warn('⚠️ No architectures loaded in service yet, proceeding without reference');
+            addLine(`⚠️ Architecture database not ready, proceeding without reference`);
           } else {
+            // Use the optimized architecture search with pre-computed embeddings
             const matchedArch = await architectureSearchService.findMatchingArchitecture(searchInput);
           
             if (matchedArch) {
@@ -150,12 +140,17 @@ ${matchedArch.architecture}`;
               
               addLine(`🏗️ Found reference architecture: ${matchedArch.subgroup}`);
               addLine(`🔗 Reference URL: ${matchedArch.source}`);
+            } else {
+              console.log('❌ No suitable architecture match found');
+              addLine(`⚠️ No matching reference architecture found`);
             }
           }
         } catch (error) {
           console.warn("⚠️ Architecture search failed:", error);
         }
       }
+      
+      logTiming("Architecture search");
       
       if (combinedContent.trim()) {
         userContent = `${combinedContent}${referenceArchitecture}
@@ -176,6 +171,8 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
       const currentGraphState = this.getStructuralData(this.elkGraphRef.current);
       const currentGraphJSON = JSON.stringify(currentGraphState, null, 2);
       console.log("📊 Current graph state being sent to agent:", currentGraphState);
+      
+      logTiming("Content building");
       
       // Create the conversation payload with current graph state
       const systemContent = `${elkGraphDescription}
@@ -199,6 +196,11 @@ ${currentGraphJSON}
           content: userContent
         }
       ];
+      
+      logTiming("Payload assembly");
+      
+      // Show immediate loading indicator
+      addLine(`🚀 Sending request to AI model...`);
       
       // If we have images, create FormData payload, otherwise use JSON
       let payload;
@@ -402,7 +404,7 @@ ${currentGraphJSON}
           return;
         }
         
-        const result = handleDelta(delta, this.pendingCalls.current, this.handledCallsRef.current);
+        const result = handleDelta(delta);
         
         if (result === 'close') {
           // No timeout to clear - let O3 model take as long as it needs
@@ -700,7 +702,7 @@ ${currentGraphJSON}
           return;
         }
         
-        const result = handleDelta(delta, this.pendingCalls.current, this.handledCallsRef.current);
+        const result = handleDelta(delta);
         
         if (result === 'close') {
           ev.close();

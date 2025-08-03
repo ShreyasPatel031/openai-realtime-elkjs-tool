@@ -166,25 +166,29 @@ export const clearChatData = (): void => {
 };
 
 // Function to add reasoning message with streaming
-export const addReasoningMessage = (): string => {
-  const messageId = 'reasoning_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-  console.log('🧠 Creating reasoning message with ID:', messageId);
-  
-  const message: Message = {
+export const addReasoningMessage = (initialContent: string = ""): string => {
+  const messageId = crypto.randomUUID();
+  const reasoningMessage: Message = {
     id: messageId,
-    content: '',
-    sender: 'assistant',
-    type: 'reasoning'
+    content: initialContent,
+    sender: 'system',
+    type: 'reasoning',
+    isStreaming: true,
+    streamedContent: "",
+    isDropdownOpen: true,
+    animationType: 'reasoning'
   };
   
-  // Dispatch the custom event to add the message
-  const event = new CustomEvent('addChatMessage', {
-    detail: { message }
+  // Make chat visible
+  makeChatVisible();
+  
+  // Add message to chat
+  const addMessageEvent = new CustomEvent('addChatMessage', {
+    detail: { message: reasoningMessage }
   });
+  document.dispatchEvent(addMessageEvent);
   
-  document.dispatchEvent(event);
-  console.log('🧠 Reasoning message dispatched:', messageId);
-  
+  console.log('🧠 Added reasoning message:', messageId);
   return messageId;
 };
 
@@ -252,18 +256,8 @@ export const addFunctionCallingMessage = (initialContent: string = ""): string =
   return messageId;
 };
 
-// Track if completion message was already sent to prevent duplicates
-let completionMessageSent = false;
-
 // Function to add process complete message
 export const addProcessCompleteMessage = (): void => {
-  // Prevent duplicate completion messages
-  if (completionMessageSent) {
-    console.log('⚠️ Completion message already sent, skipping duplicate');
-    return;
-  }
-  
-  completionMessageSent = true;
   const messageId = crypto.randomUUID();
   const completeMessage: Message = {
     id: messageId,
@@ -286,8 +280,6 @@ export const addProcessCompleteMessage = (): void => {
   // Auto-close chat after 3 seconds
   setTimeout(() => {
     closeChatWindow();
-    // Reset the flag after closing for future sessions
-    completionMessageSent = false;
   }, 3000);
 };
 

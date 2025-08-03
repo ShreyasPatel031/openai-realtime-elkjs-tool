@@ -82,6 +82,9 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
   
   // Start the fetch request
   const startFetch = async () => {
+    const requestStart = performance.now();
+    console.log(`⏱️ REQUEST TIMING: Starting fetch at ${requestStart.toFixed(2)}ms`);
+    
     try {
       let requestBody: string | FormData;
       let headers: Record<string, string> = {
@@ -121,8 +124,10 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         // No compression headers since we disabled compression
         
         console.log('🔍 Original payload size:', payload.length);
-        console.log('🔍 Sending uncompressed payload to avoid browser hanging issues');
       }
+      
+      const payloadPrepTime = performance.now();
+      console.log(`⏱️ REQUEST TIMING: Payload preparation took ${(payloadPrepTime - requestStart).toFixed(2)}ms`);
       
       // Generate a unique session ID for tracking (commented out due to CORS restrictions)
       // const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -134,6 +139,9 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         
         console.log(`🌐 PostEventSource making request to: ${apiUrl}`);
         
+        const fetchStart = performance.now();
+        console.log(`⏱️ REQUEST TIMING: Starting network fetch at ${(fetchStart - requestStart).toFixed(2)}ms`);
+        
         // No timeout - let O3 model take as long as it needs
         const response = await fetch(apiUrl, {
           method: 'POST',
@@ -141,6 +149,9 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
           body: requestBody,
           signal: controller.signal,
         }) as Response;
+      
+      const responseReceived = performance.now();
+      console.log(`⏱️ REQUEST TIMING: Network response received after ${(responseReceived - fetchStart).toFixed(2)}ms (total: ${(responseReceived - requestStart).toFixed(2)}ms)`);
       
       console.log('🔍 Stream response status:', response.status);
       console.log('🔍 Stream response headers:', Object.fromEntries(response.headers));
@@ -204,8 +215,7 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         }
         
         const chunk = decoder.decode(value, { stream: true });
-        console.log(`📨 PostEventSource received chunk: ${chunk.length} chars`);
-        console.log(`📨 First 100 chars: ${chunk.substring(0, 100)}`);
+        // Removed verbose chunk logging - was causing token spam
         buffer += chunk;
         
         // Process complete SSE messages

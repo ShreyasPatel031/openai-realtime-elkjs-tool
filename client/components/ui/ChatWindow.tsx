@@ -219,7 +219,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
   useEffect(() => {
     const handleStreamingUpdate = (event: CustomEvent) => {
       const { messageId, streamedContent, isStreaming, currentFunction } = event.detail;
-      console.log('🔄 Chat received streaming update:', { messageId, contentLength: streamedContent?.length, isStreaming, currentFunction });
+      
+      // Only log important state changes, not every token
+      if (!isStreaming && currentFunction) {
+        console.log(`✅ Function completed: ${currentFunction}`);
+      }
       
       setStreamingMessages(prev => ({
         ...prev,
@@ -439,7 +443,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
                   <p className="text-sm">No messages yet. Start by describing your architecture requirements below.</p>
                   </div>
                 ) : (
-                  <div className="space-y-1">
+                                <div className="space-y-1">
                     {/* Only show the most recent 3 messages for better UX */}
                     {messages.slice(-3).map(renderMessage)}
                     <div ref={messagesEndRef} />

@@ -274,7 +274,9 @@ export function handleFunctionCall(
     };
     
     // Update graph state
+    console.log(`🔄 Updating graph after ${name} - nodes: ${graphSummary.nodeCount}, edges: ${graphSummary.edgeCount}`);
     setElkGraph(updated);
+    console.log(`✅ Graph updated successfully after ${name}`);
     
     // Send the result back to the agent
     safeSend({

@@ -178,7 +178,7 @@ Always build complete architectures using multiple batch_update function calls. 
 
     // Initialize OpenAI client
     console.log('🤖 Initializing OpenAI client...');
-    const model = 'gpt-4.1-2025-04-14';
+    const model = 'gpt-4.1-mini';
     const timeout = 180000;
     
     const openai = new OpenAI({
@@ -202,6 +202,9 @@ Always build complete architectures using multiple batch_update function calls. 
     try {
       console.log('🔄 Starting conversation loop (exact copy from local dev)');
       
+      // Extract current graph state from the system message
+      let elkGraph = { id: "root", children: [], edges: [] };
+      
       // Check if this is a function call output continuation
       const isFunctionCallOutput = messages.length > 0 && 
         messages[0]?.type === "function_call_output";
@@ -210,21 +213,34 @@ Always build complete architectures using multiple batch_update function calls. 
         console.log(`🔄 Processing function call output: ${messages[0].call_id}`);
       }
       
-      let elkGraph = { id: "root", children: [], edges: [] };
+      // Look for the current graph state in the system message
+      const systemMessage = messages.find(msg => msg.role === 'system');
+      if (systemMessage && systemMessage.content) {
+        const graphMatch = systemMessage.content.match(/```json\n([\s\S]*?)\n```/);
+        if (graphMatch) {
+          try {
+            const parsedGraph = JSON.parse(graphMatch[1]);
+            elkGraph = parsedGraph;
+            console.log('📊 Extracted current graph state from system message:', elkGraph);
+          } catch (error) {
+            console.error('❌ Failed to parse graph state from system message:', error);
+          }
+        } else {
+          console.log('⚠️ No graph state found in system message, using empty graph');
+        }
+      }
+      
       let finalCleanedConversation = [...messages];
       let turnCount = 0;
-      const maxTurns = 20;
-      let consecutiveNoFunctionCallTurns = 0;
-      const maxConsecutiveNoFunctionCallTurns = 2;
       
       // Send helper function
       const send = (data: any) => {
         res.write(`data: ${JSON.stringify(data)}\n\n`);
       };
       
-      while (turnCount < maxTurns) {
+      while (true) { // Continue until natural completion
         turnCount++;
-        console.log(`🔄 Starting conversation turn with ${finalCleanedConversation.length} items`);
+        console.log(`🔄 Starting conversation turn ${turnCount} with ${finalCleanedConversation.length} items`);
         
         const stream = await openai.responses.create({
           model: model,
@@ -260,60 +276,66 @@ Always build complete architectures using multiple batch_update function calls. 
               const funcCall = delta.item;
               console.log(`🎯 Processing function call: ${funcCall.name}`);
               
-              // Only create function call output if not already provided by client
-              if (!isFunctionCallOutput) {
-                const fco = {
-                  type: "function_call_output",
-                  call_id: funcCall.call_id,
-                  output: JSON.stringify(elkGraph)
-                };
-                
-                send(fco);
-                finalCleanedConversation.push(fco);
-              } else {
-                console.log(`📥 Function call output already provided by client for call_id: ${funcCall.call_id}`);
-              }
+              // Skip providing function call outputs - the frontend handles all function calls locally
+              console.log(`📥 Skipping function call output - frontend handles execution locally`);
             }
 
             if (delta.type === "response.completed") {
               const calls = delta.response?.output?.filter((x: any) => x.type === "function_call") ?? [];
               const textResponses = delta.response?.output?.filter((x: any) => x.type === "message") ?? [];
               
-              if (calls.length === 0) {
-                consecutiveNoFunctionCallTurns++;
-                console.log(`⚠️  No function calls in this turn (${consecutiveNoFunctionCallTurns}/${maxConsecutiveNoFunctionCallTurns})`);
-                
-                // Check if the response indicates completion
-                const responseText = textResponses.map((msg: any) => msg.content || '').join(' ').toLowerCase();
-                const completionIndicators = [
-                  'architecture is complete',
-                  'diagram is finished', 
-                  'all requirements satisfied',
-                  'architecture diagram complete',
-                  'final validation complete',
-                  'all groups are built',
-                  'complete architecture'
-                ];
-                
-                const hasCompletionIndicator = completionIndicators.some(indicator => 
-                  responseText.includes(indicator)
-                );
-                
-                if (consecutiveNoFunctionCallTurns >= maxConsecutiveNoFunctionCallTurns || hasCompletionIndicator) {
-                  console.log('✅ Conversation complete - no more function calls needed or completion indicated');
-                  send({ type: "done", data: "[DONE]" });
-                  res.write("data: [DONE]\n\n");
-                  res.end();
-                  return;
-                }
-                
-                console.log('🔄 Allowing agent to continue thinking...');
-              } else {
-                consecutiveNoFunctionCallTurns = 0; // Reset counter when function calls are made
+              // Check if the response indicates completion
+              const responseText = textResponses.map((msg: any) => msg.content || '').join(' ').toLowerCase();
+              console.log(`🔍 Checking response text for completion: "${responseText}"`);
+              
+              const completionIndicators = [
+                'all user requirements have been fully implemented',
+                'architecture completely fulfills the user requirements',
+                'user requirements are completely satisfied',
+                'the architecture is now complete and fulfills all requirements',
+                'all aspects of the user requirements have been implemented',
+                'architecture diagram complete and requirements satisfied',
+                'final architecture complete - all requirements met'
+              ];
+              
+              const hasCompletionIndicator = completionIndicators.some(indicator => 
+                responseText.includes(indicator)
+              );
+              
+              console.log(`🔍 Completion indicator found: ${hasCompletionIndicator}`);
+              
+              if (calls.length === 0 && hasCompletionIndicator) {
+                console.log('✅ Conversation complete - AI indicated completion');
+                send({ type: "done", data: "[DONE]" });
+                res.write("data: [DONE]\n\n");
+                res.end();
+                return;
+              } else if (calls.length > 0) {
                 console.log(`🔄 ${calls.length} function call(s) processed, continuing conversation loop`);
+                console.log(`🔄 About to break from delta loop and continue to next conversation turn`);
+                
+                // Add a continuation prompt when function calls were made
+                finalCleanedConversation.push({
+                  type: "message",
+                  role: "user", 
+                  content: "Continue calling functions until the architecture completely fulfills the user requirements. The architecture is NOT complete yet. Keep adding components, services, databases, networking, security, monitoring, and all infrastructure needed. Connect all components with proper edges. Only stop when every aspect of the user's requirements has been fully implemented in the architecture diagram."
+                });
+                console.log("🔄 Added continuation prompt to encourage more architecture building");
+              } else {
+                console.log('🔄 No function calls this turn, but no completion indicated - continuing...');
               }
               
-              finalCleanedConversation.push(...delta.response.output);
+              // Filter out function calls without outputs to avoid OpenAI API errors
+              const outputToAdd = delta.response.output.filter((item: any) => {
+                if (item.type === "function_call") {
+                  // Only include function calls that have been executed (frontend handles them)
+                  return false; // Skip function calls since frontend handles them locally
+                }
+                return true; // Include all other types (messages, etc.)
+              });
+              
+              finalCleanedConversation.push(...outputToAdd);
+              console.log(`🔄 Added ${outputToAdd.length} items to conversation (filtered ${delta.response.output.length - outputToAdd.length} function calls). Total items: ${finalCleanedConversation.length}`);
               break;
             }
           } catch (deltaError) {
@@ -321,14 +343,11 @@ Always build complete architectures using multiple batch_update function calls. 
           }
         }
         
-        if (turnCount >= maxTurns) {
-          console.log('⚠️ Reached maximum conversation turns');
-          break;
-        }
+        // No need to check maxTurns since we let it run until natural completion
       }
       
       // Final completion if we exit the loop
-      console.log(`✅ Conversation loop completed after ${turnCount} turns`);
+      console.log(`✅ Conversation naturally completed after ${turnCount} turns`);
       send({ type: "done", data: "[DONE]" });
       res.write('data: [DONE]\n\n');
       res.end();

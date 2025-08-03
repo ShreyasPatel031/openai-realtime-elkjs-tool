@@ -2,11 +2,13 @@ import { StreamExecutor } from "../../reasoning/StreamExecutor";
   import { addReasoningMessage, addFunctionCallingMessage, updateStreamingMessage, addProcessCompleteMessage, makeChatVisible } from "../../utils/chatUtils";
 
 export async function process_user_requirements() {
-  console.log('[user requirements] process_user_requirements');
-  
-  // IMMEDIATE UI FEEDBACK - Show something is happening RIGHT NOW
-  addReasoningMessage("⚡ Processing your request...");
-  makeChatVisible();
+    console.log("[user requirements] process_user_requirements");
+    
+    // Signal that processing has started for the status icon
+    window.dispatchEvent(new CustomEvent('userRequirementsStart'));
+    
+    addReasoningMessage("⚡ Processing your request...");
+    makeChatVisible();
   
   // START PERFORMANCE TIMING
   const processStart = performance.now();
@@ -45,7 +47,7 @@ export async function process_user_requirements() {
     // Get images from global state
     const storedImages = (window as any).selectedImages || [];
     console.log('🖼️ Found images:', storedImages.length);
-    
+          
     // Build conversationData as formatted string
     const conversationData = `USER: ${currentTextInput}
 
@@ -73,7 +75,7 @@ ${currentTextInput}`;
          // Get current graph state
      const currentGraph = (window as any).getCurrentGraph?.() || { id: "root", children: [] };
      console.log('🗂️ Current graph state:', currentGraph);
-     
+    
      // Reasoning message tracking
      let reasoningMessageId: string | null = null;
      let reasoningContent = "";

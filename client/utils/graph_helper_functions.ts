@@ -576,9 +576,14 @@ export function removeGroup(groupId: string, layout: ElkNode): ElkNode {
  * Each operation can have parameters directly on the object or wrapped in args.
  */
 export function batchUpdate(
-  operations: Array<{name: string, args?: any, [key: string]: any}>,
+  operations: Array<{name: string, [key: string]: any}>,
   layout: ElkNode
 ): ElkNode {
+  const results = [];
+  const errors = [];
+  
+  console.log(`🔄 Processing batch update with ${operations.length} operations`);
+  
   for (let i = 0; i < operations.length; i++) {
     const operation = operations[i];
     
@@ -598,11 +603,7 @@ export function batchUpdate(
           break;
           
         case 'move_node':
-          moveNode(
-            operation.nodeId,
-            operation.newParentId,
-            layout
-          );
+          moveNode(operation.nodeId, operation.newParentId, layout);
           break;
           
         case 'add_edge':
@@ -625,7 +626,6 @@ export function batchUpdate(
             operation.parentId,
             operation.groupId,
             layout,
-            operation.style,
             operation.groupIconName
           );
           break;
@@ -635,19 +635,33 @@ export function batchUpdate(
           break;
           
         default:
-          const error = `Unknown operation: ${operation.name}`;
+          const error = `Unknown operation: ${(operation as any).name}`;
           console.error(`❌ [BATCH-UPDATE] ${error}`);
-          throw new Error(error);
+          errors.push(`Operation ${i + 1}/${operations.length}: ${error}`);
+          continue;
       }
+      
+      // Operation succeeded
+      results.push(`✅ Operation ${i + 1}/${operations.length} (${operation.name}) succeeded`);
+      console.log(`✅ [BATCH-UPDATE] Operation ${i + 1}/${operations.length} (${operation.name}) succeeded`);
       
     } catch (error) {
       const errorMsg = `Operation ${i + 1}/${operations.length} (${operation.name}) failed: ${error instanceof Error ? error.message : String(error)}`;
       console.error(`❌ [BATCH-UPDATE] ${errorMsg}`);
       console.error(`  Operation details:`, operation);
+      errors.push(errorMsg);
       
-      // STOP execution and throw the error to the caller
-      throw new Error(errorMsg);
+      // Continue with next operation instead of stopping
+      continue;
     }
+  }
+  
+  // Log summary
+  console.log(`🔄 Batch update completed: ${results.length} succeeded, ${errors.length} failed`);
+  
+  if (errors.length > 0) {
+    console.warn(`⚠️ Some operations failed:`, errors);
+    // Don't throw error, just log the issues
   }
   
   return layout;

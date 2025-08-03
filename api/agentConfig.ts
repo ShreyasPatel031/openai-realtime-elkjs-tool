@@ -347,11 +347,11 @@ export { availableIconsComprehensive as availableIcons };
 export const modelConfigs = {
   // Main architecture generation model
   reasoning: {
-    model: "gpt-4.1" as const,
-  temperature: 0.1,
-  max_tokens: 4096,
-  parallel_tool_calls: true,
-  reasoning: { 
+    model: "gpt-4.1-mini" as const,
+    temperature: 0.1,
+    max_tokens: 4096,
+    parallel_tool_calls: true,
+    reasoning: { 
       effort: "low" as const,
       summary: "concise" as const
     },

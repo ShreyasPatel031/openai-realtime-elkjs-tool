@@ -1,5 +1,5 @@
 // Auto-generated dynamic lists for agents at build time
-// Generated on: 2025-08-01T22:08:20.660Z
+// Generated on: 2025-08-03T07:42:48.818Z
 
 export interface DynamicAgentResources {
   groupIcons: {
@@ -929,6 +929,7 @@ export const availableRegularIcons = {
   ],
   generic: [
     "api",
+    "atelier",
     "browser_client",
     "certificate",
     "connector",
@@ -1786,6 +1787,7 @@ export const availableIconsComprehensive = [
   "azure_workspace_gateway",
   "azure_workspaces",
   "api",
+  "atelier",
   "browser_client",
   "certificate",
   "connector",
@@ -1810,7 +1812,7 @@ export const dynamicAgentResources: DynamicAgentResources = {
   regularIcons: availableRegularIcons,
   totalCounts: {
     groupIcons: 51,
-    regularIcons: 852
+    regularIcons: 853
   }
 };
 

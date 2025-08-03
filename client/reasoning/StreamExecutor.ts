@@ -122,25 +122,25 @@ export class StreamExecutor {
           if (availableArchs.length === 0) {
             console.warn('⚠️ No architectures loaded in service yet, proceeding without reference');
             addLine(`⚠️ Architecture database not ready, proceeding without reference`);
-          } else {
+            } else {
             // Use the optimized architecture search with pre-computed embeddings
-            const matchedArch = await architectureSearchService.findMatchingArchitecture(searchInput);
-          
-            if (matchedArch) {
-              referenceArchitecture = `\n\nREFERENCE ARCHITECTURE:
+              const matchedArch = await architectureSearchService.findMatchingArchitecture(searchInput);
+              
+              if (matchedArch) {
+                referenceArchitecture = `\n\nREFERENCE ARCHITECTURE:
 This is a reference architecture for the use case. Please replicate it:
 ${matchedArch.architecture}`;
-              
-              // Enhanced logging with URL
-              console.log(`✅ Using reference architecture: ${matchedArch.subgroup}`);
-              console.log(`📋 Description: ${matchedArch.description}`);
-              console.log(`🔗 Source URL: ${matchedArch.source}`);
-              console.log(`☁️ Cloud Provider: ${matchedArch.cloud.toUpperCase()}`);
-              console.log(`📁 Category: ${matchedArch.group} > ${matchedArch.subgroup}`);
-              
-              addLine(`🏗️ Found reference architecture: ${matchedArch.subgroup}`);
-              addLine(`🔗 Reference URL: ${matchedArch.source}`);
-            } else {
+                
+                // Enhanced logging with URL
+                console.log(`✅ Using reference architecture: ${matchedArch.subgroup}`);
+                console.log(`📋 Description: ${matchedArch.description}`);
+                console.log(`🔗 Source URL: ${matchedArch.source}`);
+                console.log(`☁️ Cloud Provider: ${matchedArch.cloud.toUpperCase()}`);
+                console.log(`📁 Category: ${matchedArch.group} > ${matchedArch.subgroup}`);
+                
+                addLine(`🏗️ Found reference architecture: ${matchedArch.subgroup}`);
+                addLine(`🔗 Reference URL: ${matchedArch.source}`);
+          } else {
               console.log('❌ No suitable architecture match found');
               addLine(`⚠️ No matching reference architecture found`);
             }

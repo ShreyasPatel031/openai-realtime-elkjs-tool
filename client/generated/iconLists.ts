@@ -931,6 +931,7 @@ export const iconLists: IconLists = {
   },
   "generic": [
     "api",
+    "atelier",
     "browser_client",
     "certificate",
     "connector",
@@ -1010,6 +1011,7 @@ export const iconLists: IconLists = {
     "artifact_registry",
     "asset_inventory",
     "assured_workloads",
+    "atelier",
     "athena",
     "atm_multistack",
     "audit_manager",
@@ -1768,6 +1770,7 @@ export const iconLists: IconLists = {
 // Provider-prefixed icons for reasoning agent (avoids confusion between providers)
 export const availableIconsPrefixed = [
   "api",
+  "atelier",
   "aws_activate",
   "aws_alexa_for_business",
   "aws_amplify",

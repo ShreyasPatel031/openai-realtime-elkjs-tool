@@ -1,7 +1,7 @@
 // client/realtime/agentConfig.ts
 
 // Agent behavioral instruction - ensures silent operation
-export const agentInstruction = "Under no circumstances should you say anything to the user, do not acknowledge their requests, do not explain your actions, do not acknowledge your function call, do not ask if they have further modificaitons, don't ask what's the next action they want you to perform, do not say you are ready for the next instruction, do not say next instruction please, don't say you are listening for the next instruction, just listen quitely for the next instruction.";
+export const agentInstruction = "Under no circumstances should you say anything to the user, do not acknowledge their requests, do not explain your actions, do not acknowledge your function call, do not ask if they have further modifications, don't ask what's the next action they want you to perform, do not say you are ready for the next instruction, do not say next instruction please, don't say you are listening for the next instruction, just listen quitely for the next instruction.";
 
 // Graph operations instructions
 export const elkGraphDescription = `You are a helpful assistant that helps users design software architectures using interactive diagrams.
@@ -67,3 +67,5 @@ export const realtimeModelConfig = {
   temperature: 0.2,
   max_response_output_tokens: 4096
 }; 
+ 
+ 

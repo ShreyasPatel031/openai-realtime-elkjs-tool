@@ -49,6 +49,7 @@ import ChatWindow from "./ChatWindow"
 // import DebugGeometry from '../DebugGeometry'
 import { diagnoseStateSynchronization, cleanupDuplicateGroups } from '../../utils/graph_helper_functions'
 import { ApiEndpointProvider } from '../../contexts/ApiEndpointContext'
+import ProcessingStatusIcon from "../ProcessingStatusIcon"
 
 const ChatBox = Chatbox as React.ComponentType<ChatBoxProps>
 
@@ -819,8 +820,14 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   return (
     <ApiEndpointProvider apiEndpoint={apiEndpoint}>
-      <div className="w-full h-full flex flex-col overflow-hidden bg-white dark:bg-black">
-      {/* Connection status indicator - moved to top-left */}
+    <div className="w-full h-full flex flex-col overflow-hidden bg-white dark:bg-black">
+      {/* ProcessingStatusIcon - moved to top-left */}
+      <div className="absolute top-4 left-4 z-[101]">
+        <ProcessingStatusIcon />
+      </div>
+
+      {/* Connection status indicator - HIDDEN */}
+      {/* 
       <div className="absolute top-4 left-4 z-[101]">
         <ConnectionStatus 
           isSessionActive={isSessionActive}
@@ -834,6 +841,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           }}
         />
       </div>
+      */}
 
       <div className="flex-1 relative min-h-0 overflow-hidden">
         {/* ReactFlow container - only show when in ReactFlow mode */}
@@ -970,7 +978,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
         {/* Single Dev Panel Toggle - Replace all 5 buttons with one sleek toggle */}
         <div className="absolute top-4 right-4 z-[100]">
-          <button
+            <button
             onClick={() => setShowDev((prev) => !prev)}
             className={`w-10 h-10 flex items-center justify-center rounded-lg shadow-lg border transition-all duration-200 ${
               showDev 
@@ -1126,13 +1134,13 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 
                 {/* Original Dev Panel Content */}
                 <div className="border-t pt-4">
-                  <DevPanel 
-                    elkGraph={rawGraph} 
-                    onGraphChange={handleGraphChange}
-                    onToggleVisMode={handleToggleVisMode}
-                    useReactFlow={useReactFlow}
-                    onSvgGenerated={handleSvgGenerated}
-                  />
+            <DevPanel 
+              elkGraph={rawGraph} 
+              onGraphChange={handleGraphChange}
+              onToggleVisMode={handleToggleVisMode}
+              useReactFlow={useReactFlow}
+              onSvgGenerated={handleSvgGenerated}
+            />
                 </div>
               </div>
             </div>
@@ -1153,8 +1161,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             console.log("Reasoning trigger - now handled directly by process_user_requirements");
           }}
         />
-        </div>
       </div>
+    </div>
     </ApiEndpointProvider>
   )
 }

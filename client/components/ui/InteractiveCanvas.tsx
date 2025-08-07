@@ -969,12 +969,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           </div>
         )}
         
-        {/* Chat overlay */}
-        <div className="absolute top-10 left-4 z-10 max-w-md pointer-events-none">
+        {/* Chat overlay - HIDDEN */}
+        {/* <div className="absolute top-10 left-4 z-10 max-w-md pointer-events-none">
           <div className="pointer-events-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg overflow-auto max-h-[calc(100vh - 200px)]">
             <ChatWindow messages={messages} isMinimized={true} />
           </div>
-        </div>
+        </div> */}
 
         {/* Single Dev Panel Toggle - Replace all 5 buttons with one sleek toggle */}
         <div className="absolute top-4 right-4 z-[100]">

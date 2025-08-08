@@ -1,4 +1,3 @@
-import { elkGraphDescription } from "./agentConfig";
 import { createPostEventSource } from "./PostEventSource";
 import { createDeltaHandler, DeltaHandlerCallbacks, PendingCall } from "./EventHandlers";
 import { executeFunctionCall, GraphState } from "./FunctionExecutor";
@@ -137,6 +136,10 @@ ${matchedArch.architecture}`;
                 console.log(`🔗 Source URL: ${matchedArch.source}`);
                 console.log(`☁️ Cloud Provider: ${matchedArch.cloud.toUpperCase()}`);
                 console.log(`📁 Category: ${matchedArch.group} > ${matchedArch.subgroup}`);
+                // Debug: Log the full architecture content being appended
+                if ((window as any).__LLM_DEBUG__) {
+                  console.log('%c📐 reference architecture (full)', 'color:#06f', matchedArch.architecture);
+                }
                 
                 addLine(`🏗️ Found reference architecture: ${matchedArch.subgroup}`);
                 addLine(`🔗 Reference URL: ${matchedArch.source}`);
@@ -174,8 +177,9 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
       
       logTiming("Content building");
       
-      // Create the conversation payload with current graph state
-      const systemContent = `${elkGraphDescription}
+      // Move CURRENT GRAPH STATE into the user content to avoid duplicating system config.
+      // The backend will prepend the canonical system instructions from api/agentConfig.ts.
+      const userContentWithGraph = `${userContent}
 
 ## CURRENT GRAPH STATE
 The following is your current graph state (same format as display_elk_graph). Use this to understand what nodes and edges already exist:
@@ -184,18 +188,18 @@ The following is your current graph state (same format as display_elk_graph). Us
 ${currentGraphJSON}
 \`\`\`
 
-**IMPORTANT**: Before making any function calls, study the current graph state above. Only create edges between nodes that exist and share a common parent container. Do not create duplicate nodes or edges.`;
+Only create edges between nodes that exist and share a common parent container. Do not create duplicate nodes or edges.`;
 
       const conversationPayload = [
         { 
-          role: "system", 
-          content: systemContent
-        },
-        { 
           role: "user", 
-          content: userContent
+          content: userContentWithGraph
         }
       ];
+      // Debug: Log the exact user content being sent to the agent
+      if ((window as any).__LLM_DEBUG__) {
+        console.log('%c🛰️  ► user content to agent', 'color:#08f', userContentWithGraph);
+      }
       
       logTiming("Payload assembly");
       
@@ -381,6 +385,16 @@ ${currentGraphJSON}
       const handleDelta = createDeltaHandler(callbacks, responseIdRef);
 
       ev.onmessage = e => {
+        // Debug tap 2: Log every delta the agent streams back
+        if ((window as any).__LLM_DEBUG__) {
+          const d = JSON.parse(e.data);
+          console.log(
+            "%c🛰️  ◀ inbound delta",
+            "color:#9a0",
+            { type: d.type, payload: d }
+          );
+        }
+        
         const delta = JSON.parse(e.data);
         
         if (e.data === '[DONE]') {
@@ -564,12 +578,29 @@ ${currentGraphJSON}
     this.options.addLine(`🔄 Loop ${this.loopRef.current}/${this.MAX_LOOPS} - Processing: ${call.name}`);
 
     try {
+      // Debug tap 3: Log the tool call arguments
+      if ((window as any).__LLM_DEBUG__) {
+        console.log("%c🔧 tool call", "color:#fa0", {
+          name: call.name,
+          args: JSON.parse(call.arguments),
+          call_id: call.call_id
+        });
+      }
+      
       const result = await executeFunctionCall(
         call, 
         { elkGraph: this.elkGraphRef.current, setElkGraph: this.options.setElkGraph },
         { addLine: this.options.addLine },
         this.elkGraphRef
       );
+      
+      // Debug tap 3: Log the tool result
+      if ((window as any).__LLM_DEBUG__) {
+        console.log("%c✅ tool result", "color:#0a0", {
+          call_id: call.call_id,
+          result,
+        });
+      }
       
       if (result && typeof result === 'string' && result.startsWith('Error:')) {
         this.incError();
@@ -791,12 +822,29 @@ ${currentGraphJSON}
     try {
       console.log(`🔧 Executing ${call.name} directly in server-managed mode`);
       
+      // Debug tap 3: Log the tool call arguments
+      if ((window as any).__LLM_DEBUG__) {
+        console.log("%c🔧 tool call", "color:#fa0", {
+          name: call.name,
+          args: JSON.parse(call.arguments),
+          call_id: call.call_id
+        });
+      }
+      
       const result = await executeFunctionCall(
         call,
         { elkGraph: this.elkGraphRef.current, setElkGraph: this.options.setElkGraph },
         { addLine: this.options.addLine },
         this.elkGraphRef
       );
+      
+      // Debug tap 3: Log the tool result
+      if ((window as any).__LLM_DEBUG__) {
+        console.log("%c✅ tool result", "color:#0a0", {
+          call_id: call.call_id,
+          result,
+        });
+      }
       
       // Mark as handled but don't send follow-up stream
       this.handledCallsRef.current.add(call.call_id);

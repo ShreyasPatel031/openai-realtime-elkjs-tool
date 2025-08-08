@@ -348,9 +348,17 @@ export const modelConfigs = {
   // Main architecture generation model
   reasoning: {
     model: "gpt-4.1-mini" as const,
+
+    // Temperature and top_p
     temperature: 0.1,
+    top_p: 1,
     max_tokens: 4096,
+
+    // Tool choice
+    tool_choice: "auto" as const,
     parallel_tool_calls: true,
+
+    // Reasoning settings
     reasoning: { 
       effort: "low" as const,
       summary: "concise" as const

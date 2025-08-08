@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { EventEmitter } from 'events';
-import { modelConfigs, timeoutConfigs, isReasoningModel } from '../client/reasoning/agentConfig.ts';
+import { modelConfigs, timeoutConfigs, isReasoningModel } from '../api/agentConfig.ts';
 
 class ConnectionManager extends EventEmitter {
   static instance;

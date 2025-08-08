@@ -145,7 +145,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
   useEffect(() => {
     if (messagesEndRef.current && !isMinimized) {
         messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
+      }
   }, [messages, streamingMessages, isMinimized]);
 
   // Additional effect for auto-scrolling during streaming
@@ -166,7 +166,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
   useEffect(() => {
     setIsMinimized(propIsMinimized);
   }, [propIsMinimized]);
-
+      
   // Keyboard handler for spacebar to expand
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -191,7 +191,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isMinimized]);
-
+          
   // Register chat visibility for StreamExecutor
   useEffect(() => {
     registerChatVisibility(() => !isMinimized);
@@ -248,7 +248,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
     return () => {
       document.removeEventListener('updateStreamingMessage', handleStreamingUpdate as EventListener);
       document.removeEventListener('addChatMessage', handleAddMessage as EventListener);
-    };
+  };
   }, []);
 
   const getMessageKey = (message: Message) => {
@@ -416,10 +416,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
       {/* Chat Header - Always visible when minimized */}
       {isMinimized && (
         <Card className="shadow-lg w-full">
-          <div
+      <div
             className="flex items-center justify-end p-4 border-b bg-gray-50 cursor-pointer"
             onClick={toggleMinimized}
-          >
+      >
             <button className="p-2 rounded hover:bg-gray-200 text-gray-500 hover:text-gray-700">
               <ChevronDown className="w-4 h-4" />
             </button>

@@ -46,17 +46,17 @@ function FramerEmbeddable({
 
   return (
     <ApiEndpointProvider apiEndpoint={apiEndpoint}>
-      <div style={containerStyle}>
-        <InteractiveCanvas
-          isSessionActive={isSessionActive}
-          startSession={startSession}
-          stopSession={stopSession}
-          sendTextMessage={sendTextMessage}
-          sendClientEvent={sendClientEvent}
-          events={events}
-          apiEndpoint={apiEndpoint}
-        />
-      </div>
+    <div style={containerStyle}>
+      <InteractiveCanvas
+        isSessionActive={isSessionActive}
+        startSession={startSession}
+        stopSession={stopSession}
+        sendTextMessage={sendTextMessage}
+        sendClientEvent={sendClientEvent}
+        events={events}
+        apiEndpoint={apiEndpoint}
+      />
+    </div>
     </ApiEndpointProvider>
   );
 }
@@ -75,10 +75,10 @@ export const FramerEmbeddablePropertyControls = {
   },
   height: {
     type: 'string' as const,
-    title: 'Height', 
+    title: 'Height',
     defaultValue: '800px'
   }
-};
+}; 
 
 // Export both as default and named for maximum compatibility
 export default FramerEmbeddable;

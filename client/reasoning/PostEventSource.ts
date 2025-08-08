@@ -139,6 +139,15 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         
         console.log(`🌐 PostEventSource making request to: ${apiUrl}`);
         
+        // Debug tap 1: Log the exact JSON request that goes to /api/stream
+        if ((window as any).__LLM_DEBUG__) {
+          console.log(
+            "%c🛰️  ► outbound payload",
+            "color:#0af",
+            JSON.parse(JSON.stringify(typeof requestBody === 'string' ? JSON.parse(requestBody) : requestBody))          // deep-clone for readability
+          );
+        }
+        
         const fetchStart = performance.now();
         console.log(`⏱️ REQUEST TIMING: Starting network fetch at ${(fetchStart - requestStart).toFixed(2)}ms`);
         

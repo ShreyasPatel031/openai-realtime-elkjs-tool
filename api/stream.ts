@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 
 // Import allTools from the catalog
 import { allTools } from "./toolCatalog.js";
-import { modelConfigs, timeoutConfigs, isReasoningModel } from "./agentConfig";
+import { modelConfigs, timeoutConfigs, isReasoningModel, elkGraphDescription } from "./agentConfig";
 
 // Helper to decompress base64 payload for Edge Runtime
 async function decompressPayload(base64String: string): Promise<string> {
@@ -92,78 +92,8 @@ export default async function handler(req: any, res: any) {
     if (messages.length === 0 || messages[0]?.role !== 'system') {
       const systemMessage = {
         role: 'system' as const,
-        content: `**CRITICAL FIRST RULE: CREATE ALL EDGES INCREMENTALLY GROUP BY GROUP - NEVER DEFER EDGE CREATION TO THE END. EACH GROUP MUST BE COMPLETE WITH ALL ITS NODES AND ALL ITS EDGES IN THE SAME BATCH_UPDATE CALL.**
-
-**CRITICAL EDGE LABEL RULE: EVERY SINGLE EDGE MUST HAVE A DESCRIPTIVE LABEL. Never create edges without labels. Use action verbs that describe the relationship (e.g., "calls", "sends", "queries", "processes", "stores", "authenticates", "routes", "validates", "monitors", "triggers", "publishes", "subscribes", "deploys", "serves", "protects", "caches", "transforms", "configures", "notifies", "syncs", "flows to", "connects to", "backs up", etc.).**
-
-You are a technical architecture diagram assistant that MUST build complete architectures through multiple batch_update calls until the full architecture is complete.
-
-**CRITICAL: NEVER STOP AFTER JUST ONE FUNCTION CALL**
-- Make MULTIPLE batch_update calls to build ALL logical groups
-- Continue building until the COMPLETE architecture is done
-- Do NOT stop after displaying the graph once - keep building!
-
-**CRITICAL GROUP CREATION PATTERN:**
-1. First: Create individual nodes with add_node operations
-2. Second: Group related nodes with group_nodes operation using groupIconName
-3. Third: Add all edges for that group
-
-Each batch_update call must include ALL nodes, the group_nodes operation, AND ALL edges for one complete logical group.
-
-When requirements are provided always follow this logic:
-Group: logical part of architecture (created with group_nodes + groupIconName)
-Node: component of architecture (created with add_node)
-Edge: relationship between components (created with add_edge)
-
-**MANDATORY PATTERN FOR EACH GROUP:**
-batch_update({
-  operations: [
-    // 1. Create all individual nodes first
-    { name:"add_node", nodename:"...", parentId:"...", data:{label:"...", icon:"..."} },
-    { name:"add_node", nodename:"...", parentId:"...", data:{label:"...", icon:"..."} },
-    // 2. Group the nodes with proper groupIconName
-    { name:"group_nodes", nodeIds:["...", "..."], parentId:"...", groupId:"...", groupIconName:"gcp_logical_grouping_services_instances" },
-    // 3. Then add edges with proper hierarchy
-    { name:"add_edge", edgeId:"...", sourceId:"...", targetId:"...", label:"..." }
-  ]
-})
-
-**CRITICAL BATCH_UPDATE FORMAT:**
-✅ CORRECT: batch_update({operations: [{name:"add_node", ...}, {name:"group_nodes", ...}]})
-❌ WRONG: batch_update({graph: {...}}) - This will cause errors!
-
-## Example Architecture Build Process:
-/* ───────── 1. users group (create nodes first, then group them) */
-batch_update({
-  operations: [
-    { name:"add_node", nodename:"web_user", parentId:"root",
-      data:{ label:"Web", icon:"browser_client" } },
-    { name:"add_node", nodename:"mobile_user", parentId:"root",
-      data:{ label:"Mobile", icon:"mobile_app" } },
-    { name:"group_nodes", nodeIds:["web_user", "mobile_user"], parentId:"root", groupId:"users", groupIconName:"gcp_system" }
-  ]
-})
-
-/* ───────── 2. gcp edge/CDN group (create nodes first, then group them) */
-batch_update({
-  operations: [
-    { name:"add_node", nodename:"gcp", parentId:"root",
-      data:{ label:"Google Cloud Platform", icon:"gcp_logo" } },
-    { name:"add_node", nodename:"cloud_cdn", parentId:"gcp",
-      data:{ label:"Cloud CDN", icon:"gcp_cloud_cdn" } },
-    { name:"add_node", nodename:"lb_https", parentId:"gcp",
-      data:{ label:"HTTPS LB", icon:"load_balancer_generic" } },
-    { name:"add_node", nodename:"cloud_armor", parentId:"gcp",
-      data:{ label:"Cloud Armor", icon:"gcp_cloud_armor" } },
-    { name:"group_nodes", nodeIds:["cloud_cdn", "lb_https", "cloud_armor"], parentId:"gcp", groupId:"edge", groupIconName:"gcp_logical_grouping_services_instances" },
-    { name:"add_edge", edgeId:"e_cdn_lb", sourceId:"cloud_cdn", targetId:"lb_https", label:"route" },
-    { name:"add_edge", edgeId:"e_waf_lb", sourceId:"cloud_armor", targetId:"lb_https", label:"protect" },
-    { name:"add_edge", edgeId:"e_web_edge", sourceId:"web_user", targetId:"cloud_cdn", label:"HTTPS" },
-    { name:"add_edge", edgeId:"e_mobile_edge", sourceId:"mobile_user", targetId:"cloud_cdn", label:"HTTPS" }
-  ]
-})
-
-Always build complete architectures using multiple batch_update function calls. Never just describe - always BUILD the actual interactive diagram!`
+        // Pull all static instructions from central config
+        content: elkGraphDescription
       };
       
       if (messages.length === 0) {
@@ -178,8 +108,8 @@ Always build complete architectures using multiple batch_update function calls. 
 
     // Initialize OpenAI client
     console.log('🤖 Initializing OpenAI client...');
-    const model = 'gpt-4.1-mini';
-    const timeout = 180000;
+    const model = modelConfigs.reasoning.model;
+    const timeout = timeoutConfigs.requestTimeout;
     
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,

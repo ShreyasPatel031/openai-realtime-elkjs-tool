@@ -12,6 +12,7 @@ interface ReferenceArchitecture {
 class ArchitectureSearchService {
   private architectures: ReferenceArchitecture[] = [];
   private embeddings: Map<string, number[]> = new Map();
+  private queryCache: Map<string, number[]> = new Map();   // reuse queries
   private isInitialized = false;
   
   constructor() {
@@ -53,6 +54,28 @@ class ArchitectureSearchService {
     this.isInitialized = true;
   }
 
+  /** Embed an arbitrary text once, then cache it. */
+  private async embedQuery(text: string): Promise<number[]> {
+    const key = text.toLowerCase();
+    if (this.queryCache.has(key)) return this.queryCache.get(key)!;
+
+    // Call the backend instead of the OpenAI SDK
+    const res = await fetch('/api/embed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: key })
+    });
+
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`Backend /api/embed failed ${res.status}: ${detail}`);
+    }
+
+    const { embedding } = await res.json();
+    this.queryCache.set(key, embedding);
+    return embedding as number[];
+  }
+
   private cosineSimilarity(a: number[], b: number[]): number {
     let dotProduct = 0;
     let normA = 0;
@@ -68,36 +91,43 @@ class ArchitectureSearchService {
   }
 
   public async findMatchingArchitecture(userInput: string): Promise<ReferenceArchitecture | null> {
-    if (typeof window === 'undefined' || !this.isInitialized) {
+    if (!this.isInitialized) {
       throw new Error('❌ ArchitectureSearchService: Not properly initialized with pre-computed embeddings');
     }
-    
-    if (this.architectures.length === 0) {
-      throw new Error('❌ No architectures available - pre-computed embeddings not loaded');
+
+    console.log(`🤖 Vector-search for: "${userInput}"`);
+
+    // 1️⃣ embed the query
+    let queryVec: number[];
+    try {
+      queryVec = await this.embedQuery(userInput);
+    } catch (err) {
+      console.error('❌ Unable to embed query', err);
+      return null;
     }
 
-    console.log(`🤖 Searching for architecture matching: "${userInput}"`);
-    
-    // Simple text search - find first reasonable match
-    const searchTerms = userInput.toLowerCase();
-    
+    // 2️⃣ cosine-similarity over ALL reference vectors
+    let bestArch: ReferenceArchitecture | null = null;
+    let bestScore = -Infinity;
+
     for (const arch of this.architectures) {
-      const archText = `${arch.cloud} ${arch.group} ${arch.subgroup} ${arch.description}`.toLowerCase();
-      
-      if (searchTerms.includes('kubernetes') && archText.includes('app-dev')) {
-        console.log(`✅ Found architecture match: ${arch.subgroup}`);
-        return arch;
+      const key = `${arch.cloud} ${arch.group} ${arch.subgroup} ${arch.description}`.toLowerCase();
+      const vec = this.embeddings.get(key);
+      if (!vec) continue;                           // should not happen
+
+      const score = this.cosineSimilarity(queryVec, vec);
+      if (score > bestScore) {
+        bestScore = score;
+        bestArch  = arch;
       }
     }
-    
-    // Fallback to first app-dev architecture
-    const appDevArch = this.architectures.find(arch => arch.group === 'app-dev');
-    if (appDevArch) {
-      console.log(`✅ Using fallback app-dev architecture: ${appDevArch.subgroup}`);
-      return appDevArch;
+
+    if (bestArch) {
+      console.log(`✅ Best match: ${bestArch.subgroup} (score ${bestScore.toFixed(3)})`);
+    } else {
+      console.warn('⚠️ No architecture matched');
     }
-    
-    return null;
+    return bestArch;
   }
 
   public getAvailableArchitectures(): ReferenceArchitecture[] {

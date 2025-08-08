@@ -9,7 +9,7 @@ import multer from 'multer';
 // Import tools from catalog
 import { allTools } from "../api/toolCatalog.js";
 import ConnectionManager from './connectionManager.js';
-import { modelConfigs } from '../client/reasoning/agentConfig.ts';
+import { modelConfigs } from '../api/agentConfig.ts';
 
 const app = express();
 const apiKey = process.env.OPENAI_API_KEY;
@@ -44,7 +44,9 @@ app.use(express.urlencoded({ extended: false })); // for x-www-form-urlencoded
 
 // API routes - Import from the main API directory
 import streamHandler from '../api/stream.ts';
+import embedHandler from '../api/embed.ts';
 app.post("/api/stream", upload.array('images', 5), streamHandler);
+app.post("/api/embed", embedHandler);
 app.post("/api/questionnaire", async (req, res) => {
   try {
     console.log("Received questionnaire request:", req.body);

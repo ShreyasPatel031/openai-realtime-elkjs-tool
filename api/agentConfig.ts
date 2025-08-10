@@ -8,7 +8,7 @@ import {
   availableGroupIcons, 
   groupIconInstructions,
   availableIconsComprehensive
-} from './generated/dynamicAgentResources';
+} from './generated/dynamicAgentResources.js';
 
 export const exampleArchitectureBuild = `/* ───────── 1. users group (create nodes first, then group them) */
 batch_update({

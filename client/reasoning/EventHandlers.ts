@@ -19,7 +19,7 @@ export interface DeltaHandlerCallbacks {
 export const createDeltaHandler = (
   callbacks: DeltaHandlerCallbacks,
   responseIdRef: { current: string | null },
-  options?: { suppressCompletion?: boolean; completionOnCompleted?: boolean }
+  options?: { suppressCompletion?: boolean; completionOnCompleted?: boolean; suppressBusyOnDone?: boolean }
 ) => {
   const { addLine, appendToTextLine, appendToReasoningLine, appendToArgsLine, completeFunctionCall, pushCall, setBusy, onComplete } = callbacks;
   
@@ -339,7 +339,9 @@ export const createDeltaHandler = (
         window.dispatchEvent(new CustomEvent('processingComplete'));
       }
       console.log('🏁 Architecture generation complete - done type received with [DONE] data');
-      setBusy(false);
+      if (!options?.suppressBusyOnDone) {
+        setBusy(false);
+      }
       // Trigger completion callback which adds the completion message and closes chat
       if (onComplete) {
         onComplete();

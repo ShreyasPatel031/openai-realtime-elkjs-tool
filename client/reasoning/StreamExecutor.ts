@@ -670,7 +670,7 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
       this.processQueue();
     } else {
       this.options.addLine(`🎯 All function calls completed - ${this.loopRef.current} steps processed`);
-      this.options.setBusy(false);
+      // Do not clear busy here; only clear when main stream is truly done
     }
   }
 
@@ -730,8 +730,8 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
         }
       };
 
-      // For follow-up tool-output streams, allow completion on final [DONE]
-      const handleDelta = createDeltaHandler(callbacks, this.responseIdRef, { suppressCompletion: false, completionOnCompleted: false });
+      // For follow-up tool-output streams, suppress completion and busy clearing.
+      const handleDelta = createDeltaHandler(callbacks, this.responseIdRef, { suppressCompletion: true, completionOnCompleted: false, suppressBusyOnDone: true });
 
       ev.onmessage = e => {
         const delta = JSON.parse(e.data);
@@ -739,8 +739,7 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
         if (e.data === '[DONE]') {
           this.options.addLine('🏁 Follow-up stream finished - [DONE] received');
           ev.close();
-          this.options.setBusy(false);
-          // DO NOT trigger completion here - only main stream should trigger completion
+          // Do not clear busy and do not trigger completion here
           resolve();
           return;
         }

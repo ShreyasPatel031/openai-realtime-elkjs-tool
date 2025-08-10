@@ -538,7 +538,7 @@ export function groupNodes(
   const edgesBefore = collectEdges(layout);
   for (const { parent: container, edgeArr } of edgesBefore) {
     if (edgeArr.length > 0) {
-      console.log(`  - ${container.id}: ${edgeArr.length} edges`);
+
     }
   }
   
@@ -549,7 +549,7 @@ export function groupNodes(
   const edgesAfter = collectEdges(layout);
   for (const { parent: container, edgeArr } of edgesAfter) {
     if (edgeArr.length > 0) {
-      console.log(`  - ${container.id}: ${edgeArr.length} edges`);
+
     }
   }
   
@@ -601,7 +601,7 @@ export function batchUpdate(
   const results = [];
   const errors = [];
   
-  console.log(`🔄 Processing batch update with ${operations.length} operations`);
+  
   
   for (let i = 0; i < operations.length; i++) {
     const operation = operations[i];
@@ -662,7 +662,7 @@ export function batchUpdate(
       
       // Operation succeeded
       results.push(`✅ Operation ${i + 1}/${operations.length} (${operation.name}) succeeded`);
-      console.log(`✅ [BATCH-UPDATE] Operation ${i + 1}/${operations.length} (${operation.name}) succeeded`);
+
       
     } catch (error) {
       const errorMsg = `Operation ${i + 1}/${operations.length} (${operation.name}) failed: ${error instanceof Error ? error.message : String(error)}`;
@@ -676,7 +676,7 @@ export function batchUpdate(
   }
   
   // Log summary
-  console.log(`🔄 Batch update completed: ${results.length} succeeded, ${errors.length} failed`);
+
   
   if (errors.length > 0) {
     console.warn(`⚠️ Some operations failed:`, errors);

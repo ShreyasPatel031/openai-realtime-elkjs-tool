@@ -217,11 +217,7 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
   // Process all edges in the graph
   processEdges(elkGraph);
 
-  // 🟪 DEBUG: Final Edge Summary
-  console.log(`🟪 [FINAL-EDGES] Total edges created: ${edges.length}`, {
-    createdEdges: edges.map(e => ({id: e.id, source: e.source, target: e.target})),
-    processedEdgeIds: Array.from(processedEdgeIds)
-  });
+  // Final edge creation complete
 
   return { nodes, edges };
 } 

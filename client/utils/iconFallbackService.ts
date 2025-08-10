@@ -33,7 +33,7 @@ class IconFallbackService {
         dangerouslyAllowBrowser: true
       });
       this.initializeProviderIconSets();
-      console.log('✅ IconFallbackService initialized with OpenAI embeddings');
+
     } catch (error) {
       console.warn('⚠️ Failed to initialize IconFallbackService:', error);
     }

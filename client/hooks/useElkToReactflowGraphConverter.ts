@@ -110,9 +110,8 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
         
         // 2) run ELK
         const layout = await elk.layout(prepared);
-        console.groupCollapsed(`[ELK] layout OK   (nodes ${layout.children?.length ?? 0}, edges ${layout.edges?.length ?? 0})`);
-        console.log(layout);
-        console.groupEnd();
+
+
         
         /* stale result? – ignore */
         if (hashAtStart !== hashRef.current) return;

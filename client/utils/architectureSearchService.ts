@@ -26,7 +26,7 @@ class ArchitectureSearchService {
       return;
     }
 
-    console.log('⚡ Initializing ArchitectureSearchService with PRE-COMPUTED embeddings ONLY...');
+
     
     // STRICT: Only work with pre-computed data - NO FALLBACKS
     if (!precomputedEmbeddings) {
@@ -49,8 +49,8 @@ class ArchitectureSearchService {
       this.embeddings.set(text, embedding as number[]);
     });
     
-    console.log(`✅ Loaded ${this.architectures.length} pre-computed architectures with ${this.embeddings.size} embeddings`);
-    console.log(`📅 Generated at: ${precomputedEmbeddings.generatedAt}`);
+
+
     this.isInitialized = true;
   }
 
@@ -95,7 +95,7 @@ class ArchitectureSearchService {
       throw new Error('❌ ArchitectureSearchService: Not properly initialized with pre-computed embeddings');
     }
 
-    console.log(`🤖 Vector-search for: "${userInput}"`);
+
 
     // 1️⃣ embed the query
     let queryVec: number[];
@@ -123,7 +123,7 @@ class ArchitectureSearchService {
     }
 
     if (bestArch) {
-      console.log(`✅ Best match: ${bestArch.subgroup} (score ${bestScore.toFixed(3)})`);
+
     } else {
       console.warn('⚠️ No architecture matched');
     }

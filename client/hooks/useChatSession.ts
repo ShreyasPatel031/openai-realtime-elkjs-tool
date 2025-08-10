@@ -85,7 +85,7 @@ export const useChatSession = ({
   useEffect(() => {
     const handleAddChatMessage = (event: CustomEvent) => {
       const { message } = event.detail;
-      console.log('📨 Received custom chat message event:', message);
+
       
       // Add message to the Map
       messagesMap.current.set(message.id, message);

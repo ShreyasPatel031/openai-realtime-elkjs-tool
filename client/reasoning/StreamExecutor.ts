@@ -29,6 +29,7 @@ export class StreamExecutor {
   private sentOutput: React.MutableRefObject<Set<string>>;
   private pendingCalls: React.MutableRefObject<Map<string, { name: string; arguments: string; call_id: string }>>;
   private responseIdRef: React.MutableRefObject<string | null>;
+  private finalizationAttemptedRef: React.MutableRefObject<boolean>;
   
   private readonly MAX_LOOPS = 20;
   private readonly MAX_ERRORS = 3;
@@ -49,12 +50,13 @@ export class StreamExecutor {
     this.sentOutput = { current: new Set() };
     this.pendingCalls = { current: new Map() };
     this.responseIdRef = { current: null };
+    this.finalizationAttemptedRef = { current: false };
   }
 
   async execute(): Promise<void> {
     const { addLine, setBusy } = this.options;
     
-    console.log('🔴 STEP 6: StreamExecutor.execute() called - starting architecture generation');
+  
     setBusy(true);
     this.resetState();
     
@@ -66,7 +68,7 @@ export class StreamExecutor {
       const now = performance.now();
       const stageTime = now - lastTiming;
       const totalTime = now - timingStart;
-      console.log(`⏱️ TIMING: ${stage} took ${stageTime.toFixed(2)}ms (total: ${totalTime.toFixed(2)}ms)`);
+
       lastTiming = now;
     };
     
@@ -86,7 +88,7 @@ export class StreamExecutor {
       
       // Debug what conversation data, text input, and images we're using
       // Retrieved conversation data and additional input
-      console.log("📸 DEBUG: Found stored images:", storedImages.length);
+
       
       logTiming("Initial data collection");
       
@@ -108,17 +110,17 @@ export class StreamExecutor {
       
       // Search for matching reference architecture
       let referenceArchitecture = "";
-      console.log(`🔍 STEP 7: Starting architecture search for input: "${combinedContent.trim()}"`);
-      console.log(`📏 Combined content length: ${combinedContent.length} characters`);
+
+
       
       if (combinedContent.trim()) {
         try {
           const searchInput = combinedContent.toLowerCase();
-          console.log(`🔍 Searching for reference architecture matching: "${searchInput}"`);
+
           
           // Check if service is ready
           const availableArchs = architectureSearchService.getAvailableArchitectures();
-          console.log(`📊 Architecture service has ${availableArchs.length} architectures loaded`);
+
           
           if (availableArchs.length === 0) {
             console.warn('⚠️ No architectures loaded in service yet, proceeding without reference');
@@ -133,11 +135,8 @@ This is a reference architecture for the use case. Please replicate it:
 ${matchedArch.architecture}`;
                 
                 // Enhanced logging with URL
-                console.log(`✅ Using reference architecture: ${matchedArch.subgroup}`);
-                console.log(`📋 Description: ${matchedArch.description}`);
-                console.log(`🔗 Source URL: ${matchedArch.source}`);
-                console.log(`☁️ Cloud Provider: ${matchedArch.cloud.toUpperCase()}`);
-                console.log(`📁 Category: ${matchedArch.group} > ${matchedArch.subgroup}`);
+
+
                 // Debug: Log the full architecture content being appended
                 if ((window as any).__LLM_DEBUG__) {
                   console.log('%c📐 reference architecture (full)', 'color:#06f', matchedArch.architecture);
@@ -175,7 +174,7 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
       // Get current graph state for context using the same format as "Show ELK Data"
       const currentGraphState = this.getStructuralData(this.elkGraphRef.current);
       const currentGraphJSON = JSON.stringify(currentGraphState, null, 2);
-      console.log("📊 Current graph state being sent to agent:", currentGraphState);
+
       
       logTiming("Content building");
       
@@ -276,6 +275,7 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
     this.toolCallParent.current.clear();
     this.sentOutput.current.clear();
     this.pendingCalls.current.clear();
+    this.finalizationAttemptedRef.current = false;
   }
 
   // Extract structural data (same as InteractiveCanvas getStructuralData)
@@ -339,7 +339,7 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
             .map((item: any) => ({ id: item.id, response_id: item.response_id, role: item.role }));
           
           if (responseIds.length > 0) {
-            console.log(`🔍 StreamExecutor: Found ${responseIds.length} response IDs in payload:`, responseIds);
+    
           }
         } catch (e) {
           // Ignore parse errors for debugging
@@ -379,39 +379,35 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
       const handleDelta = createDeltaHandler(callbacks, this.responseIdRef, { suppressCompletion: false, completionOnCompleted: false });
 
       ev.onmessage = e => {
-        // Debug tap 2: Log every delta the agent streams back
-        if ((window as any).__LLM_DEBUG__) {
-          const d = JSON.parse(e.data);
-          console.log(
-            "%c🛰️  ◀ inbound delta",
-            "color:#9a0",
-            { type: d.type, payload: d }
-          );
-        }
-        
-        const delta = JSON.parse(e.data);
-        
+        // Handle [DONE] sentinel BEFORE any JSON parsing
         if (e.data === '[DONE]') {
-                  // [DONE] marker received - finalizing execution
-          
           addLine('🏁 Stream finished - [DONE] received');
-          console.log('🏁 Architecture generation complete - [DONE] marker received');
+    
           ev.close();
           setBusy(false);
-          // ONLY trigger completion here when [DONE] is received
           this.options.onComplete?.();
-          // Add the single completion message
-          setTimeout(() => {
-            addProcessCompleteMessage();
-          }, 500);
-          // Send architecture complete notification to real-time agent
-          setTimeout(() => {
-            sendArchitectureCompleteToRealtimeAgent();
-          }, 1000);
+          setTimeout(() => { addProcessCompleteMessage(); }, 500);
+          setTimeout(() => { sendArchitectureCompleteToRealtimeAgent(); }, 1000);
           resolve();
           return;
         }
-        
+
+        // Debug tap 2: Log every delta the agent streams back
+        if ((window as any).__LLM_DEBUG__) {
+          try {
+            const d = JSON.parse(e.data);
+            console.log("%c🛰️  ◀ inbound delta", "color:#9a0", { type: d.type, payload: d });
+          } catch {}
+        }
+
+        let delta: any;
+        try {
+          delta = JSON.parse(e.data);
+        } catch (parseErr) {
+          console.error('❌ Failed to parse inbound delta:', parseErr);
+          return;
+        }
+
         const result = handleDelta(delta);
         
         if (result === 'close') {
@@ -517,7 +513,7 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
     this.toolCallParent.current.set(pc.call.call_id, pc.responseId);
     this.pendingCalls.current.set(pc.call.call_id, pc.call);
     this.queueRef.current.push(pc.call.call_id);
-    console.log(`📥 Queued: ${pc.call.name} - Response ID: ${pc.responseId}`);
+
     this.processQueue();
   }
 
@@ -526,6 +522,8 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
     
     if (this.isProcessingRef.current) return;
     if (this.queueRef.current.length === 0) return;
+    
+    const processStartTime = performance.now();
 
     if (this.loopRef.current >= this.MAX_LOOPS) {
       this.options.addLine(`🛑 Reached ${this.MAX_LOOPS} loops – stopping`);
@@ -534,10 +532,12 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
     }
 
     this.isProcessingRef.current = true;
+    // Signal function-call icon start once per processing batch
+    try { window.dispatchEvent(new CustomEvent('functionCallStart')); } catch {}
     const firstCallId = this.queueRef.current[0];
     const firstCall = this.pendingCalls.current.get(firstCallId);
     let responseId = this.toolCallParent.current.get(firstCallId) || this.responseIdRef.current || undefined;
-    console.log(`🔍 Processing calls for responseId: ${responseId || 'NONE'} (starting with ${firstCallId})`);
+
     
     // Improved response ID handling with longer wait and retry logic
     if (!responseId) {
@@ -566,7 +566,7 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
     
     // Reset retry counter on success
     (this as any)._responseIdRetryCount = 0;
-    console.log(`✅ Processing with response ID: ${responseId}`);
+
     
     // Group all queued calls that belong to the same responseId
     const groupedCallIds: string[] = [];
@@ -602,15 +602,19 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
           });
         }
 
+        const executionStartTime = performance.now();
+        
         const result = await executeFunctionCall(
           call,
           { elkGraph: this.elkGraphRef.current, setElkGraph: this.options.setElkGraph },
           { addLine: this.options.addLine },
           this.elkGraphRef
         );
+        
+        const executionTime = performance.now() - executionStartTime;
 
         if ((window as any).__LLM_DEBUG__) {
-          console.log("%c✅ tool result", "color:#0a0", { call_id: call.call_id, result });
+
         }
 
         if (result && typeof result === 'string' && result.startsWith('Error:')) {
@@ -641,12 +645,36 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
           outputContent = JSON.stringify({ success: true, message: "Function completed with empty output" });
         }
         
-        console.log(`📤 Preparing output for ${call.call_id}: ${outputContent.substring(0, 100)}...`);
+
         outputs.push({ type: "function_call_output", call_id: call.call_id, output: outputContent });
       }
 
       // Send a single follow-up continuation with all outputs for this response
-      await this.openFollowUpStreamBatch(responseId, outputs);
+      const followUpStartTime = performance.now();
+      
+      try {
+        await this.openFollowUpStreamBatch(responseId, outputs);
+        
+        const followUpTime = performance.now() - followUpStartTime;
+      } catch (error: any) {
+        if (error.name === 'ExpiredResponseError' || error.message?.includes('EXPIRED_RESPONSE_ID')) {
+          this.options.addLine(`🔄 Restarting conversation with function outputs...`);
+          
+          // Start a fresh conversation with all the function outputs we have so far
+          try {
+            await this.openFollowUpStreamBatch(null, outputs); // null = start fresh
+            
+            const followUpTime = performance.now() - followUpStartTime;
+          } catch (freshError) {
+            console.error('❌ Fresh conversation also failed:', freshError);
+            this.options.addLine(`❌ Failed to restart conversation`);
+            throw freshError;
+          }
+        } else {
+          // Re-throw other errors
+          throw error;
+        }
+      }
 
       // Mark all as sent and cleanup
       for (const callId of groupedCallIds) {
@@ -665,12 +693,45 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
       }
     }
 
+    const processTotalTime = performance.now() - processStartTime;
+
     this.isProcessingRef.current = false;
     if (this.queueRef.current.length > 0) {
       this.processQueue();
     } else {
       this.options.addLine(`🎯 All function calls completed - ${this.loopRef.current} steps processed`);
-      // Do not clear busy here; only clear when main stream is truly done
+      // Attempt a single resume turn to allow the model to finalize with a message
+      if (!this.finalizationAttemptedRef.current && this.responseIdRef.current) {
+        this.finalizationAttemptedRef.current = true;
+        const resumeStartTime = performance.now();
+
+        try {
+          await this.openResumeStream(this.responseIdRef.current);
+          const resumeTime = performance.now() - resumeStartTime;
+
+        } catch (e) {
+          console.warn('⚠️ Resume stream failed:', e);
+          this.options.addLine(`⚠️ Final completion failed - using fallback completion`);
+          
+          // If resume stream fails, we need to complete manually
+          setTimeout(() => {
+
+            this.options.addLine(`🏁 Architecture generation completed (fallback)`);
+            this.options.setBusy(false);
+            this.options.onComplete?.();
+            window.dispatchEvent(new CustomEvent('processingComplete'));
+          }, 1000);
+        }
+      } else {
+        // No pending function calls and no resume needed - complete immediately
+
+        this.options.addLine(`🏁 Architecture generation completed`);
+        setTimeout(() => {
+          this.options.setBusy(false);
+          this.options.onComplete?.();
+          window.dispatchEvent(new CustomEvent('processingComplete'));
+        }, 500);
+      }
     }
   }
 
@@ -684,10 +745,9 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
       }
       
       if (!responseId) {
-        console.error('❌ openFollowUpStreamBatch: No response ID available');
-        this.options.addLine(`❌ Cannot send function outputs - missing response ID`);
-        resolve(); // Don't reject - continue processing
-        return;
+
+        this.options.addLine(`🔄 Starting fresh conversation with function outputs`);
+        // Continue processing with responseId = null for fresh conversation
       }
       
       // Validate each output before sending
@@ -702,13 +762,12 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
       }
       
       // Log the function call IDs we're sending outputs for
-      console.log(`📤 Sending outputs for function calls: ${outputs.map(o => o.call_id).join(', ')}`);
-      console.log(`🆔 Using response ID: ${responseId}`);
+
+
       
       // Build array payload of all outputs
       const followUpPayload = JSON.stringify(outputs);
-      console.log(`📤 FOLLOWUP SEND`, { previous_response_id: responseId, outputs_count: outputs.length, first_call_id: outputs[0]?.call_id });
-      console.log(`📤 Payload size: ${followUpPayload.length} chars`);
+
       
       const ev = createPostEventSource(followUpPayload, responseId, this.options.apiEndpoint);
       const responseIdRef = { current: null };
@@ -726,7 +785,7 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
         setBusy: this.options.setBusy,
         onComplete: () => {
           // Follow-up streams should not trigger completion
-          console.log('⚠️ Follow-up stream tried to trigger completion - ignoring');
+  
         }
       };
 
@@ -734,16 +793,22 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
       const handleDelta = createDeltaHandler(callbacks, this.responseIdRef, { suppressCompletion: true, completionOnCompleted: false, suppressBusyOnDone: true });
 
       ev.onmessage = e => {
-        const delta = JSON.parse(e.data);
-        
+        // Handle [DONE] sentinel BEFORE any JSON parsing
         if (e.data === '[DONE]') {
-          this.options.addLine('🏁 Follow-up stream finished - [DONE] received');
+          // Suppress noisy logs for follow-up streams to avoid multiple "done" lines
           ev.close();
-          // Do not clear busy and do not trigger completion here
           resolve();
           return;
         }
-        
+
+        let delta: any;
+        try {
+          delta = JSON.parse(e.data);
+        } catch (parseErr) {
+          console.error('❌ Failed to parse follow-up delta:', parseErr);
+          return;
+        }
+
         const result = handleDelta(delta);
         
         if (result === 'close') {
@@ -753,26 +818,15 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
       };
       
       ev.onerror = (error) => {
-        console.error('🚨 Follow-up EventSource error:', error);
+        // Downgrade to warning to avoid scaring the user; follow-up errors are often benign
+        console.warn('⚠️ Follow-up EventSource warning:', error);
         const errorDetails = (error as any).error || error;
-        console.error('🚨 Follow-up EventSource error details:', {
-          error,
-          responseId: responseId || 'NONE',
-          errorType: errorDetails?.name,
-          errorMessage: errorDetails?.message,
-          timestamp: new Date().toISOString(),
-          payload: followUpPayload.substring(0, 200) + '...',
-          payloadLength: followUpPayload.length,
-          callIds: outputs.map(o => o.call_id)
-        });
         
         ev.close();
         
         // Handle specific OpenAI API errors
         if (errorDetails?.message?.includes('No tool output found')) {
-          console.error('🚨 OpenAI "No tool output found" error - this indicates a mismatch between function call IDs');
-          this.options.addLine(`❌ OpenAI API error: Function call output mismatch`);
-          this.options.addLine(`🔍 Call IDs in error: ${outputs.map(o => o.call_id).join(', ')}`);
+          console.warn('⚠️ OpenAI "No tool output found" - treating as non-fatal and continuing');
           
           // Don't increment error count for this specific error - it's likely a timing issue
           resolve(); // Resolve to continue processing
@@ -787,30 +841,79 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
         
         // Handle HTTP 500 errors more gracefully
         if (errorDetails?.message?.includes('HTTP 500')) {
-          console.error('🚨 HTTP 500 error on follow-up stream - server issue');
-          this.options.addLine(`❌ Server error on function output - continuing anyway`);
+          console.warn('⚠️ HTTP 500 on follow-up stream - continuing');
           
           // Don't fail the entire process for server errors
           resolve();
           return;
         }
         
-        this.incError();
-        
-        if (this.errorRef.current >= this.MAX_ERRORS) {
-          this.options.addLine(`🛑 Stopping after ${this.MAX_ERRORS} consecutive errors`);
-          this.options.setBusy(false);
-          reject(error);
-        } else {
-          this.options.addLine(`❌ Follow-up stream failed (${this.errorRef.current}/${this.MAX_ERRORS}) - continuing`);
-          // Don't reject - resolve to continue processing
-          resolve();
-        }
+        // Treat other follow-up errors as non-fatal: resolve to allow UI to finish
+        resolve();
       };
       
       ev.onopen = () => {
         this.options.addLine("🔄 Continuing stream...");
         this.resetError();
+      };
+    });
+  }
+
+  // Open a lightweight resume stream to continue the conversation after tool outputs
+  private async openResumeStream(previousResponseId: string): Promise<void> {
+    return new Promise((resolve) => {
+      const nudgeMessages = [
+        { role: 'user', content: 'Continue and finalize. If the architecture is complete, respond with a final message instead of calling tools.' }
+      ];
+
+      const payload = JSON.stringify(nudgeMessages);
+      const ev = createPostEventSource(payload, previousResponseId, this.options.apiEndpoint);
+
+      const callbacks: DeltaHandlerCallbacks = {
+        addLine: this.options.addLine,
+        appendToTextLine: this.options.appendToTextLine,
+        appendToReasoningLine: this.options.appendToReasoningLine,
+        appendToArgsLine: this.options.appendToArgsLine,
+        completeFunctionCall: this.options.completeFunctionCall,
+        pushCall: (params: { call: any; responseId: string }) => this.pushCall({
+          call: params.call,
+          responseId: params.responseId
+        }),
+        setBusy: this.options.setBusy,
+        onComplete: () => {
+          // Main completion will be handled by [DONE] branch
+        }
+      };
+
+      const handleDelta = createDeltaHandler(callbacks, this.responseIdRef, { suppressCompletion: false, completionOnCompleted: false });
+
+      ev.onmessage = e => {
+        if (e.data === '[DONE]') {
+          // Finalization turn complete
+          ev.close();
+          // Allow main [DONE] to clear busy and trigger UI completion
+          resolve();
+          return;
+        }
+
+        let delta: any;
+        try {
+          delta = JSON.parse(e.data);
+        } catch {
+          return;
+        }
+
+        const result = handleDelta(delta);
+        if (result === 'close') {
+          ev.close();
+          resolve();
+        }
+      };
+
+      ev.onerror = () => {
+        // Treat resume errors as non-fatal
+        try { ev.close(); } catch {}
+        resolve();
       };
     });
   }

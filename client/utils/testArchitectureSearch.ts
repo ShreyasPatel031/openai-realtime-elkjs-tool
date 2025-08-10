@@ -89,11 +89,7 @@ if (typeof window !== 'undefined') {
   (window as any).listAvailableArchitectures = listAvailableArchitectures;
   (window as any).architectureSearchService = architectureSearchService;
   
-  console.log('🛠️ Architecture search test functions available:');
-  console.log('   testArchitectureSearch() - Test multiple search terms');
-  console.log('   testSingleArchitecture("machine learning") - Test single search');
-  console.log('   listAvailableArchitectures() - Show all available architectures');
-  console.log('   architectureSearchService - Direct access to service');
+  // Architecture search test functions available on window object
   
   // Auto-test disabled to avoid console noise - use manual testing instead
   // setTimeout(() => {

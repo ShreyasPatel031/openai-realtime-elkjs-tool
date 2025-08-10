@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Code, Bot, Check } from 'lucide-react';
+import { Search, Code, Check } from 'lucide-react';
 
-type ProcessingState = 'idle' | 'search' | 'function-call' | 'reasoning' | 'complete';
+type ProcessingState = 'idle' | 'search' | 'function-call' | 'complete';
 
 const ProcessingStatusIcon: React.FC = () => {
   const [state, setState] = useState<ProcessingState>('idle');
@@ -9,6 +9,7 @@ const ProcessingStatusIcon: React.FC = () => {
   const stateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const blinkIntervalRef = useRef<number | null>(null);
   const currentStateStartTime = useRef<number>(0);
+  const isFinalizingRef = useRef<boolean>(false);
 
   const startBlinking = () => {
     if (blinkIntervalRef.current) {
@@ -30,7 +31,7 @@ const ProcessingStatusIcon: React.FC = () => {
   };
 
   const setStateWithMinDuration = (newState: ProcessingState, minDuration: number = 0) => {
-    console.log(`🎯 ProcessingStatusIcon: Setting state to ${newState} with min duration ${minDuration}ms`);
+
     
     if (stateTimeoutRef.current) {
       clearTimeout(stateTimeoutRef.current);
@@ -45,7 +46,7 @@ const ProcessingStatusIcon: React.FC = () => {
       currentStateStartTime.current = Date.now();
       
       // Start blinking for active states, stop for idle/complete
-      if (newState === 'search' || newState === 'function-call' || newState === 'reasoning') {
+      if (newState === 'search' || newState === 'function-call') {
         startBlinking();
       } else {
         stopBlinking();
@@ -53,7 +54,7 @@ const ProcessingStatusIcon: React.FC = () => {
     };
 
     if (remainingTime > 0) {
-      console.log(`🎯 ProcessingStatusIcon: Waiting ${remainingTime}ms before state change`);
+
       stateTimeoutRef.current = setTimeout(updateState, remainingTime);
     } else {
       updateState();
@@ -62,22 +63,18 @@ const ProcessingStatusIcon: React.FC = () => {
 
   useEffect(() => {
     const handleUserRequirementsStart = () => {
-      console.log('🎯 ProcessingStatusIcon: userRequirementsStart received');
+
       setStateWithMinDuration('search', 2000); // Minimum 2 seconds
     };
 
     const handleFunctionCall = () => {
-      console.log('🎯 ProcessingStatusIcon: functionCallStart received');
+      if (isFinalizingRef.current) return;
+
       setStateWithMinDuration('function-call', 2000); // Minimum 2 seconds
     };
 
-    const handleReasoning = () => {
-      console.log('🎯 ProcessingStatusIcon: reasoningStart received');
-      setStateWithMinDuration('reasoning', 2000); // Minimum 2 seconds
-    };
-
     const handleComplete = () => {
-      console.log('🎯 ProcessingStatusIcon: processingComplete received, current state:', state);
+
       
       // Clear any existing timeout to avoid conflicts
       if (stateTimeoutRef.current) {
@@ -88,19 +85,20 @@ const ProcessingStatusIcon: React.FC = () => {
       stopBlinking();
       setState('complete');
       currentStateStartTime.current = Date.now();
+      isFinalizingRef.current = true;
       
       // Reset to idle after 1 second
       stateTimeoutRef.current = setTimeout(() => {
-        console.log('🎯 ProcessingStatusIcon: resetting to idle after complete');
+
         setState('idle');
         currentStateStartTime.current = Date.now();
+        isFinalizingRef.current = false;
       }, 1000);
     };
 
     // Listen for custom events
     window.addEventListener('userRequirementsStart', handleUserRequirementsStart);
     window.addEventListener('functionCallStart', handleFunctionCall);
-    window.addEventListener('reasoningStart', handleReasoning);
     window.addEventListener('processingComplete', handleComplete);
 
     return () => {
@@ -112,7 +110,6 @@ const ProcessingStatusIcon: React.FC = () => {
       }
       window.removeEventListener('userRequirementsStart', handleUserRequirementsStart);
       window.removeEventListener('functionCallStart', handleFunctionCall);
-      window.removeEventListener('reasoningStart', handleReasoning);
       window.removeEventListener('processingComplete', handleComplete);
     };
   }, []);
@@ -129,8 +126,6 @@ const ProcessingStatusIcon: React.FC = () => {
         return <Search className={baseClasses} style={iconStyle} />;
       case 'function-call':
         return <Code className={baseClasses} style={iconStyle} />;
-      case 'reasoning':
-        return <Bot className={baseClasses} style={iconStyle} />;
       case 'complete':
         return <Check className={baseClasses} style={iconStyle} />;
       default:

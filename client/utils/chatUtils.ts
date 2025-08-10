@@ -16,30 +16,30 @@ export const registerChatVisibility = (setter: (visible: boolean) => void) => {
 
 // Function to make chat window visible
 export const makeChatVisible = () => {
-  console.log('🔧 Making chat window visible');
+
   
   if (setChatVisible) {
     setChatVisible(true);
   } else {
-    console.warn('Chat visibility setter not registered');
+
   }
 };
 
 // Function to auto-close chat window
 export const closeChatWindow = () => {
-  console.log('🔧 Auto-closing chat window');
+
   
   if (setChatVisible) {
     setChatVisible(false);
   } else {
-    console.warn('Chat visibility setter not registered');
+
   }
 };
 
 // Function to add a user decision to the chat
 export const addUserDecisionToChat = (decision: string): { success: boolean; message: string } => {
   try {
-    console.log('📝 Adding user decision to chat:', decision);
+
     
     // Store the decision
     userDecisions.push(decision);
@@ -61,7 +61,7 @@ export const addUserDecisionToChat = (decision: string): { success: boolean; mes
     });
     document.dispatchEvent(addMessageEvent);
     
-    console.log('✅ User decision added successfully');
+
     return { 
       success: true, 
       message: `Decision recorded: ${decision}` 
@@ -79,7 +79,7 @@ export const addUserDecisionToChat = (decision: string): { success: boolean; mes
 // Function to create and add follow-up questions to chat
 export const createFollowupQuestionsToChat = (questions: any[]): { success: boolean; message: string } => {
   try {
-    console.log('❓ Creating follow-up questions based on structured questions:', questions);
+
     
     // Validate questions parameter
     if (!questions || !Array.isArray(questions)) {
@@ -134,7 +134,7 @@ export const createFollowupQuestionsToChat = (questions: any[]): { success: bool
       document.dispatchEvent(addQuestionEvent);
     });
     
-    console.log('✅ Follow-up questions created and added to chat successfully');
+  
     return { 
       success: true, 
       message: `Generated ${questions.length} follow-up questions`
@@ -188,7 +188,7 @@ export const addReasoningMessage = (initialContent: string = ""): string => {
   });
   document.dispatchEvent(addMessageEvent);
   
-  console.log('🧠 Added reasoning message:', messageId);
+
   return messageId;
 };
 
@@ -252,7 +252,7 @@ export const addFunctionCallingMessage = (initialContent: string = ""): string =
   });
   document.dispatchEvent(addMessageEvent);
   
-  console.log('⚙️ Added function calling message:', messageId);
+
   return messageId;
 };
 
@@ -275,7 +275,7 @@ export const addProcessCompleteMessage = (): void => {
   });
   document.dispatchEvent(addMessageEvent);
   
-  console.log('✅ Added process complete message - chat will auto-close');
+
   
   // Auto-close chat after 3 seconds
   setTimeout(() => {
@@ -300,7 +300,7 @@ export const simulateTokenStreaming = (messageId: string, fullText: string, spee
 
 // Function to send architecture complete notification to real-time agent
 export const sendArchitectureCompleteToRealtimeAgent = (): void => {
-  console.log('🏗️ Sending architecture complete notification to real-time agent');
+
   
   // Check if global functions are available (set by App component)
   const globalSendTextMessage = (window as any).realtimeAgentSendTextMessage;
@@ -308,7 +308,7 @@ export const sendArchitectureCompleteToRealtimeAgent = (): void => {
   const isSessionActive = (window as any).realtimeAgentSessionActive;
   
   if (!isSessionActive) {
-    console.log('ℹ️ Real-time agent session not active - skipping notification');
+
     return;
   }
   

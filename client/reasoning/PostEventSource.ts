@@ -20,7 +20,7 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
   
   // Use response ID for proper GPT-5 tool output chaining
   if (prevId) {
-    console.log(`🔍 PostEventSource: Using response ID ${prevId} for GPT-5 tool chaining`);
+
   }
   
   // Create EventSource-like object
@@ -50,7 +50,7 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
       // Start the fetch request
   const startFetch = async () => {
     const requestStart = performance.now();
-        console.log(`⏱️ REQUEST TIMING: Starting fetch`);
+    const startTime = new Date().toISOString();
     
     try {
       let requestBody: string | FormData;
@@ -60,18 +60,18 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
       
       // Handle FormData (images) vs JSON payload
         if (payload instanceof FormData) {
-          console.log('🔄 Starting stream with FormData', prevId ? '(follow-up)' : '(initial)');
+
         
         // Include response ID for tool chaining when provided
         if (prevId) {
-          console.log(`🔍 PostEventSource: Including FormData response ID for tool chaining: ${prevId}`);
+
           payload.append('previous_response_id', prevId);
         }
         
         requestBody = payload;
         // Don't set Content-Type header for FormData - let browser set it with boundary
         } else {
-          console.log('🔄 Starting stream with JSON', prevId ? '(follow-up)' : '(initial)');
+
         
         // Use payload directly without compression
         const compressedPayload = payload;
@@ -94,17 +94,17 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
       }
       
       const payloadPrepTime = performance.now();
-      console.log(`⏱️ REQUEST TIMING: Payload preparation took ${(payloadPrepTime - requestStart).toFixed(2)}ms`);
+      const payloadTime = payloadPrepTime - requestStart;
       
       // Generate a unique session ID for tracking (commented out due to CORS restrictions)
       // const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       // headers['x-session-id'] = sessionId;
       
               // Use provided apiEndpoint or default to relative URL
-        console.log(`🔍 DEBUG: apiEndpoint parameter:`, apiEndpoint);
+
         let apiUrl = apiEndpoint ? `${apiEndpoint}/api/stream` : '/api/stream';
         
-        console.log(`🌐 PostEventSource making request to: ${apiUrl}`);
+
         
         // Debug tap 1: Log the exact JSON request that goes to /api/stream
         if ((window as any).__LLM_DEBUG__) {
@@ -115,7 +115,7 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
           );
         }
         
-        console.log(`⏱️ REQUEST TIMING: Starting network fetch`);
+  
         
         // No timeout - let O3 model take as long as it needs
         const response = await fetch(apiUrl, {
@@ -125,15 +125,33 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
           signal: controller.signal,
         }) as Response;
       
-      console.log(`⏱️ REQUEST TIMING: Network response received`);
-      console.log('🔍 Stream response status:', response.status);
+
+
       
-      if (!response.ok) {
+            if (!response.ok) {
         const errorText = await response.text();
-          console.error('❌ Stream endpoint failed:', response.status, errorText);
+        console.error('❌ Stream endpoint failed:', response.status, errorText);
+        
+        // Check if this is a "previous response not found" error
+        if (response.status === 500 && errorText.includes('Previous response with id') && errorText.includes('not found')) {
+          // Extract the expired response ID for logging
+          const match = errorText.match(/Previous response with id '([^']+)' not found/);
+          // Throw a specific error type that we can catch and handle
+          const expiredError = new Error(`EXPIRED_RESPONSE_ID: ${errorText}`);
+          expiredError.name = 'ExpiredResponseError';
+          throw expiredError;
+        }
+        
         throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
       }
       
+      const responseTime = performance.now();
+      const serverResponseTime = responseTime - requestStart;
+      
+      if (serverResponseTime > 5000) {
+        console.warn(`⚠️ SLOW RESPONSE: Server took ${(serverResponseTime / 1000).toFixed(1)}s to respond - this may cause timeouts`);
+      }
+
       // Check if we're getting the expected content type
       const contentType = response.headers.get('content-type');
       if (!contentType?.includes('text/event-stream') && !contentType?.includes('text/plain')) {
@@ -168,26 +186,57 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
           readResult = await reader.read();
         } catch (readError) {
           // Handle read errors gracefully
-          console.error('❌ Stream read error:', readError.message || readError);
+          const streamTime = performance.now() - requestStart;
+          
+          // Log BodyStreamBuffer aborts with reduced severity since they're expected in dev
+          if (readError.message && readError.message.includes('BodyStreamBuffer was aborted')) {
+
+          } else {
+            console.error('❌ Stream read error:', readError.message || readError);
+          }
           
           // Handle AbortError
           if (readError.name === 'AbortError') {
-            console.log('📡 Stream aborted normally');
+    
             source.readyState = 2; // CLOSED
             break;
           }
           
           // Handle BodyStreamBuffer errors (common with Vercel dev server)
           if (readError.message && readError.message.includes('BodyStreamBuffer was aborted')) {
-            console.log('📡 BodyStreamBuffer aborted - treating as normal closure');
             source.readyState = 2; // CLOSED
+            
+            // Send a synthetic completion event to ensure UI is cleaned up properly
+            setTimeout(() => {
+              try {
+                const syntheticDoneEvent = new MessageEvent('message', {
+                  data: '[DONE]'
+                });
+                source.dispatchEvent(syntheticDoneEvent);
+                if (source.onmessage) source.onmessage.call(source as any, syntheticDoneEvent);
+              } catch (e) {
+                // Ignore synthetic event dispatch errors
+              }
+            }, 100);
             break;
           }
           
           // Handle TypeError for stream reading
           if (readError.name === 'TypeError' && readError.message.includes('stream')) {
-            console.log('📡 Stream TypeError - treating as normal closure');
             source.readyState = 2; // CLOSED
+            
+            // Send a synthetic completion event to ensure UI is cleaned up properly
+            setTimeout(() => {
+              try {
+                const syntheticDoneEvent = new MessageEvent('message', {
+                  data: '[DONE]'
+                });
+                source.dispatchEvent(syntheticDoneEvent);
+                if (source.onmessage) source.onmessage.call(source as any, syntheticDoneEvent);
+              } catch (e) {
+                // Ignore synthetic event dispatch errors
+              }
+            }, 100);
             break;
           }
           
@@ -197,8 +246,27 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         const { done, value } = readResult;
         
         if (done) {
-          console.log(`📡 Stream ended (${messageCount} messages)`);
+          const streamEndTime = performance.now();
+          const totalStreamTime = streamEndTime - requestStart;
+
           source.readyState = 2; // CLOSED
+          
+          // Check if we received a proper [DONE] event during the stream
+          const receivedDoneEvent = (source as any)._receivedDoneEvent;
+          if (!receivedDoneEvent) {
+            // Send a synthetic completion event to ensure UI is cleaned up properly
+            setTimeout(() => {
+              try {
+                const syntheticDoneEvent = new MessageEvent('message', {
+                  data: '[DONE]'
+                });
+                source.dispatchEvent(syntheticDoneEvent);
+                if (source.onmessage) source.onmessage.call(source as any, syntheticDoneEvent);
+              } catch (e) {
+                // Ignore synthetic event dispatch errors
+              }
+            }, 100);
+          }
           break;
         }
         
@@ -216,20 +284,27 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
           if (line.startsWith('data: ')) {
             const data = line.slice(6);
             if (data === '[DONE]') {
-          // minimal
+              // Track that we received a [DONE] event
+              (source as any)._receivedDoneEvent = true;
+              // Forward the [DONE] marker so consumers can finalize correctly
+              const doneEvent = new MessageEvent('message', { data: '[DONE]' });
+              source.dispatchEvent(doneEvent);
+              if (source.onmessage) source.onmessage.call(source as any, doneEvent);
               continue;
             }
             
             messageCount++;
             
-            // Log only errors
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.type === 'error') {
-                console.log('❌ Error:', parsed.error?.message || 'Unknown error');
+            // Only attempt to parse JSON payloads; [DONE] already handled above
+            if (data && data.charAt(0) === '{') {
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.type === 'error') {
+                  console.log('❌ Error:', parsed.error?.message || 'Unknown error');
+                }
+              } catch (e) {
+                // ignore non-JSON lines
               }
-            } catch (e) {
-              // Not JSON or not important, skip logging
             }
             
             // Dispatch message event
@@ -252,8 +327,28 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
       
       // Handle different error types
       if (error.name === 'AbortError') {
-        console.log('📡 Stream aborted normally');
+
         return; // Don't dispatch error event for normal closure
+      }
+      
+      // Handle BodyStreamBuffer abort errors that might be caught here
+      if (error.message && error.message.includes('BodyStreamBuffer was aborted')) {
+
+        // Send synthetic completion to ensure UI cleanup
+        setTimeout(() => {
+          try {
+
+            const syntheticDoneEvent = new MessageEvent('message', {
+              data: '[DONE]'
+            });
+            source.dispatchEvent(syntheticDoneEvent);
+            if (source.onmessage) source.onmessage.call(source as any, syntheticDoneEvent);
+
+          } catch (e) {
+
+          }
+        }, 100);
+        return; // Don't dispatch error event for handled abort
       }
       
       // Handle socket timeout errors with automatic reconnection
@@ -262,7 +357,7 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         
         if (reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++;
-          console.log(`🔄 Attempting reconnection ${reconnectAttempts}/${maxReconnectAttempts} in ${reconnectDelay}ms...`);
+
           
           setTimeout(() => {
             source.readyState = 0; // CONNECTING
@@ -291,7 +386,7 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         
         if (reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++;
-          console.log(`🔄 Attempting reconnection ${reconnectAttempts}/${maxReconnectAttempts} in ${reconnectDelay}ms...`);
+
           
           setTimeout(() => {
             source.readyState = 0; // CONNECTING

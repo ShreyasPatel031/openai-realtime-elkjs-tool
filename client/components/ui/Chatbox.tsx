@@ -34,7 +34,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit, isDisabled = false }) => {
     setIsProcessing(true);
     
     try {
-      console.log('🟢 Processing example:', example);
+
       
       // Store text input globally for reasoning agent
       (window as any).chatTextInput = example;
@@ -67,7 +67,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit, isDisabled = false }) => {
       setIsProcessing(true);
       
       try {
-        console.log('🟢 Processing user input:', textInput.trim());
+
         
         // Store text input globally for reasoning agent
         (window as any).chatTextInput = textInput.trim();

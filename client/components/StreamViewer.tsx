@@ -15,7 +15,7 @@ const StreamViewer: React.FC<{ elkGraph: any; setElkGraph: (graph: any) => void;
 
   // Handle graph updates
   useEffect(() => {
-    console.log('🔄 StreamViewer elkGraphRef updated:', elkGraph);
+
   }, [elkGraph]);
 
   const addLine = (line: string) => {

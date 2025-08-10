@@ -199,7 +199,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     const hasNewNodes = currentNodeCount > prevNodeCountRef.current;
     
     if (hasNewNodes && currentNodeCount > 0 && reactFlowRef.current) {
-      console.log(`🎯 Auto-fitting view: ${prevNodeCountRef.current} → ${currentNodeCount} nodes`);
+
       
       // Small delay to ensure nodes are rendered before fitting view
       const timeoutId = setTimeout(() => {
@@ -235,7 +235,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     prevEdgeIdsRef.current = currentEdgeIds;
 
     if (hasNewEdges && nodes.length > 0 && reactFlowRef.current) {
-      console.log(`🎯 Auto-fitting view due to new edges: total ${edges.length}`);
+
       const timeoutId = setTimeout(() => {
         try {
           reactFlowRef.current.fitView({
@@ -423,7 +423,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       
       // Expose setElkGraph for StreamExecutor
       (window as any).setElkGraph = (newGraph: any) => {
-        console.log('🔄 Global setElkGraph called with:', newGraph);
+  
         setRawGraph(newGraph);
       };
       
@@ -435,14 +435,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         return cleaned;
       };
       
-      console.log('🔧 Diagnostic functions exposed to window:');
-      console.log('  - analyzeGraphState() - Analyze current graph for edge alignment issues');
-      console.log('  - forceEdgeReattachmentAnalysis() - Force reattachment of all edges');
-      console.log('  - showGraphStructure() - Show complete graph hierarchy and edge distribution');
-      console.log('  - validateBatchOperations(ops) - Validate operation sequence for edge misalignment risks');
-      console.log('  - getCurrentGraph() - Get current graph state');
-      console.log('  - diagnoseStateSynchronization() - Analyze state synchronization issues');
-      console.log('  - cleanupDuplicateGroups() - Remove duplicate group nodes from the graph');
+          // Diagnostic functions exposed to window object for debugging
     });
     
     // Cleanup on unmount

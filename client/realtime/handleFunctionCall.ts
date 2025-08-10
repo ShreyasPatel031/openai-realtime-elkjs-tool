@@ -38,7 +38,7 @@ export function handleFunctionCall(
   const { elkGraph, setElkGraph, mutations, safeSend } = helpers;
 
   // Essential logging only
-  console.log(`🔧 ${name} (${call_id})`);
+
 
   let result: any = null;
   // Always start from a deep copy so we never mutate the prev-state object
@@ -55,7 +55,7 @@ export function handleFunctionCall(
         break;
         
       case "log_requirements_and_generate_questions":
-        console.log('📝 Processing requirements and questions');
+
         try {
           // Validate both requirements and questions
           if (!args.requirements || !Array.isArray(args.requirements) || args.requirements.length === 0) {
@@ -83,7 +83,7 @@ export function handleFunctionCall(
           result = { success: false, message: `Exception: ${err instanceof Error ? err.message : String(err)}` };
         }
         // Log the result before sending
-        console.log('🔧 log_requirements_and_generate_questions result:', result);
+
         // Send response and return early to prevent graph update
         safeSend({
           type: "conversation.item.create",
@@ -149,9 +149,7 @@ export function handleFunctionCall(
         
       case "batch_update":
         // Debug logging to see what's being passed
-        console.log('🔍 batch_update received arguments:', JSON.stringify(args, null, 2));
-        console.log('🔍 batch_update arg keys:', Object.keys(args));
-        console.log('🔍 batch_update arg types:', Object.keys(args).map(k => `${k}: ${typeof args[k]}`));
+
         
         // Quick validation
         if (args.id || args.children || args.edges) {
@@ -187,7 +185,7 @@ export function handleFunctionCall(
         }
         
         updated = mutations.batchUpdate(args.operations, graphCopy);
-        console.log(`✅ batch_update: ${args.operations.length} operations completed`);
+
         break;
         
       default:
@@ -274,9 +272,9 @@ export function handleFunctionCall(
     };
     
     // Update graph state
-    console.log(`🔄 Updating graph after ${name} - nodes: ${graphSummary.nodeCount}, edges: ${graphSummary.edgeCount}`);
+
     setElkGraph(updated);
-    console.log(`✅ Graph updated successfully after ${name}`);
+
     
     // Send the result back to the agent
     safeSend({

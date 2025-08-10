@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 
 // Import allTools from the catalog
 import { allTools } from "./toolCatalog.js";
-import { modelConfigs, timeoutConfigs, isReasoningModel, elkGraphDescription } from "./agentConfig";
+import { modelConfigs, timeoutConfigs, isReasoningModel, elkGraphDescription } from "./agentConfig.js";
 
 
 

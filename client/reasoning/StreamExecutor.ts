@@ -28,6 +28,7 @@ export class StreamExecutor {
   private toolCallParent: React.MutableRefObject<Map<string, string>>;
   private sentOutput: React.MutableRefObject<Set<string>>;
   private pendingCalls: React.MutableRefObject<Map<string, { name: string; arguments: string; call_id: string }>>;
+  private responseIdRef: React.MutableRefObject<string | null>;
   
   private readonly MAX_LOOPS = 20;
   private readonly MAX_ERRORS = 3;
@@ -47,6 +48,7 @@ export class StreamExecutor {
     this.toolCallParent = { current: new Map() };
     this.sentOutput = { current: new Set() };
     this.pendingCalls = { current: new Map() };
+    this.responseIdRef = { current: null };
   }
 
   async execute(): Promise<void> {
@@ -177,18 +179,9 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
       
       logTiming("Content building");
       
-      // Move CURRENT GRAPH STATE into the user content to avoid duplicating system config.
-      // The backend will prepend the canonical system instructions from api/agentConfig.ts.
-      const userContentWithGraph = `${userContent}
-
-## CURRENT GRAPH STATE
-The following is your current graph state (same format as display_elk_graph). Use this to understand what nodes and edges already exist:
-
-\`\`\`json
-${currentGraphJSON}
-\`\`\`
-
-Only create edges between nodes that exist and share a common parent container. Do not create duplicate nodes or edges.`;
+      // Do NOT send CURRENT GRAPH STATE up-front. We will include the updated graph state
+      // only after each tool execution in the follow-up tool output.
+      const userContentWithGraph = `${userContent}`;
 
       const conversationPayload = [
         { 
@@ -353,8 +346,8 @@ Only create edges between nodes that exist and share a common parent container. 
         }
       }
       
-      const ev = createPostEventSource(payload, undefined, this.options.apiEndpoint);
-      const responseIdRef = { current: null as string | null };
+              const ev = createPostEventSource(payload, undefined, this.options.apiEndpoint);
+        this.responseIdRef = { current: null as string | null };
 
       const callbacks: DeltaHandlerCallbacks = {
         addLine: this.options.addLine,
@@ -382,7 +375,7 @@ Only create edges between nodes that exist and share a common parent container. 
         }
       };
 
-      const handleDelta = createDeltaHandler(callbacks, responseIdRef);
+      const handleDelta = createDeltaHandler(callbacks, this.responseIdRef);
 
       ev.onmessage = e => {
         // Debug tap 2: Log every delta the agent streams back
@@ -512,30 +505,18 @@ Only create edges between nodes that exist and share a common parent container. 
   }
 
   private pushCall(pc: PendingCall): void {
-          // Function call queued for processing
+    // Function call queued for processing
     
     if (this.handledCallsRef.current.has(pc.call.call_id)) {
       console.log(`🚫 Skipping already handled call_id: ${pc.call.call_id}`);
       return;
     }
     
-    // Check if we're in server-managed mode (Vercel dev) by detecting if we're getting
-    // function calls without client-initiated follow-up streams
-    const isServerManaged = this.isServerManagedConversation();
-    
-    if (isServerManaged) {
-      console.log(`📥 Server-managed mode: Executing ${pc.call.name} locally without follow-up stream`);
-      this.executeCallDirectly(pc.call);
-      return;
-    }
-    
-    // Client-managed mode (npm run dev) - traditional flow
-    console.log(`📥 Client-managed mode: Queuing ${pc.call.name} for traditional flow`);
-    // NEVER store response IDs for multi-server compatibility
-    this.toolCallParent.current.set(pc.call.call_id, null);
+    // Store the response ID for GPT-5 chaining
+    this.toolCallParent.current.set(pc.call.call_id, pc.responseId);
     this.pendingCalls.current.set(pc.call.call_id, pc.call);
     this.queueRef.current.push(pc.call.call_id);
-    console.log(`📥 Queued: ${pc.call.name} - NO response ID stored for multi-server compatibility`);
+    console.log(`📥 Queued: ${pc.call.name} - Response ID: ${pc.responseId}`);
     this.processQueue();
   }
 
@@ -552,81 +533,128 @@ Only create edges between nodes that exist and share a common parent container. 
     }
 
     this.isProcessingRef.current = true;
-    const callId = this.queueRef.current[0];
-    const call = this.pendingCalls.current.get(callId);
-    const parentId = this.toolCallParent.current.get(callId);
-    console.log(`🔍 Processing call ${callId} with parentId: ${parentId} (should be null for multi-server compatibility)`);
+    const firstCallId = this.queueRef.current[0];
+    const firstCall = this.pendingCalls.current.get(firstCallId);
+    let responseId = this.toolCallParent.current.get(firstCallId) || this.responseIdRef.current || undefined;
+    console.log(`🔍 Processing calls for responseId: ${responseId || 'NONE'} (starting with ${firstCallId})`);
     
-    if (!call) {
-      this.options.addLine(`❌ Missing call details for ${callId}`);
-      this.queueRef.current.shift();
+    // Improved response ID handling with longer wait and retry logic
+    if (!responseId) {
+      console.log(`⏳ Waiting for response.id before sending tool outputs...`);
       this.isProcessingRef.current = false;
-      this.processQueue();
-      return;
-    }
-    
-    if (this.sentOutput.current.has(callId)) {
-      this.options.addLine(`🚫 Output already sent for ${callId}`);
-      this.cleanupCall(callId);
-      this.isProcessingRef.current = false;
-      this.processQueue();
-      return;
-    }
-    this.sentOutput.current.add(callId);
-    
-    this.incLoop();
-    this.options.addLine(`🔄 Loop ${this.loopRef.current}/${this.MAX_LOOPS} - Processing: ${call.name}`);
-
-    try {
-      // Debug tap 3: Log the tool call arguments
-      if ((window as any).__LLM_DEBUG__) {
-        console.log("%c🔧 tool call", "color:#fa0", {
-          name: call.name,
-          args: JSON.parse(call.arguments),
-          call_id: call.call_id
-        });
-      }
       
-      const result = await executeFunctionCall(
-        call, 
-        { elkGraph: this.elkGraphRef.current, setElkGraph: this.options.setElkGraph },
-        { addLine: this.options.addLine },
-        this.elkGraphRef
-      );
+      // Wait longer and implement exponential backoff for response ID
+      const retryCount = (this as any)._responseIdRetryCount || 0;
+      const maxRetries = 15;
+      const waitTime = Math.min(300 + (retryCount * 200), 5000); // 300ms to 5s max
       
-      // Debug tap 3: Log the tool result
-      if ((window as any).__LLM_DEBUG__) {
-        console.log("%c✅ tool result", "color:#0a0", {
-          call_id: call.call_id,
-          result,
-        });
-      }
-      
-      if (result && typeof result === 'string' && result.startsWith('Error:')) {
-        this.incError();
-        if (this.errorRef.current >= this.MAX_ERRORS) {
-          this.options.addLine(`🛑 ${this.MAX_ERRORS} consecutive errors – stopping`);
-          this.options.setBusy(false);
-          this.isProcessingRef.current = false;
-          return;
-        }
-        this.options.addLine(`⚠️ Error ${this.errorRef.current}/${this.MAX_ERRORS}: Will retry if possible`);
+      if (retryCount < maxRetries) {
+        (this as any)._responseIdRetryCount = retryCount + 1;
+        console.log(`⏳ Retry ${retryCount + 1}/${maxRetries} for response ID in ${waitTime}ms`);
+        setTimeout(() => {
+          this.processQueue();
+        }, waitTime);
+        return;
       } else {
-        this.resetError();
-      }
-
-      if (this.loopRef.current >= this.MAX_LOOPS || this.errorRef.current >= this.MAX_ERRORS) {
+        console.error(`❌ Failed to get response ID after ${maxRetries} retries`);
+        this.options.addLine(`❌ Failed to get response ID for function call - aborting`);
         this.isProcessingRef.current = false;
         return;
       }
+    }
+    
+    // Reset retry counter on success
+    (this as any)._responseIdRetryCount = 0;
+    console.log(`✅ Processing with response ID: ${responseId}`);
+    
+    // Group all queued calls that belong to the same responseId
+    const groupedCallIds: string[] = [];
+    for (const queuedId of this.queueRef.current) {
+      if ((this.toolCallParent.current.get(queuedId) || this.responseIdRef.current) === responseId) {
+        groupedCallIds.push(queuedId);
+      } else {
+        break; // stop at first call from a different response
+      }
+    }
 
-      // Pass null instead of parentId to ensure no response ID is used
-      console.log(`🔍 DEBUG: About to open follow-up stream for call ${callId}`);
-      await this.openFollowUpStream(null, callId, typeof result === 'string' ? result : JSON.stringify(result));
-      console.log(`🔍 DEBUG: Follow-up stream completed for call ${callId}`);
-      
+    if (groupedCallIds.length === 0 || !firstCall) {
+      this.isProcessingRef.current = false;
+      return;
+    }
+
+    this.incLoop();
+    this.options.addLine(`🔄 Loop ${this.loopRef.current}/${this.MAX_LOOPS} - Processing ${groupedCallIds.length} call(s)`);
+
+    const outputs: { type: string; call_id: string; output: string }[] = [];
+
+    try {
+      for (const callId of groupedCallIds) {
+        const call = this.pendingCalls.current.get(callId);
+        if (!call) continue;
+        if (this.sentOutput.current.has(callId)) continue;
+
+        if ((window as any).__LLM_DEBUG__) {
+          console.log("%c🔧 tool call", "color:#fa0", {
+            name: call.name,
+            args: JSON.parse(call.arguments),
+            call_id: call.call_id
+          });
+        }
+
+        const result = await executeFunctionCall(
+          call,
+          { elkGraph: this.elkGraphRef.current, setElkGraph: this.options.setElkGraph },
+          { addLine: this.options.addLine },
+          this.elkGraphRef
+        );
+
+        if ((window as any).__LLM_DEBUG__) {
+          console.log("%c✅ tool result", "color:#0a0", { call_id: call.call_id, result });
+        }
+
+        if (result && typeof result === 'string' && result.startsWith('Error:')) {
+          this.incError();
+          if (this.errorRef.current >= this.MAX_ERRORS) {
+            this.options.addLine(`🛑 ${this.MAX_ERRORS} consecutive errors – stopping`);
+            this.options.setBusy(false);
+            this.isProcessingRef.current = false;
+            return;
+          }
+          this.options.addLine(`⚠️ Error ${this.errorRef.current}/${this.MAX_ERRORS}: Will retry if possible`);
+        } else {
+          this.resetError();
+        }
+
+        // Ensure the output is properly formatted as a string
+        let outputContent: string;
+        if (typeof result === 'string') {
+          outputContent = result;
+        } else if (result === null || result === undefined) {
+          outputContent = JSON.stringify({ success: true, message: "Function completed successfully" });
+        } else {
+          outputContent = JSON.stringify(result);
+        }
+        
+        // Validate the output format
+        if (!outputContent.trim()) {
+          outputContent = JSON.stringify({ success: true, message: "Function completed with empty output" });
+        }
+        
+        console.log(`📤 Preparing output for ${call.call_id}: ${outputContent.substring(0, 100)}...`);
+        outputs.push({ type: "function_call_output", call_id: call.call_id, output: outputContent });
+      }
+
+      // Send a single follow-up continuation with all outputs for this response
+      await this.openFollowUpStreamBatch(responseId, outputs);
+
+      // Mark all as sent and cleanup
+      for (const callId of groupedCallIds) {
+        this.sentOutput.current.add(callId);
+        this.cleanupCall(callId);
+      }
+
     } catch (error) {
-      console.error('Error processing queue item:', error);
+      console.error('Error processing queue group:', error);
       this.incError();
       if (this.errorRef.current >= this.MAX_ERRORS) {
         this.options.addLine(`🛑 ${this.MAX_ERRORS} consecutive errors – stopping`);
@@ -636,70 +664,52 @@ Only create edges between nodes that exist and share a common parent container. 
       }
     }
 
-    this.cleanupCall(callId);
     this.isProcessingRef.current = false;
-    
-    // Continue processing queue if more items exist - DO NOT trigger completion here
-    if (this.queueRef.current.length === 0) {
+    if (this.queueRef.current.length > 0) {
+      this.processQueue();
+    } else {
       this.options.addLine(`🎯 All function calls completed - ${this.loopRef.current} steps processed`);
       this.options.setBusy(false);
-      // REMOVED: No completion trigger here - only [DONE] marker should trigger completion
-    } else {
-      // Still have work to do
-      this.processQueue();
     }
   }
 
-  private async openFollowUpStream(responseId: string, callId: string, result: string): Promise<void> {
+  private async openFollowUpStreamBatch(responseId: string | null, outputs: { type: string; call_id: string; output: string }[]): Promise<void> {
     return new Promise((resolve, reject) => {
-      if (this.sentOutput.current.has(callId)) {
-        console.log(`🚫 Already sent output for call_id: ${callId} (sanity check)`);
+      // Validate inputs before proceeding
+      if (!outputs || outputs.length === 0) {
+        console.error('❌ openFollowUpStreamBatch: No outputs to send');
         resolve();
         return;
       }
       
-      let outputContent = result;
-      try {
-        const parsedResult = JSON.parse(result);
-        if (parsedResult.success) {
-          // Include current graph state in follow-up
-          const currentGraphState = this.getStructuralData(this.elkGraphRef.current);
-          const currentGraphJSON = JSON.stringify(currentGraphState, null, 2);
-          
-          outputContent = JSON.stringify({
-            ...parsedResult,
-            current_graph_state: currentGraphState,
-            graph_state_info: `CURRENT GRAPH STATE: Here is the updated graph state after the last operation:\n\`\`\`json\n${currentGraphJSON}\n\`\`\`\n\nUse this state information for your next function call. Only create edges between existing nodes that share a common parent.`,
-            next_action: "Continue building the architecture. Call the next required function without any explanation.",
-            reminder: "Do not acknowledge this result. Just execute the next function."
-          });
-        }
-      } catch (e) {
-        // Keep as is if not JSON
+      if (!responseId) {
+        console.error('❌ openFollowUpStreamBatch: No response ID available');
+        this.options.addLine(`❌ Cannot send function outputs - missing response ID`);
+        resolve(); // Don't reject - continue processing
+        return;
       }
       
-      const followUpPayload = JSON.stringify([
-        {
-          type: "function_call_output",
-          call_id: callId,
-          output: outputContent
+      // Validate each output before sending
+      for (const output of outputs) {
+        if (!output.call_id || !output.output || !output.call_id.startsWith('call_')) {
+          console.error('❌ Invalid output format:', output);
+          this.options.addLine(`❌ Invalid function output format for ${output.call_id}`);
+          // Don't proceed with invalid outputs
+          resolve();
+          return;
         }
-      ]);
-
-      console.log(`🔄 Opening follow-up stream for call_id: ${callId} (NO response_id continuation)`);
-      console.log(`🔍 StreamExecutor: Follow-up payload structure:`, {
-        type: "function_call_output",
-        call_id: callId,
-        output_length: outputContent.length,
-        using_response_id: undefined,
-        responseId_param: responseId
-      });
-      console.log(`🔍 DEBUG: Follow-up payload preview:`, followUpPayload.substring(0, 300) + '...');
+      }
       
-      // DON'T pass responseId - let the server handle conversation state
-      console.log(`🔍 DEBUG: About to create PostEventSource for follow-up`);
-      const ev = createPostEventSource(followUpPayload, undefined);
-      console.log(`🔍 DEBUG: PostEventSource created for follow-up, setting up handlers...`);
+      // Log the function call IDs we're sending outputs for
+      console.log(`📤 Sending outputs for function calls: ${outputs.map(o => o.call_id).join(', ')}`);
+      console.log(`🆔 Using response ID: ${responseId}`);
+      
+      // Build array payload of all outputs
+      const followUpPayload = JSON.stringify(outputs);
+      console.log(`📤 FOLLOWUP SEND`, { previous_response_id: responseId, outputs_count: outputs.length, first_call_id: outputs[0]?.call_id });
+      console.log(`📤 Payload size: ${followUpPayload.length} chars`);
+      
+      const ev = createPostEventSource(followUpPayload, responseId, this.options.apiEndpoint);
       const responseIdRef = { current: null };
 
       const callbacks: DeltaHandlerCallbacks = {
@@ -719,7 +729,7 @@ Only create edges between nodes that exist and share a common parent container. 
         }
       };
 
-      const handleDelta = createDeltaHandler(callbacks, responseIdRef);
+      const handleDelta = createDeltaHandler(callbacks, this.responseIdRef);
 
       ev.onmessage = e => {
         const delta = JSON.parse(e.data);
@@ -743,20 +753,43 @@ Only create edges between nodes that exist and share a common parent container. 
       
       ev.onerror = (error) => {
         console.error('🚨 Follow-up EventSource error:', error);
+        const errorDetails = (error as any).error || error;
         console.error('🚨 Follow-up EventSource error details:', {
           error,
-          callId,
-          responseId: 'NOT_USED',
-          errorType: error && (error as any).error?.name,
+          responseId: responseId || 'NONE',
+          errorType: errorDetails?.name,
+          errorMessage: errorDetails?.message,
           timestamp: new Date().toISOString(),
           payload: followUpPayload.substring(0, 200) + '...',
-          payloadLength: followUpPayload.length
+          payloadLength: followUpPayload.length,
+          callIds: outputs.map(o => o.call_id)
         });
-        console.error('🚨 This is likely the Vercel dev issue - follow-up stream failed to connect');
+        
         ev.close();
         
-        if (error && (error as any).error?.name === 'AbortError') {
+        // Handle specific OpenAI API errors
+        if (errorDetails?.message?.includes('No tool output found')) {
+          console.error('🚨 OpenAI "No tool output found" error - this indicates a mismatch between function call IDs');
+          this.options.addLine(`❌ OpenAI API error: Function call output mismatch`);
+          this.options.addLine(`🔍 Call IDs in error: ${outputs.map(o => o.call_id).join(', ')}`);
+          
+          // Don't increment error count for this specific error - it's likely a timing issue
+          resolve(); // Resolve to continue processing
+          return;
+        }
+        
+        if (errorDetails?.name === 'AbortError') {
           console.log('📡 Follow-up stream closed normally (AbortError expected)');
+          resolve();
+          return;
+        }
+        
+        // Handle HTTP 500 errors more gracefully
+        if (errorDetails?.message?.includes('HTTP 500')) {
+          console.error('🚨 HTTP 500 error on follow-up stream - server issue');
+          this.options.addLine(`❌ Server error on function output - continuing anyway`);
+          
+          // Don't fail the entire process for server errors
           resolve();
           return;
         }
@@ -766,11 +799,12 @@ Only create edges between nodes that exist and share a common parent container. 
         if (this.errorRef.current >= this.MAX_ERRORS) {
           this.options.addLine(`🛑 Stopping after ${this.MAX_ERRORS} consecutive errors`);
           this.options.setBusy(false);
+          reject(error);
         } else {
-          this.options.addLine(`❌ Follow-up stream failed (${this.errorRef.current}/${this.MAX_ERRORS}) - check console for details`);
+          this.options.addLine(`❌ Follow-up stream failed (${this.errorRef.current}/${this.MAX_ERRORS}) - continuing`);
+          // Don't reject - resolve to continue processing
+          resolve();
         }
-        
-        reject(error);
       };
       
       ev.onopen = () => {
@@ -803,103 +837,7 @@ Only create edges between nodes that exist and share a common parent container. 
     this.errorRef.current = 0;
   }
 
-  private isServerManagedConversation(): boolean {
-    // Server-managed mode (Vercel) sends multiple function calls in one stream
-    // without expecting client follow-up streams. We can detect this by checking
-    // if we've received multiple calls without sending any follow-up streams yet.
-    const queueLength = this.queueRef.current.length;
-    const pendingCallsCount = this.pendingCalls.current.size;
-    const isInInitialStream = queueLength === 0 && pendingCallsCount === 0;
-    
-    // Server managed mode detection for function execution
-    
-    // If we're getting function calls during the initial stream (not as a result
-    // of our follow-up), it's likely server-managed
-    return isInInitialStream;
-  }
 
-  private async executeCallDirectly(call: { name: string; arguments: string; call_id: string }): Promise<void> {
-    try {
-      console.log(`🔧 Executing ${call.name} directly in server-managed mode`);
-      
-      // Debug tap 3: Log the tool call arguments
-      if ((window as any).__LLM_DEBUG__) {
-        console.log("%c🔧 tool call", "color:#fa0", {
-          name: call.name,
-          args: JSON.parse(call.arguments),
-          call_id: call.call_id
-        });
-      }
-      
-      const result = await executeFunctionCall(
-        call,
-        { elkGraph: this.elkGraphRef.current, setElkGraph: this.options.setElkGraph },
-        { addLine: this.options.addLine },
-        this.elkGraphRef
-      );
-      
-      // Debug tap 3: Log the tool result
-      if ((window as any).__LLM_DEBUG__) {
-        console.log("%c✅ tool result", "color:#0a0", {
-          call_id: call.call_id,
-          result,
-        });
-      }
-      
-      // Mark as handled but don't send follow-up stream
-      this.handledCallsRef.current.add(call.call_id);
-      
-      console.log(`✅ Executed ${call.name} locally in server-managed mode`);
-      
-    } catch (error) {
-      console.error(`❌ Error executing ${call.name} in server-managed mode:`, error);
-      this.options.addLine(`❌ Error executing ${call.name}: ${error}`);
-    }
-  }
 }
 
-/**
- * Utility function to execute streaming directly without DOM manipulation
- * Can be called from process_user_requirements or other components
- */
-export const executeStreamDirectly = async (
-  elkGraph: any,
-  setElkGraph: (graph: any) => void,
-  options?: {
-    onLog?: (message: string) => void;
-    onComplete?: () => void;
-    onError?: (error: any) => void;
-  }
-): Promise<void> => {
-  const logs: string[] = [];
-  
-  const addLine = (line: string) => {
-    logs.push(line);
-    options?.onLog?.(line);
-    console.log(line); // Also log to console for debugging
-  };
-
-  const streamOptions: StreamExecutorOptions = {
-    elkGraph,
-    setElkGraph,
-    addLine,
-    appendToTextLine: addLine, // For direct execution, just add as normal lines
-    appendToReasoningLine: addLine,
-    appendToArgsLine: addLine,
-    setBusy: (busy: boolean) => {
-      // For direct execution, we don't have a UI busy state
-      console.log(`🔄 Stream executor busy: ${busy}`);
-    },
-    onComplete: () => {
-      addLine("🎯 Direct stream execution completed!");
-      options?.onComplete?.();
-    },
-    onError: (error) => {
-      addLine(`❌ Direct stream execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      options?.onError?.(error);
-    }
-  };
-
-  const executor = new StreamExecutor(streamOptions);
-  await executor.execute();
-}; 
+ 

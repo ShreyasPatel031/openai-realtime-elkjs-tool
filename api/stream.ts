@@ -4,19 +4,11 @@ import OpenAI from 'openai';
 import { allTools } from "./toolCatalog.js";
 import { modelConfigs, timeoutConfigs, isReasoningModel, elkGraphDescription } from "./agentConfig";
 
-// Helper to decompress base64 payload for Edge Runtime
-async function decompressPayload(base64String: string): Promise<string> {
-  // In Node.js runtime, we can use native modules
-  const zlib = require('zlib');
-  const buffer = Buffer.from(base64String, 'base64');
-  return zlib.gunzipSync(buffer).toString();
-}
+
 
 export default async function handler(req: any, res: any) {
   try {
-    console.log('=== VERCEL STREAM REQUEST (with CORS fix) ===');
-    console.log('Method:', req.method);
-    console.log('Content-Type:', req.headers['content-type']);
+    // Server request received
     
     // Check environment variables
     if (!process.env.OPENAI_API_KEY) {
@@ -25,7 +17,7 @@ export default async function handler(req: any, res: any) {
       return;
     }
     
-    console.log('✅ Environment check passed');
+      // Env OK
     
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
@@ -38,7 +30,7 @@ export default async function handler(req: any, res: any) {
 
     // Get payload from request
     let payload: string;
-    let isCompressed = false;
+    let previousResponseIdFromClient: string | undefined;
     
     if (req.method === "POST") {
       const body = req.body;
@@ -46,25 +38,10 @@ export default async function handler(req: any, res: any) {
       // For FormData requests (with images), conversation is in body?.conversation
       // For JSON requests, payload is in body?.payload
       payload = body?.conversation || body?.payload;
-      isCompressed = body?.isCompressed === true;
-      
-      // Decompress if needed (only applies to JSON requests)
-      if (isCompressed && payload) {
-        try {
-          console.log('🔄 Decompressing payload...');
-          payload = await decompressPayload(payload);
-          console.log('✅ Payload decompressed successfully');
-        } catch (decompressError) {
-          console.error('❌ Failed to decompress payload:', decompressError);
-          res.status(400).json({ 
-            error: "Failed to decompress payload",
-            details: decompressError instanceof Error ? decompressError.message : String(decompressError)
-          });
-          return;
-        }
-      }
+      previousResponseIdFromClient = body?.previous_response_id;
     } else {
       payload = req.query.payload || '';
+      previousResponseIdFromClient = req.query.previous_response_id;
     }
 
     if (!payload) {
@@ -73,7 +50,7 @@ export default async function handler(req: any, res: any) {
       return;
     }
 
-    console.log('📦 Processing payload...');
+    // Processing payload
     
     let parsedPayload;
     try {
@@ -87,27 +64,33 @@ export default async function handler(req: any, res: any) {
     // Parse conversation array (like the working local server)
     const conversation = Array.isArray(parsedPayload) ? parsedPayload : [];
     
-    // Add comprehensive system message if conversation doesn't already have one
+    // Detect if this is a tool output continuation (Responses API item)
+    const isFunctionCallOutput = Array.isArray(conversation) && conversation[0]?.type === 'function_call_output';
+    
+    // Request analysis
+
+    // Add comprehensive system message only for normal role-based conversations
     let messages = conversation;
-    if (messages.length === 0 || messages[0]?.role !== 'system') {
-      const systemMessage = {
-        role: 'system' as const,
-        // Pull all static instructions from central config
-        content: elkGraphDescription
-      };
-      
-      if (messages.length === 0) {
-        messages = [systemMessage];
-      } else {
-        messages = [systemMessage, ...messages];
+    if (!isFunctionCallOutput) {
+      if (messages.length === 0 || messages[0]?.role !== 'system') {
+        const systemMessage = {
+          role: 'system' as const,
+          // Pull all static instructions from central config
+          content: elkGraphDescription
+        };
+        
+        if (messages.length === 0) {
+          messages = [systemMessage];
+        } else {
+          messages = [systemMessage, ...messages];
+        }
       }
     }
     
-    console.log(`🔍 Conversation length: ${messages.length}`);
-    console.log(`🔍 Processing conversation for reasoning agent`);
+    // Conversation ready for reasoning agent
 
     // Initialize OpenAI client
-    console.log('🤖 Initializing OpenAI client...');
+    // Initializing OpenAI client
     const model = modelConfigs.reasoning.model;
     const timeout = timeoutConfigs.requestTimeout;
     
@@ -124,23 +107,21 @@ export default async function handler(req: any, res: any) {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Content-Encoding, x-session-id');
 
-    console.log('🌊 Starting OpenAI stream...');
+    // Starting OpenAI stream
 
     // Use the messages array that was already prepared with system message
     // messages is already set above with proper system message
 
     try {
-      console.log('🔄 Starting conversation loop (exact copy from local dev)');
+      // Starting conversation loop
       
       // Extract current graph state from the system message
       let elkGraph = { id: "root", children: [], edges: [] };
       
-      // Check if this is a function call output continuation
-      const isFunctionCallOutput = messages.length > 0 && 
-        messages[0]?.type === "function_call_output";
+      // isFunctionCallOutput already computed above
       
       if (isFunctionCallOutput) {
-        console.log(`🔄 Processing function call output: ${messages[0].call_id}`);
+          // Processing function call output
       }
       
       // Look for the current graph state in the system message
@@ -151,17 +132,24 @@ export default async function handler(req: any, res: any) {
           try {
             const parsedGraph = JSON.parse(graphMatch[1]);
             elkGraph = parsedGraph;
-            console.log('📊 Extracted current graph state from system message:', elkGraph);
+            // Extracted current graph state
           } catch (error) {
             console.error('❌ Failed to parse graph state from system message:', error);
           }
         } else {
-          console.log('⚠️ No graph state found in system message, using empty graph');
+          // No graph state found in system message
         }
       }
       
       let finalCleanedConversation = [...messages];
+      // For tool output continuations, do not filter; pass raw items through
+      if (!isFunctionCallOutput) {
+        // Strictly keep only role-based messages (system/user/assistant) as inputs
+        finalCleanedConversation = finalCleanedConversation.filter((item: any) => 'role' in item);
+      }
       let turnCount = 0;
+      let lastResponseId: string | null = null;
+      let lastUserNudge: any | null = null;
       
       // Send helper function
       const send = (data: any) => {
@@ -170,54 +158,144 @@ export default async function handler(req: any, res: any) {
       
       while (true) { // Continue until natural completion
         turnCount++;
-        console.log(`🔄 Starting conversation turn ${turnCount} with ${finalCleanedConversation.length} items`);
+        // Starting conversation turn
         
-        const stream = await openai.responses.create({
-          model: model,
-          input: finalCleanedConversation,
+        // Allow ALL tools. Prompting (not hard restrictions) will steer behavior.
+        const allowedTools = allTools.map(tool => ({ type: "function", name: tool.name }));
+        const baseRequest: any = {
+          model,
           tools: allTools.map(tool => ({
             type: "function",
             name: tool.name,
             description: tool.description,
-            parameters: tool.parameters,
-            strict: false
+            parameters: tool.parameters
           })),
+          // Let the model choose when to call tools vs return messages
           tool_choice: "auto",
-          parallel_tool_calls: true,
+          parallel_tool_calls: false,
           stream: true
-        });
+        };
 
-        console.log('🔍 OpenAI stream created successfully');
+        // Provide minimal reasoning effort and low verbosity specifically for GPT-5 variants
+        if (String(model).includes('gpt-5')) {
+          baseRequest.reasoning = { effort: "minimal" };
+          baseRequest.text = { verbosity: "low" };
+        }
 
-        let messageCount = 0;
-        for await (const delta of stream) {
-          // Check if client has disconnected
-          if (res.destroyed) {
-            console.warn('⚠️ Client disconnected during stream - stopping');
-            break;
+        // If this is a tool output continuation from client, require a valid previous_response_id
+        if (isFunctionCallOutput) {
+          console.log('🔧 Processing function call output continuation');
+          console.log('🔍 Function call outputs:', conversation.map((item: any) => ({
+            type: item.type,
+            call_id: item.call_id,
+            output_length: item.output?.length || 0
+          })));
+          
+          if (!previousResponseIdFromClient || !String(previousResponseIdFromClient).startsWith('resp_')) {
+            console.error('❌ Invalid or missing previous_response_id for tool output:', previousResponseIdFromClient);
+            if (!res.headersSent) {
+              res.status(400).json({
+                error: "Missing or invalid previous_response_id for tool output chaining",
+                details: "Client must supply a valid previous_response_id (resp_*) when sending function_call_output"
+              });
+            }
+            return;
           }
           
-          messageCount++;
-          
-          try {
-            send(delta);
-            
-            if (delta.type === "response.output_item.done" && delta.item?.type === "function_call") {
-              const funcCall = delta.item;
-              console.log(`🎯 Processing function call: ${funcCall.name}`);
-              
-              // Skip providing function call outputs - the frontend handles all function calls locally
-              console.log(`📥 Skipping function call output - frontend handles execution locally`);
+          // Validate that all items are function_call_output types
+          const invalidItems = conversation.filter((item: any) => item.type !== 'function_call_output');
+          if (invalidItems.length > 0) {
+            console.error('❌ Invalid items in function call output request:', invalidItems);
+            if (!res.headersSent) {
+              res.status(400).json({
+                error: "Invalid function call output format",
+                details: "All items must be of type 'function_call_output'"
+              });
             }
+            return;
+          }
+          
+          baseRequest.previous_response_id = previousResponseIdFromClient;
+          baseRequest.input = conversation; // pass raw tool output item(s)
+          console.log(`✅ Tool output chaining with response ID: ${previousResponseIdFromClient}`);
+        } else if (lastResponseId && lastUserNudge) {
+          // Normal next turn: chain with last response id and only send nudge
+          baseRequest.previous_response_id = lastResponseId;
+          baseRequest.input = [lastUserNudge];
+        } else {
+          baseRequest.input = finalCleanedConversation;
+        }
+
+        // Minimal request verification log (headers implied via SDK)
+        try {
+          const toolsValid = Array.isArray(baseRequest.tools) && baseRequest.tools.every((t: any) => t?.type === 'function' && t?.name && t?.parameters && t?.parameters.type === 'object');
+          console.log('REQ /v1/responses', {
+            model: baseRequest.model,
+            tool_choice: baseRequest.tool_choice,
+            stream: baseRequest.stream === true,
+            parallel_tool_calls: !!baseRequest.parallel_tool_calls,
+            tools_valid: toolsValid,
+            tools_count: Array.isArray(baseRequest.tools) ? baseRequest.tools.length : 0,
+            has_previous_response_id: !!baseRequest.previous_response_id
+          });
+        } catch {}
+
+        // Create stream (no fallback – invalid chaining must fail loudly)
+        const stream: any = await openai.responses.create(baseRequest);
+
+        // OpenAI stream created
+
+        // Minimal, protocol-aligned logging only
+        let createdLogged = false;
+        for await (const delta of stream) {
+          // Check if client has disconnected more gracefully
+          if (res.destroyed || res.writableEnded || !res.writable) {
+            console.warn('⚠️ Client disconnected during stream - stopping gracefully');
+            try {
+              // Attempt to clean up the stream
+              if (typeof stream.controller?.abort === 'function') {
+                stream.controller.abort();
+              }
+            } catch (cleanupError) {
+              console.warn('⚠️ Error during stream cleanup:', cleanupError);
+            }
+            break;
+          }
+          try {
+            // Emit the SSE as-is
+            send(delta);
+            // Protocol visibility logs (strict subset)
+            if (delta.type === 'response.created' && !createdLogged) {
+              createdLogged = true;
+              console.log('EVENT response.created');
+            }
+            // Suppress noisy per-delta logs; keep minimal visibility
+            // function_call_arguments.delta and .done are intentionally not logged per event
+            if (delta.type === 'response.output_item.added' && (delta as any)?.item?.type === 'function_call') {
+              // Keep a single concise log for tool-call addition
+              console.log('EVENT response.output_tool_call.added');
+            }
+            
+            // Do not synthesize function_call_output here; the frontend will send real outputs
 
             if (delta.type === "response.completed") {
+              console.log('EVENT response.completed');
               const calls = delta.response?.output?.filter((x: any) => x.type === "function_call") ?? [];
               const textResponses = delta.response?.output?.filter((x: any) => x.type === "message") ?? [];
+              // Server-side debug: log output type counts
+              const typeCounts: Record<string, number> = {};
+              for (const item of (delta.response?.output ?? [])) {
+                typeCounts[item.type] = (typeCounts[item.type] || 0) + 1;
+              }
+              // output type counts
+              if (delta.response?.id) {
+                lastResponseId = delta.response.id;
+                // Echo the response id back to client so the follow-up tool output can chain correctly
+                send({ type: 'response.id', id: lastResponseId });
+              }
               
               // Check if the response indicates completion
               const responseText = textResponses.map((msg: any) => msg.content || '').join(' ').toLowerCase();
-              console.log(`🔍 Checking response text for completion: "${responseText}"`);
-              
               const completionIndicators = [
                 'all user requirements have been fully implemented',
                 'architecture completely fulfills the user requirements',
@@ -227,45 +305,45 @@ export default async function handler(req: any, res: any) {
                 'architecture diagram complete and requirements satisfied',
                 'final architecture complete - all requirements met'
               ];
-              
-              const hasCompletionIndicator = completionIndicators.some(indicator => 
-                responseText.includes(indicator)
-              );
-              
-              console.log(`🔍 Completion indicator found: ${hasCompletionIndicator}`);
-              
+              const hasCompletionIndicator = completionIndicators.some(indicator => responseText.includes(indicator));
+
+              // Special handling: for function_call_output continuations, ALWAYS end this turn after response.completed
+              if (isFunctionCallOutput) {
+                send({ type: 'done', data: '[DONE]' });
+                res.write('data: [DONE]\n\n');
+                res.end();
+                return;
+              }
+
+              // Normal conversational handling
               if (calls.length === 0 && hasCompletionIndicator) {
                 console.log('✅ Conversation complete - AI indicated completion');
-                send({ type: "done", data: "[DONE]" });
-                res.write("data: [DONE]\n\n");
+                send({ type: 'done', data: '[DONE]' });
+                res.write('data: [DONE]\n\n');
                 res.end();
                 return;
               } else if (calls.length > 0) {
-                console.log(`🔄 ${calls.length} function call(s) processed, continuing conversation loop`);
-                console.log(`🔄 About to break from delta loop and continue to next conversation turn`);
-                
-                // Add a continuation prompt when function calls were made
-                finalCleanedConversation.push({
-                  type: "message",
-                  role: "user", 
-                  content: "Continue calling functions until the architecture completely fulfills the user requirements. The architecture is NOT complete yet. Keep adding components, services, databases, networking, security, monitoring, and all infrastructure needed. Connect all components with proper edges. Only stop when every aspect of the user's requirements has been fully implemented in the architecture diagram."
-                });
-                console.log("🔄 Added continuation prompt to encourage more architecture building");
+                // One or more tool calls were issued. Stop the server loop now and
+                // let the client execute tools and POST back function_call_output in a new request.
+                send({ type: 'done', data: '[DONE]' });
+                res.write('data: [DONE]\n\n');
+                res.end();
+                return;
               } else {
-                console.log('🔄 No function calls this turn, but no completion indicated - continuing...');
+                // hard nudge to force tool use
+                lastUserNudge = {
+                  role: 'user',
+                  content: 'Use batch_update now with a small set of 3–7 operations to make incremental progress. After executing, return the entire current graph JSON in a message. Continue this small-burst cadence across turns until the architecture is complete.'
+                };
+                finalCleanedConversation.push(lastUserNudge);
               }
               
-              // Filter out function calls without outputs to avoid OpenAI API errors
-              const outputToAdd = delta.response.output.filter((item: any) => {
-                if (item.type === "function_call") {
-                  // Only include function calls that have been executed (frontend handles them)
-                  return false; // Skip function calls since frontend handles them locally
-                }
-                return true; // Include all other types (messages, etc.)
-              });
+              // Do NOT feed back any assistant outputs (message/reasoning/function_call) to next turn.
+              // GPT-5 may require paired reasoning/message items; excluding them avoids 400 pairing errors.
+              const outputToAdd: any[] = [];
               
               finalCleanedConversation.push(...outputToAdd);
-              console.log(`🔄 Added ${outputToAdd.length} items to conversation (filtered ${delta.response.output.length - outputToAdd.length} function calls). Total items: ${finalCleanedConversation.length}`);
+              // added assistant items
               break;
             }
           } catch (deltaError) {
@@ -273,11 +351,15 @@ export default async function handler(req: any, res: any) {
           }
         }
         
+        // Capture response id for next turn chaining
+        if (lastResponseId == null) {
+          // best effort; response id is usually available on response.completed
+        }
         // No need to check maxTurns since we let it run until natural completion
       }
       
       // Final completion if we exit the loop
-      console.log(`✅ Conversation naturally completed after ${turnCount} turns`);
+      // conversation completed
       send({ type: "done", data: "[DONE]" });
       res.write('data: [DONE]\n\n');
       res.end();
@@ -285,13 +367,44 @@ export default async function handler(req: any, res: any) {
     } catch (openaiError) {
       console.error('❌ OpenAI API error:', openaiError);
       
+      // Extract more detailed error information
+      let errorMessage = 'Unknown error';
+      let errorCode = 500;
+      
+      if (openaiError instanceof Error) {
+        errorMessage = openaiError.message;
+        
+        // Handle specific OpenAI API errors
+        if (errorMessage.includes('No tool output found')) {
+          const callIdMatch = errorMessage.match(/call_[a-zA-Z0-9]+/);
+          const missingCallId = callIdMatch ? callIdMatch[0] : 'unknown';
+          console.error('🚨 OpenAI "No tool output found" error - function call ID mismatch');
+          console.error('🚨 This usually happens when function calls are sent with wrong response ID context');
+          console.error('🚨 Missing function call ID:', missingCallId);
+          console.error('🚨 Request details:', { 
+            method: req.method, 
+            hasResponseId: !!previousResponseIdFromClient,
+            responseId: previousResponseIdFromClient
+          });
+          errorMessage = `Function call ID mismatch: OpenAI expected output for ${missingCallId} but received different context`;
+          errorCode = 400;
+        } else if (errorMessage.includes('Invalid request')) {
+          console.error('🚨 OpenAI invalid request error');
+          errorCode = 400;
+        } else if (errorMessage.includes('rate limit')) {
+          console.error('🚨 OpenAI rate limit error');
+          errorCode = 429;
+        }
+      }
+      
       if (!res.headersSent) {
-        res.status(500).json({ 
+        res.status(errorCode).json({ 
           error: 'OpenAI API failed',
-          details: openaiError instanceof Error ? openaiError.message : String(openaiError)
+          details: errorMessage,
+          errorType: openaiError instanceof Error ? openaiError.name : 'UnknownError'
         });
       } else {
-        res.write(`data: {"error": "OpenAI API failed: ${openaiError instanceof Error ? openaiError.message : String(openaiError)}"}\n\n`);
+        res.write(`data: {"error": "OpenAI API failed: ${errorMessage}", "errorType": "${openaiError instanceof Error ? openaiError.name : 'UnknownError'}"}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
       }

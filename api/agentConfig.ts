@@ -347,7 +347,7 @@ export { availableIconsComprehensive as availableIcons };
 export const modelConfigs = {
   // Main architecture generation model
   reasoning: {
-    model: "gpt-4.1-mini" as const,
+    model: "gpt-5" as const,
 
     // Temperature and top_p
     temperature: 0.1,
@@ -356,11 +356,11 @@ export const modelConfigs = {
 
     // Tool choice
     tool_choice: "auto" as const,
-    parallel_tool_calls: true,
+    parallel_tool_calls: false,
 
     // Reasoning settings
     reasoning: { 
-      effort: "low" as const,
+      effort: "minimal" as const,
       summary: "concise" as const
     },
     stream: true

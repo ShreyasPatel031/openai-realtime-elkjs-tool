@@ -135,6 +135,10 @@ const vite = await createViteServer({
   configFile: resolve(__dirname, "../vite.config.js"),
   root: resolve(__dirname, "../client"),
 });
+// Short-circuit noisy crawlers or platform probes hitting "/.well-known/..."
+app.use('/.well-known', (req, res) => {
+  res.status(404).send('Not found');
+});
 app.use(vite.middlewares);
 
 // API route for token generation

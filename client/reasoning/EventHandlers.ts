@@ -55,7 +55,6 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
       if (delta.delta) {
           // Dispatch reasoning start event on first reasoning content
           if (!reasoningStarted) {
-            console.log('🎯 EventHandlers: Dispatching reasoningStart event (output_text.delta)');
             window.dispatchEvent(new CustomEvent('reasoningStart'));
             reasoningStarted = true;
           }
@@ -67,12 +66,10 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
         if (delta.delta) {
           // Dispatch reasoning start event on first reasoning content
           if (!reasoningStarted) {
-            console.log('🎯 EventHandlers: Dispatching reasoningStart event');
             window.dispatchEvent(new CustomEvent('reasoningStart'));
             reasoningStarted = true;
           }
           
-          console.log('🧠 Routing response.text.delta to reasoning:', delta.delta.slice(0, 30));
           appendToReasoningLine(delta.delta);
         }
     } else if (delta.type === "reasoning.delta") {
@@ -80,12 +77,10 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
       if (delta.delta) {
           // Dispatch reasoning start event on first reasoning content
           if (!reasoningStarted) {
-            console.log('🎯 EventHandlers: Dispatching reasoningStart event');
             window.dispatchEvent(new CustomEvent('reasoningStart'));
             reasoningStarted = true;
           }
           
-          console.log('🧠 Reasoning delta received:', delta.delta.slice(0, 30));
         appendToReasoningLine(delta.delta);
       }
     } else if (delta.type === "reasoning.summary_text.delta") {
@@ -93,12 +88,10 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
       if (delta.delta) {
           // Dispatch reasoning start event on first reasoning content
           if (!reasoningStarted) {
-            console.log('🎯 EventHandlers: Dispatching reasoningStart event');
             window.dispatchEvent(new CustomEvent('reasoningStart'));
             reasoningStarted = true;
           }
           
-          console.log('🧠 Reasoning summary delta received:', delta.delta.slice(0, 30));
         appendToReasoningLine(delta.delta);
       }
     } else if (delta.type === "response.reasoning_summary_text.delta") {
@@ -106,25 +99,21 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
       if (delta.delta) {
           // Dispatch reasoning start event on first reasoning content
           if (!reasoningStarted) {
-            console.log('🎯 EventHandlers: Dispatching reasoningStart event');
             window.dispatchEvent(new CustomEvent('reasoningStart'));
             reasoningStarted = true;
           }
           
-          console.log('🧠 Response reasoning summary delta received:', delta.delta.slice(0, 30));
-          appendToReasoningLine(delta.delta);
+        appendToReasoningLine(delta.delta);
         }
       } else if (delta.type === "response.reasoning.delta") {
         // Response reasoning delta (another possible format)
         if (delta.delta) {
           // Dispatch reasoning start event on first reasoning content
           if (!reasoningStarted) {
-            console.log('🎯 EventHandlers: Dispatching reasoningStart event');
             window.dispatchEvent(new CustomEvent('reasoningStart'));
             reasoningStarted = true;
           }
           
-          console.log('🧠 Response reasoning delta received:', delta.delta.slice(0, 30));
         appendToReasoningLine(delta.delta);
       }
     } else if (delta.type === "function_call.delta") {
@@ -155,42 +144,59 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
           const functionCall = activeFunctionCalls.get(delta.item.id)!;
           functionCall.name = delta.item.name;
           
-          // Dispatch function call start event
-          console.log('🎯 EventHandlers: Dispatching functionCallStart event');
+          // Dispatch function call start event (quiet)
           window.dispatchEvent(new CustomEvent('functionCallStart'));
           
-          // Notify that we have a function call with a name
-          addLine(`🎯 Function call: ${delta.item.name}`);
-      }
-    } else if (delta.type === "function_call.done") {
-      // Complete function call
-      const funcCall = delta.function_call;
-      if (funcCall) {
+          // Minimal UI update only
+          addLine(`🎯 Function call started: ${delta.item.name}`);
+        }
+      } else if (delta.type === "function_call.done") {
+        // Complete function call
+        const funcCall = delta.function_call;
+        if (funcCall && funcCall.call_id && funcCall.call_id.startsWith('call_')) {
+        // Only show a single summarized args line at done
         addLine(`🎯 Function call: ${funcCall.name}`);
-        addLine(`📝 Args: ${funcCall.arguments}`);
+        addLine(`📝 Args (final): ${funcCall.arguments}`);
         
-        // Guard against duplicate tool calls
-        if (pendingCalls.has(funcCall.call_id) || handledCalls.has(funcCall.call_id)) {
-          console.log('🔁 duplicate tool-call ignored (function_call.done)');
-          return;
+          // Guard against duplicate tool calls
+          if (pendingCalls.has(funcCall.call_id) || handledCalls.has(funcCall.call_id)) {
+            console.log('🔁 duplicate tool-call ignored (function_call.done)');
+            return;
+          }
+        
+        console.log(`✅ EventHandlers: Processing function call with ID: ${funcCall.call_id}`);
+        
+        // Determine if this function call should use the current response ID or start fresh
+        let functionCallResponseId = responseIdRef.current;
+        
+        // If this function call comes after a completed response, it should start fresh
+        // This prevents "No tool output found" errors when OpenAI chains function calls
+        if ((responseIdRef as any).lastCompletedId === responseIdRef.current) {
+          console.log(`🔄 Function call ${funcCall.call_id} detected after response completion - using fresh context`);
+          functionCallResponseId = undefined; // This will let it start a new conversation
+          // Reset the completion marker
+          delete (responseIdRef as any).lastCompletedId;
         }
         
-          // Queue ALL function calls for local execution (remove responseId dependency)
+          // Queue ALL function calls for local execution with determined responseId
           pushCall({
             call: {
               name: funcCall.name,
               arguments: funcCall.arguments,
               call_id: funcCall.call_id
             },
-            responseId: responseIdRef.current || 'no-response-id'
+            responseId: functionCallResponseId
           });
+      } else {
+        console.error(`❌ EventHandlers: Invalid function call format:`, funcCall);
       }
     } else if (delta.type === "response.function_call_arguments.done") {
       // Response function call arguments complete (actual API format)
         if (delta.item_id && activeFunctionCalls.has(delta.item_id)) {
           const functionCall = activeFunctionCalls.get(delta.item_id)!;
+          // Aggregate-only final output
           addLine(`🎯 Function call complete: ${functionCall.name || 'Unknown'}`);
-          addLine(`📝 Final args: ${functionCall.arguments}`);
+          addLine(`📝 Args (final): ${functionCall.arguments}`);
         
           // Mark this specific function call as complete in the UI
           if (completeFunctionCall) {
@@ -203,24 +209,43 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
     } else if (delta.type === "response.output_item.done" && delta.item?.type === "function_call") {
       // Alternative function call format (if the API uses this)
       const funcCall = delta.item;
-      addLine(`🎯 Function call: ${funcCall.name}`);
-      addLine(`📝 Args: ${funcCall.arguments}`);
-      
-      // Guard against duplicate tool calls
-      if (pendingCalls.has(funcCall.call_id) || handledCalls.has(funcCall.call_id)) {
-        console.log('🔁 duplicate tool-call ignored (response.output_item.done)');
-        return;
+      if (funcCall && funcCall.call_id && funcCall.call_id.startsWith('call_')) {
+        // Only show summary line at done
+        addLine(`🎯 Function call: ${funcCall.name}`);
+        addLine(`📝 Args (final): ${funcCall.arguments}`);
+        
+        // Guard against duplicate tool calls
+        if (pendingCalls.has(funcCall.call_id) || handledCalls.has(funcCall.call_id)) {
+          console.log('🔁 duplicate tool-call ignored (response.output_item.done)');
+          return;
+        }
+        
+        console.log(`✅ EventHandlers: Processing alternative function call with ID: ${funcCall.call_id}`);
+        
+        // Determine if this function call should use the current response ID or start fresh
+        let functionCallResponseId = responseIdRef.current;
+        
+        // If this function call comes after a completed response, it should start fresh
+        // This prevents "No tool output found" errors when OpenAI chains function calls
+        if ((responseIdRef as any).lastCompletedId === responseIdRef.current) {
+          console.log(`🔄 Alternative function call ${funcCall.call_id} detected after response completion - using fresh context`);
+          functionCallResponseId = undefined; // This will let it start a new conversation
+          // Reset the completion marker
+          delete (responseIdRef as any).lastCompletedId;
+        }
+        
+          // Queue ALL function calls for local execution with determined responseId
+          pushCall({
+            call: {
+              name: funcCall.name,
+              arguments: funcCall.arguments,
+              call_id: funcCall.call_id
+            },
+            responseId: functionCallResponseId
+          });
+      } else {
+        console.error(`❌ EventHandlers: Invalid alternative function call format:`, funcCall);
       }
-      
-        // Queue ALL function calls for local execution (remove responseId dependency)
-        pushCall({
-          call: {
-            name: funcCall.name,
-            arguments: funcCall.arguments,
-            call_id: funcCall.call_id
-          },
-          responseId: responseIdRef.current || 'no-response-id'
-        });
     } else if (delta.type === "function_call_output") {
       // Handle function call output events from the server
       console.log(`📨 Function output received: ${delta.call_id}`);
@@ -228,6 +253,15 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
       // Mark this call as handled to prevent the StreamExecutor from trying to send another output
       if (handledCalls) {
         handledCalls.add(delta.call_id);
+      }
+    } else if (delta.type === "response.id") {
+      // Capture server-echoed response id for correct tool output chaining
+      if (delta.id && delta.id.startsWith('resp_')) {
+        responseIdRef.current = delta.id;
+        addLine(`🆔 Captured response ID: ${delta.id}`);
+        console.log(`✅ EventHandlers: Captured valid response ID: ${delta.id}`);
+      } else {
+        console.error(`❌ EventHandlers: Invalid response ID format: ${delta.id}`);
       }
     } else if (delta.type === "error") {
       // Handle error events from the server
@@ -269,10 +303,20 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
         timestamp: new Date().toISOString()
       });
     } else if (delta.type === "response.completed" || delta.type === "response.done") {
-      // Keep the id
-      if (!responseIdRef.current && delta.response?.id) {
+      // Capture response ID for tool output chaining
+      if (delta.response?.id && delta.response.id.startsWith('resp_')) {
         responseIdRef.current = delta.response.id;
+        addLine(`🆔 Captured response ID from response.completed: ${delta.response.id}`);
+        console.log(`✅ EventHandlers: Captured response ID from completed event: ${delta.response.id}`);
+        
+        // Mark that this response has completed - new function calls should use fresh context
+        (responseIdRef as any).lastCompletedId = delta.response.id;
+        console.log(`🔄 Marked response ${delta.response.id} as completed - new function calls will use fresh context`);
+      } else if (delta.response?.id && !delta.response.id.startsWith('resp_')) {
+        console.error(`❌ EventHandlers: Invalid response ID format in completed event: ${delta.response.id}`);
       }
+
+      // Function calls are handled individually during streaming - no batch processing needed
 
       const usage = delta.response?.usage || delta.usage;
       if (usage?.reasoning_tokens) {

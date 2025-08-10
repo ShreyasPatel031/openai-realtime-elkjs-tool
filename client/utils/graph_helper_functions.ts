@@ -382,6 +382,25 @@ export function addEdge(
   layout: ElkNode,
   label?: string
 ): ElkNode {
+  // Validate that both endpoints exist before attempting LCA
+  const sourceNode = findNodeById(layout, sourceId);
+  const targetNode = findNodeById(layout, targetId);
+  if (!sourceNode && !targetNode) {
+    const error = `Nodes not found: ${sourceId}, ${targetId}`;
+    console.error(`❌ [ADD-EDGE] ${error}`);
+    throw new Error(error);
+  }
+  if (!sourceNode) {
+    const error = `Node not found: ${sourceId}`;
+    console.error(`❌ [ADD-EDGE] ${error}`);
+    throw new Error(error);
+  }
+  if (!targetNode) {
+    const error = `Node not found: ${targetId}`;
+    console.error(`❌ [ADD-EDGE] ${error}`);
+    throw new Error(error);
+  }
+
   const commonAncestor = findCommonAncestor(layout, sourceId, targetId);
   if (!commonAncestor) {
     const error = `Common ancestor not found for nodes: ${sourceId}, ${targetId}`;

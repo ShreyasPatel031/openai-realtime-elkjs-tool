@@ -12,49 +12,16 @@ export interface PostEventSource extends EventTarget {
   CLOSED: number;
 }
 
-// Helper to compress payload using base64 to reduce size
-const compressPayload = async (payload: string): Promise<string> => {
-  // Use TextEncoder to convert string to Uint8Array
-  const encoder = new TextEncoder();
-  const data = encoder.encode(payload);
-  
-  // Create a buffer to hold compressed data
-  const cs = new CompressionStream('gzip');
-  const writer = cs.writable.getWriter();
-  await writer.write(data);
-  await writer.close();
-  
-  // Get the compressed data from the stream
-  const reader = cs.readable.getReader();
-  const chunks: Uint8Array[] = [];
-  
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-  }
-  
-  // Combine chunks and convert to base64
-  const compressed = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
-  let offset = 0;
-  for (const chunk of chunks) {
-    compressed.set(chunk, offset);
-    offset += chunk.length;
-  }
-  
-  return btoa(String.fromCharCode(...compressed));
-};
+
 
 // Helper to create EventSource-like object using POST + SSE parsing
 export const createPostEventSource = (payload: string | FormData, prevId?: string, apiEndpoint?: string): PostEventSource => {
   const controller = new AbortController();
   
-  // NEVER use responseId in multi-server scenarios - always start fresh
-  // This prevents 404 errors when multiple servers are running on different ports
+  // Use response ID for proper GPT-5 tool output chaining
   if (prevId) {
-    console.log(`🔍 PostEventSource: Ignoring response ID ${prevId} for multi-server compatibility`);
+    console.log(`🔍 PostEventSource: Using response ID ${prevId} for GPT-5 tool chaining`);
   }
-  const actualPrevId = undefined; // Force fresh conversation for multi-server compatibility
   
   // Create EventSource-like object
   const source = new EventTarget() as PostEventSource;
@@ -80,10 +47,10 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
     controller.abort();
   };
   
-  // Start the fetch request
+      // Start the fetch request
   const startFetch = async () => {
     const requestStart = performance.now();
-    console.log(`⏱️ REQUEST TIMING: Starting fetch at ${requestStart.toFixed(2)}ms`);
+        console.log(`⏱️ REQUEST TIMING: Starting fetch`);
     
     try {
       let requestBody: string | FormData;
@@ -92,38 +59,38 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
       };
       
       // Handle FormData (images) vs JSON payload
-      if (payload instanceof FormData) {
-        console.log('🔄 Starting stream with FormData (images)...', actualPrevId ? '(follow-up)' : '(initial)');
+        if (payload instanceof FormData) {
+          console.log('🔄 Starting stream with FormData', prevId ? '(follow-up)' : '(initial)');
         
-        // NEVER use response IDs for multi-server compatibility
-        if (actualPrevId) {
-          console.log(`🔍 PostEventSource: Blocking FormData response ID for multi-server compatibility: ${actualPrevId}`);
+        // Include response ID for tool chaining when provided
+        if (prevId) {
+          console.log(`🔍 PostEventSource: Including FormData response ID for tool chaining: ${prevId}`);
+          payload.append('previous_response_id', prevId);
         }
         
         requestBody = payload;
         // Don't set Content-Type header for FormData - let browser set it with boundary
-      } else {
-        console.log('🔄 Starting stream with JSON...', actualPrevId ? '(follow-up)' : '(initial)');
+        } else {
+          console.log('🔄 Starting stream with JSON', prevId ? '(follow-up)' : '(initial)');
         
-        // Check if payload needs compression (over 40KB)
-        const isLargePayload = payload.length > 40 * 1024;
-        console.log('🔍 Payload size check:', payload.length, 'bytes, needs compression:', isLargePayload);
-        
-        // Skip compression due to browser CompressionStream hanging issues
-        console.log('🔄 Skipping compression due to browser compatibility issues');
+        // Use payload directly without compression
         const compressedPayload = payload;
         
         // Use JSON format for cleaner API
-        requestBody = JSON.stringify({
+        const body: any = {
           payload: compressedPayload,
-          isCompressed: false // Always false since we disabled compression
-          // NEVER include previous_response_id for multi-server compatibility
-        });
+          isCompressed: false
+        };
+        // Include previous_response_id when provided (follow-up tool output)
+        if (prevId) {
+          body.previous_response_id = prevId;
+        }
+        requestBody = JSON.stringify(body);
         
         headers['Content-Type'] = 'application/json';
         // No compression headers since we disabled compression
         
-        console.log('🔍 Original payload size:', payload.length);
+         // no extra payload size logging
       }
       
       const payloadPrepTime = performance.now();
@@ -148,8 +115,7 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
           );
         }
         
-        const fetchStart = performance.now();
-        console.log(`⏱️ REQUEST TIMING: Starting network fetch at ${(fetchStart - requestStart).toFixed(2)}ms`);
+        console.log(`⏱️ REQUEST TIMING: Starting network fetch`);
         
         // No timeout - let O3 model take as long as it needs
         const response = await fetch(apiUrl, {
@@ -159,16 +125,12 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
           signal: controller.signal,
         }) as Response;
       
-      const responseReceived = performance.now();
-      console.log(`⏱️ REQUEST TIMING: Network response received after ${(responseReceived - fetchStart).toFixed(2)}ms (total: ${(responseReceived - requestStart).toFixed(2)}ms)`);
-      
+      console.log(`⏱️ REQUEST TIMING: Network response received`);
       console.log('🔍 Stream response status:', response.status);
-      console.log('🔍 Stream response headers:', Object.fromEntries(response.headers));
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ Stream endpoint failed:', response.status, errorText);
-        console.error('❌ Full error response:', errorText);
+          console.error('❌ Stream endpoint failed:', response.status, errorText);
         throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
       }
       
@@ -207,12 +169,29 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         } catch (readError) {
           // Handle read errors gracefully
           console.error('❌ Stream read error:', readError.message || readError);
+          
+          // Handle AbortError
           if (readError.name === 'AbortError') {
             console.log('📡 Stream aborted normally');
             source.readyState = 2; // CLOSED
             break;
           }
-          throw readError; // Re-throw non-abort errors
+          
+          // Handle BodyStreamBuffer errors (common with Vercel dev server)
+          if (readError.message && readError.message.includes('BodyStreamBuffer was aborted')) {
+            console.log('📡 BodyStreamBuffer aborted - treating as normal closure');
+            source.readyState = 2; // CLOSED
+            break;
+          }
+          
+          // Handle TypeError for stream reading
+          if (readError.name === 'TypeError' && readError.message.includes('stream')) {
+            console.log('📡 Stream TypeError - treating as normal closure');
+            source.readyState = 2; // CLOSED
+            break;
+          }
+          
+          throw readError; // Re-throw other errors
         }
         
         const { done, value } = readResult;
@@ -237,7 +216,7 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
           if (line.startsWith('data: ')) {
             const data = line.slice(6);
             if (data === '[DONE]') {
-              console.log('📡 [DONE] marker received');
+          // minimal
               continue;
             }
             
@@ -363,13 +342,4 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
   return source;
 };
 
-// Fallback to GET with smaller payload
-export const createGetEventSource = (payload: string, prevId?: string): EventSource => {
-  let url = `/stream?payload=${encodeURIComponent(payload)}`;
-  if (prevId) {
-            // NEVER use response IDs for multi-server compatibility - this line removed
-        console.log(`🔍 PostEventSource: Blocking response ID from URL for multi-server compatibility: ${prevId}`);
-  }
-  console.log(`🔄 Using GET fallback (${url.length} chars)`);
-  return new EventSource(url);
-}; 
+ 

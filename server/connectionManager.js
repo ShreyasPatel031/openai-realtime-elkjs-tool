@@ -243,7 +243,7 @@ class ConnectionManager extends EventEmitter {
       return client.responses.create({
         model: modelConfigs.reasoning.model,
         input: conversation,
-        tools: [], // Tools will be passed from the caller
+        tools: [], // No tools at this layer
         tool_choice: "auto",
         parallel_tool_calls: modelConfigs.reasoning.parallel_tool_calls,
         ...(isReasoningModel(modelConfigs.reasoning.model) ? {

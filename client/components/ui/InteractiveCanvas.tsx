@@ -51,7 +51,8 @@ import { diagnoseStateSynchronization, cleanupDuplicateGroups } from '../../util
 import { ApiEndpointProvider } from '../../contexts/ApiEndpointContext'
 import ProcessingStatusIcon from "../ProcessingStatusIcon"
 
-const ChatBox = Chatbox as React.ComponentType<ChatBoxProps>
+// Relaxed typing to avoid prop mismatch across layers
+const ChatBox = Chatbox as React.ComponentType<any>
 
 const initialMessages: ChatMessage[] = [
   { id: "1", content: "Hello! How can I help you with the migration?", sender: "assistant" },
@@ -187,6 +188,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   // Track previous node count for auto-zoom on new components
   const prevNodeCountRef = useRef(0);
+  // Track previous edge IDs to auto-zoom when new edges are added
+  const prevEdgeIdsRef = useRef<Set<string>>(new Set());
+  // Track agent busy state to disable input while drawing
+  const [agentBusy, setAgentBusy] = useState(false);
 
   // Auto-zoom and fit to screen when new components are added
   useEffect(() => {
@@ -215,6 +220,70 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       prevNodeCountRef.current = currentNodeCount;
     }
   }, [nodes.length]);
+
+  // Auto-zoom and fit to screen when new edges are added
+  useEffect(() => {
+    const currentEdgeIds = new Set(edges.map(e => e.id));
+    let hasNewEdges = false;
+    for (const id of currentEdgeIds) {
+      if (!prevEdgeIdsRef.current.has(id)) {
+        hasNewEdges = true;
+        break;
+      }
+    }
+    // Update the ref regardless, to keep in sync
+    prevEdgeIdsRef.current = currentEdgeIds;
+
+    if (hasNewEdges && nodes.length > 0 && reactFlowRef.current) {
+      console.log(`🎯 Auto-fitting view due to new edges: total ${edges.length}`);
+      const timeoutId = setTimeout(() => {
+        try {
+          reactFlowRef.current.fitView({
+            padding: 0.2,
+            duration: 800,
+            maxZoom: 1.5,
+            minZoom: 0.1
+          });
+        } catch {}
+      }, 150);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [edges.length]);
+
+  // Auto-fit on any layout update (covers groups, moves, edges, etc.)
+  useEffect(() => {
+    if (layoutVersion > 0 && reactFlowRef.current && nodes.length > 0) {
+      const timeoutId = setTimeout(() => {
+        try {
+          reactFlowRef.current.fitView({
+            padding: 0.2,
+            duration: 600,
+            maxZoom: 1.5,
+            minZoom: 0.1
+          });
+        } catch {}
+      }, 120);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [layoutVersion, nodes.length]);
+
+  // Listen to global processing events to disable inputs while agent is drawing
+  useEffect(() => {
+    const start = () => setAgentBusy(true);
+    const complete = () => setAgentBusy(false);
+
+    window.addEventListener('userRequirementsStart', start);
+    window.addEventListener('functionCallStart', start);
+    window.addEventListener('reasoningStart', start);
+    window.addEventListener('processingComplete', complete);
+
+    return () => {
+      window.removeEventListener('userRequirementsStart', start);
+      window.removeEventListener('functionCallStart', start);
+      window.removeEventListener('reasoningStart', start);
+      window.removeEventListener('processingComplete', complete);
+    };
+  }, []);
   
   // Handler for ELK debug toggle with auto-copy
   const handleElkDebugToggle = useCallback(() => {
@@ -1151,7 +1220,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       {/* ChatBox at the bottom */}
       <div className="flex-none min-h-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 shadow-lg z-10">
         <ChatBox 
-          onSubmit={handleChatSubmit} 
+          onSubmit={handleChatSubmit}
+          isDisabled={agentBusy}
           isSessionActive={isSessionActive}
           isConnecting={isConnecting}
           isAgentReady={isAgentReady}

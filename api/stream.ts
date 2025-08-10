@@ -318,6 +318,8 @@ export default async function handler(req: any, res: any) {
               // Normal conversational handling
               if (calls.length === 0 && hasCompletionIndicator) {
                 console.log('✅ Conversation complete - AI indicated completion');
+                // Explicitly signal final completion before closing
+                send({ type: 'final.completed' });
                 send({ type: 'done', data: '[DONE]' });
                 res.write('data: [DONE]\n\n');
                 res.end();

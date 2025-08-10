@@ -6,12 +6,9 @@ import { Button } from "./button"
 import { Send, Loader2 } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { process_user_requirements } from "../graph/userRequirements"
+import type { ChatBoxProps } from "../../types/chat"
 
-interface ChatBoxProps {
-  onSubmit?: (message: string) => void;
-}
-
-const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
+const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit, isDisabled = false }) => {
   const [textInput, setTextInput] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -31,7 +28,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
   }, []);
 
   const handleExampleClick = async (example: string) => {
-    if (isProcessing) return; // Prevent multiple clicks during processing
+    if (isProcessing || isDisabled) return; // Prevent clicks during processing or when disabled
     
     setTextInput(example);
     setIsProcessing(true);
@@ -66,7 +63,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (textInput.trim() && !isProcessing) {
+    if (textInput.trim() && !isProcessing && !isDisabled) {
       setIsProcessing(true);
       
       try {
@@ -113,7 +110,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
           <button
             key={index}
             onClick={() => handleExampleClick(example)}
-            disabled={isProcessing}
+            disabled={isProcessing || isDisabled}
             className="text-xs px-4 py-2 rounded-full bg-gradient-to-r from-gray-50 to-gray-100 hover:from-blue-50 hover:to-blue-100 text-gray-700 hover:text-blue-700 border border-gray-200 hover:border-blue-200 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md transform hover:scale-105 flex items-center"
           >
             {example}
@@ -130,7 +127,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
             onChange={(e) => setTextInput(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="Describe your architecture requirements"
-            disabled={isProcessing}
+            disabled={isProcessing || isDisabled}
             className="flex-grow border-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-base placeholder:text-gray-400"
           />
           
@@ -149,6 +146,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit }) => {
           <Button
             type="submit"
             className="h-10 w-10 rounded-lg flex-shrink-0 flex items-center justify-center p-0 bg-gray-900 hover:bg-gray-800 text-white transition-all"
+            disabled={isProcessing || isDisabled}
           >
             {isProcessing ? (
               <Loader2 className="h-4 w-4 animate-spin" />

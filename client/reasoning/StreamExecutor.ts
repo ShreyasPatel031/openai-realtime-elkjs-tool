@@ -375,7 +375,8 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
         }
       };
 
-      const handleDelta = createDeltaHandler(callbacks, this.responseIdRef);
+      // For the main stream, suppress completion so mid-turn response.completed doesn't finish UI
+      const handleDelta = createDeltaHandler(callbacks, this.responseIdRef, { suppressCompletion: true, completionOnCompleted: false });
 
       ev.onmessage = e => {
         // Debug tap 2: Log every delta the agent streams back
@@ -729,7 +730,8 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
         }
       };
 
-      const handleDelta = createDeltaHandler(callbacks, this.responseIdRef);
+      // For follow-up tool-output streams, allow completion on final [DONE]
+      const handleDelta = createDeltaHandler(callbacks, this.responseIdRef, { suppressCompletion: false, completionOnCompleted: false });
 
       ev.onmessage = e => {
         const delta = JSON.parse(e.data);

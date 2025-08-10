@@ -6,6 +6,7 @@ export interface ChatBoxProps {
   onStartSession?: () => void;
   onStopSession?: () => void;
   onTriggerReasoning?: () => void;
+  isDisabled?: boolean;
 }
 
 export interface Message {

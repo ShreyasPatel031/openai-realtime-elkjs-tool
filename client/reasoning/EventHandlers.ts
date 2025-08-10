@@ -16,7 +16,11 @@ export interface DeltaHandlerCallbacks {
 }
 
 // Function to handle different delta types from the API response
-export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdRef: { current: string | null }) => {
+export const createDeltaHandler = (
+  callbacks: DeltaHandlerCallbacks,
+  responseIdRef: { current: string | null },
+  options?: { suppressCompletion?: boolean; completionOnCompleted?: boolean }
+) => {
   const { addLine, appendToTextLine, appendToReasoningLine, appendToArgsLine, completeFunctionCall, pushCall, setBusy, onComplete } = callbacks;
   
   // Track active function calls by item_id
@@ -40,16 +44,9 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
     
     try {
       if (delta.type === "response.done") {
-        console.log("🏁 Stream completed");
-        setBusy(false);
-        
-        // Dispatch completion event
-        console.log('🎯 EventHandlers: Dispatching processingComplete event');
-        window.dispatchEvent(new CustomEvent('processingComplete'));
-        
-        if (onComplete) {
-          onComplete();
-      }
+        // Do not mark completion here; follow-up turns and tool-call continuations
+        // also emit response.done. We only mark completion on final [DONE].
+        return;
     } else if (delta.type === "response.output_text.delta") {
         // Handle text output deltas (this is the actual reasoning text!)
       if (delta.delta) {
@@ -135,7 +132,7 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
           // Pass the item_id to appendToArgsLine so it can create/update the appropriate message
           appendToArgsLine(delta.delta, delta.item_id);
         }
-      } else if (delta.type === "response.output_item.added" && delta.item?.type === "function_call") {
+    } else if (delta.type === "response.output_item.added" && delta.item?.type === "function_call") {
         // Function call started - track the name
         if (delta.item.id && delta.item.name) {
           if (!activeFunctionCalls.has(delta.item.id)) {
@@ -144,8 +141,7 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
           const functionCall = activeFunctionCalls.get(delta.item.id)!;
           functionCall.name = delta.item.name;
           
-          // Dispatch function call start event (quiet)
-          window.dispatchEvent(new CustomEvent('functionCallStart'));
+        // Do not dispatch functionCallStart here to avoid blinking icon on every tool call
           
           // Minimal UI update only
           addLine(`🎯 Function call started: ${delta.item.name}`);
@@ -326,11 +322,22 @@ export const createDeltaHandler = (callbacks: DeltaHandlerCallbacks, responseIdR
         addLine(`📊 Total tokens: ${usage.total_tokens}`);
       }
       
+      // Never signal completion here; only signal on final [DONE]
+
       // Leave the stream open; the server will send [DONE] when truly finished
       // The backend manages the conversation loop and will close when done
+    } else if (delta.type === "final.completed") {
+      // Server signaled final completion just before [DONE]
+      if (!options?.suppressCompletion) {
+        window.dispatchEvent(new CustomEvent('processingComplete'));
+      }
     } else if (delta.type === "done" && delta.data === "[DONE]") {
       // Handle the final completion message
       addLine('🏁 Architecture generation completed - done signal received');
+      // Only signal completion on final [DONE] and only for main stream
+      if (!options?.suppressCompletion) {
+        window.dispatchEvent(new CustomEvent('processingComplete'));
+      }
       console.log('🏁 Architecture generation complete - done type received with [DONE] data');
       setBusy(false);
       // Trigger completion callback which adds the completion message and closes chat

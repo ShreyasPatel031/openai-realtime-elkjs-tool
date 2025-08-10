@@ -375,8 +375,8 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
         }
       };
 
-      // For the main stream, suppress completion so mid-turn response.completed doesn't finish UI
-      const handleDelta = createDeltaHandler(callbacks, this.responseIdRef, { suppressCompletion: true, completionOnCompleted: false });
+      // For the main stream, allow completion only on final [DONE]; mid-turn response.completed is ignored in handler
+      const handleDelta = createDeltaHandler(callbacks, this.responseIdRef, { suppressCompletion: false, completionOnCompleted: false });
 
       ev.onmessage = e => {
         // Debug tap 2: Log every delta the agent streams back

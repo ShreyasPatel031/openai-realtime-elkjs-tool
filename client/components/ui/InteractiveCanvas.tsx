@@ -185,86 +185,61 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Ref to store ReactFlow instance for auto-zoom functionality
   const reactFlowRef = useRef<any>(null);
 
-  // Track previous node count for auto-zoom on new components
-  const prevNodeCountRef = useRef(0);
-  // Track previous edge IDs to auto-zoom when new edges are added
-  const prevEdgeIdsRef = useRef<Set<string>>(new Set());
   // Track agent busy state to disable input while drawing
   const [agentBusy, setAgentBusy] = useState(false);
 
-  // Auto-zoom and fit to screen when new components are added
-  useEffect(() => {
-    const currentNodeCount = nodes.length;
-    const hasNewNodes = currentNodeCount > prevNodeCountRef.current;
-    
-    if (hasNewNodes && currentNodeCount > 0 && reactFlowRef.current) {
-
-      
-      // Small delay to ensure nodes are rendered before fitting view
-      const timeoutId = setTimeout(() => {
+  // Manual fit view function that can be called anywhere
+  const manualFitView = useCallback(() => {
+    if (reactFlowRef.current) {
+      try {
         reactFlowRef.current.fitView({
           padding: 0.2,
-          duration: 800, // Smooth animation duration
-          maxZoom: 1.5,  // Don't zoom in too much
-          minZoom: 0.1   // Allow zooming out for large graphs
+          duration: 600,
+          maxZoom: 1.5,
+          minZoom: 0.1
         });
-      }, 150);
-
-      // Update the previous count
-      prevNodeCountRef.current = currentNodeCount;
-
-      return () => clearTimeout(timeoutId);
-    } else if (currentNodeCount !== prevNodeCountRef.current) {
-      // Update count even if we didn't trigger fitView
-      prevNodeCountRef.current = currentNodeCount;
-    }
-  }, [nodes.length]);
-
-  // Auto-zoom and fit to screen when new edges are added
-  useEffect(() => {
-    const currentEdgeIds = new Set(edges.map(e => e.id));
-    let hasNewEdges = false;
-    for (const id of currentEdgeIds) {
-      if (!prevEdgeIdsRef.current.has(id)) {
-        hasNewEdges = true;
-        break;
+      } catch (error) {
+        console.warn('Failed to fit view:', error);
       }
     }
-    // Update the ref regardless, to keep in sync
-    prevEdgeIdsRef.current = currentEdgeIds;
+  }, []);
 
-    if (hasNewEdges && nodes.length > 0 && reactFlowRef.current) {
-
-      const timeoutId = setTimeout(() => {
-        try {
-          reactFlowRef.current.fitView({
-            padding: 0.2,
-            duration: 800,
-            maxZoom: 1.5,
-            minZoom: 0.1
-          });
-        } catch {}
-      }, 150);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [edges.length]);
-
-  // Auto-fit on any layout update (covers groups, moves, edges, etc.)
+  // Expose manual fit view function globally for debugging
   useEffect(() => {
-    if (layoutVersion > 0 && reactFlowRef.current && nodes.length > 0) {
+    (window as any).fitView = manualFitView;
+    return () => {
+      delete (window as any).fitView;
+    };
+  }, [manualFitView]);
+
+  // Create a stable hash of node and edge IDs for efficient change detection
+  const graphStateHash = useMemo(() => {
+    const nodeIds = nodes.map(n => n.id).sort().join(',');
+    const edgeIds = edges.map(e => e.id).sort().join(',');
+    return `${nodes.length}:${edges.length}:${nodeIds}:${edgeIds}:${layoutVersion}`;
+  }, [nodes, edges, layoutVersion]);
+
+  // Unified auto-fit view effect - triggers on ANY graph state change
+  // This replaces the previous separate effects for nodes, edges, and layout
+  useEffect(() => {
+    // Always fit view when graph state changes, regardless of what changed
+    if (reactFlowRef.current && (nodes.length > 0 || edges.length > 0)) {
       const timeoutId = setTimeout(() => {
         try {
           reactFlowRef.current.fitView({
             padding: 0.2,
-            duration: 600,
-            maxZoom: 1.5,
-            minZoom: 0.1
+            duration: 600, // Smooth animation
+            maxZoom: 1.5,  // Don't zoom in too much
+            minZoom: 0.1   // Allow zooming out for large graphs
           });
-        } catch {}
-      }, 120);
+        } catch (error) {
+          // Silently handle any fitView errors
+        }
+      }, 200); // Slightly longer delay to ensure rendering is complete
+
       return () => clearTimeout(timeoutId);
     }
-  }, [layoutVersion, nodes.length]);
+  }, [graphStateHash]); // Single dependency that captures all graph changes
 
   // Listen to global processing events to disable inputs while agent is drawing
   useEffect(() => {

@@ -64,7 +64,10 @@ async function precomputeEmbeddings() {
     const embeddings = {};
     
     console.log('🔍 Processing architectures...');
-    for (let i = 1; i < Math.min(lines.length, 63); i++) { // Process up to 62 architectures
+    
+    // Parse all architectures first
+    const validArchs = [];
+    for (let i = 1; i < Math.min(lines.length, 63); i++) {
       const line = lines[i].trim();
       if (!line) continue;
       
@@ -82,26 +85,61 @@ async function precomputeEmbeddings() {
           };
           
           if (arch.subgroup && arch.description) {
-            // Create search text for embedding
             const searchText = `${arch.cloud} ${arch.group} ${arch.subgroup} ${arch.description}`.toLowerCase();
-            
-            console.log(`⚡ Computing embedding for: ${arch.subgroup}`);
-            
-            // Get embedding
-            const response = await openai.embeddings.create({
-              model: 'text-embedding-3-small',
-              input: searchText,
-            });
-            
-            architectures.push(arch);
-            embeddings[searchText] = response.data[0].embedding;
-            
-            // Small delay to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 100));
+            validArchs.push({ arch, searchText });
           }
         }
       } catch (error) {
         console.warn(`⚠️  Skipping line ${i}:`, error.message);
+      }
+    }
+    
+    // Process embeddings in batches for speed (up to 2048 inputs per request)
+    console.log(`🚀 Processing ${validArchs.length} architectures in batches for maximum speed...`);
+    const batchSize = 50; // Conservative batch size for stability
+    
+    for (let batchStart = 0; batchStart < validArchs.length; batchStart += batchSize) {
+      const batch = validArchs.slice(batchStart, batchStart + batchSize);
+      const batchTexts = batch.map(item => item.searchText);
+      
+      console.log(`⚡ Computing embeddings for batch ${Math.floor(batchStart/batchSize) + 1}/${Math.ceil(validArchs.length/batchSize)} (${batch.length} items)`);
+      
+      try {
+        // Get embeddings for entire batch in one API call
+        const response = await openai.embeddings.create({
+          model: 'text-embedding-3-small',
+          input: batchTexts,
+        });
+        
+        // Store results
+        batch.forEach((item, index) => {
+          architectures.push(item.arch);
+          embeddings[item.searchText] = response.data[index].embedding;
+        });
+        
+        // Small delay between batches to be nice to API
+        if (batchStart + batchSize < validArchs.length) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+      } catch (error) {
+        console.error(`❌ Batch failed, falling back to individual processing:`, error.message);
+        
+        // Fallback: process this batch individually
+        for (const item of batch) {
+          try {
+            console.log(`⚡ Computing embedding for: ${item.arch.subgroup}`);
+            const response = await openai.embeddings.create({
+              model: 'text-embedding-3-small',
+              input: item.searchText,
+            });
+            
+            architectures.push(item.arch);
+            embeddings[item.searchText] = response.data[0].embedding;
+            await new Promise(resolve => setTimeout(resolve, 100));
+          } catch (error) {
+            console.warn(`⚠️  Skipping ${item.arch.subgroup}:`, error.message);
+          }
+        }
       }
     }
     

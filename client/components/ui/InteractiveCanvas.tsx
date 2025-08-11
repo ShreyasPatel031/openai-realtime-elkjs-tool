@@ -185,16 +185,17 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Ref to store ReactFlow instance for auto-zoom functionality
   const reactFlowRef = useRef<any>(null);
 
+  // Removed individual tracking refs - now using unified fitView approach
   // Track agent busy state to disable input while drawing
   const [agentBusy, setAgentBusy] = useState(false);
 
-  // Manual fit view function that can be called anywhere
+  // Manual fit view function that can be called anytime
   const manualFitView = useCallback(() => {
     if (reactFlowRef.current) {
       try {
         reactFlowRef.current.fitView({
           padding: 0.2,
-          duration: 600,
+          duration: 800,
           maxZoom: 1.5,
           minZoom: 0.1
         });
@@ -204,53 +205,33 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     }
   }, []);
 
-  // Expose manual fit view function globally for debugging
+  // Unified auto-fit view: triggers on ANY graph state change
   useEffect(() => {
-    (window as any).fitView = manualFitView;
-    return () => {
-      delete (window as any).fitView;
-    };
-  }, [manualFitView]);
-
-  // Create a stable hash of node and edge IDs for efficient change detection
-  const graphStateHash = useMemo(() => {
-    const nodeIds = nodes.map(n => n.id).sort().join(',');
-    const edgeIds = edges.map(e => e.id).sort().join(',');
-    return `${nodes.length}:${edges.length}:${nodeIds}:${edgeIds}:${layoutVersion}`;
-  }, [nodes, edges, layoutVersion]);
-
-  // Unified auto-fit view effect - triggers on ANY graph state change
-  // This replaces the previous separate effects for nodes, edges, and layout
-  useEffect(() => {
-    // Always fit view when graph state changes, regardless of what changed
-    if (reactFlowRef.current && (nodes.length > 0 || edges.length > 0)) {
+    // Only trigger if we have content and ReactFlow is ready
+    if (nodes.length > 0 && reactFlowRef.current && layoutVersion > 0) {
       const timeoutId = setTimeout(() => {
-        try {
-          reactFlowRef.current.fitView({
-            padding: 0.2,
-            duration: 600, // Smooth animation
-            maxZoom: 1.5,  // Don't zoom in too much
-            minZoom: 0.1   // Allow zooming out for large graphs
-          });
-        } catch (error) {
-          // Silently handle any fitView errors
-        }
-      }, 200); // Slightly longer delay to ensure rendering is complete
-
+        manualFitView();
+      }, 200); // Unified delay to ensure layout is complete
       return () => clearTimeout(timeoutId);
     }
-  }, [graphStateHash]); // Single dependency that captures all graph changes
+  }, [
+    // Trigger on ANY significant graph change:
+    nodes.length,           // When nodes are added/removed
+    edges.length,           // When edges are added/removed  
+    layoutVersion,          // When ELK layout completes (includes groups, moves, etc.)
+    manualFitView
+  ]);
 
-  // Listen to global processing events to disable inputs while agent is drawing
+    // Listen to global processing events to disable inputs while agent is drawing
   useEffect(() => {
     const start = () => setAgentBusy(true);
     const complete = () => setAgentBusy(false);
-
+    
     window.addEventListener('userRequirementsStart', start);
     window.addEventListener('functionCallStart', start);
     window.addEventListener('reasoningStart', start);
     window.addEventListener('processingComplete', complete);
-
+    
     return () => {
       window.removeEventListener('userRequirementsStart', start);
       window.removeEventListener('functionCallStart', start);
@@ -258,6 +239,17 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       window.removeEventListener('processingComplete', complete);
     };
   }, []);
+
+  // Expose fitView function globally for debugging and manual use
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).manualFitView = manualFitView;
+      
+      return () => {
+        delete (window as any).manualFitView;
+      };
+    }
+  }, [manualFitView]);
   
   // Handler for ELK debug toggle with auto-copy
   const handleElkDebugToggle = useCallback(() => {

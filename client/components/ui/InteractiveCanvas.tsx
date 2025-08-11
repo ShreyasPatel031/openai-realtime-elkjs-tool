@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback, useRef, useMemo, use } from "r
 import ReactFlow, { 
   Background, 
   Controls, 
-  MiniMap, 
   BackgroundVariant,
   useNodesState,
   useEdgesState,
@@ -968,18 +967,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                   color: '#000'
                 }}
               />
-              <MiniMap 
-                position="bottom-right"
-                nodeStrokeWidth={3}
-                nodeColor="#000"
-                maskColor="rgba(255, 255, 255, 0.1)"
-                style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  borderRadius: '8px',
-                  padding: '8px',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
-                }}
-              />
+
               {/* <DebugGeometry /> */}
             </ReactFlow>
           </div>

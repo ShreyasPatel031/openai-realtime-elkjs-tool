@@ -720,11 +720,7 @@ const ReactFlowGraph = ({ graphData }) => {
           >
             <Background />
             <Controls showZoom={true} showFitView={true} showInteractive={true} />
-            <MiniMap 
-              nodeStrokeWidth={3}
-              zoomable 
-              pannable
-            />
+
           </ReactFlow>
           <div style={{ position: 'absolute', bottom: '10px', left: '10px', background: 'rgba(255,255,255,0.8)', padding: '5px', fontSize: '12px' }}>
             {debug}

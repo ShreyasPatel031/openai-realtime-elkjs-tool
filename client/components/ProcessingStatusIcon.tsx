@@ -69,32 +69,40 @@ const ProcessingStatusIcon: React.FC = () => {
 
     const handleFunctionCall = () => {
       if (isFinalizingRef.current) return;
-
-      setStateWithMinDuration('function-call', 2000); // Minimum 2 seconds
-    };
-
-    const handleComplete = () => {
-
       
-      // Clear any existing timeout to avoid conflicts
+      // Clear any existing timeout to ensure immediate transition from search to function-call
       if (stateTimeoutRef.current) {
         clearTimeout(stateTimeoutRef.current);
       }
       
-      // Stop any blinking and show complete immediately
-      stopBlinking();
-      setState('complete');
-      currentStateStartTime.current = Date.now();
-      isFinalizingRef.current = true;
-      
-      // Reset to idle after 1 second
-      stateTimeoutRef.current = setTimeout(() => {
-
-        setState('idle');
-        currentStateStartTime.current = Date.now();
-        isFinalizingRef.current = false;
-      }, 1000);
+      setStateWithMinDuration('function-call', 2000); // Minimum 2 seconds
     };
+
+      const handleComplete = () => {
+    // Only handle completion if we're currently in function-call state
+    // This prevents premature completion during architecture search
+    if (state !== 'function-call') {
+      return;
+    }
+    
+    // Clear any existing timeout to avoid conflicts
+    if (stateTimeoutRef.current) {
+      clearTimeout(stateTimeoutRef.current);
+    }
+    
+    // Stop any blinking and show complete immediately
+    stopBlinking();
+    setState('complete');
+    currentStateStartTime.current = Date.now();
+    isFinalizingRef.current = true;
+    
+    // Reset to idle after 1 second
+    stateTimeoutRef.current = setTimeout(() => {
+      setState('idle');
+      currentStateStartTime.current = Date.now();
+      isFinalizingRef.current = false;
+    }, 1000);
+  };
 
     // Listen for custom events
     window.addEventListener('userRequirementsStart', handleUserRequirementsStart);

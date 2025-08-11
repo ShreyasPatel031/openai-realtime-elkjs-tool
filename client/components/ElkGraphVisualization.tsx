@@ -221,7 +221,7 @@ export default function ElkGraphVisualization({ initialGraph }: ElkGraphVisualiz
           height={n.height ?? 60}
           style={getNodeStyle(n)}
         />
-        {(n.data?.label || (n.labels && n.labels[0]?.text)) && (
+        {(n.data?.label || (n.labels && n.labels[0]?.text) || (n.id !== 'root' && n.id)) && (
           <text
             x={shiftX(n.x) + (n.width ?? 120) / 2}
             y={shiftY(n.y) + (n.height ?? 60) / 2}
@@ -231,7 +231,7 @@ export default function ElkGraphVisualization({ initialGraph }: ElkGraphVisualiz
             fontWeight="bold"
             fill="#2d6bc4"
           >
-            {n.data?.label || (n.labels && n.labels[0]?.text)}
+            {n.data?.label || (n.labels && n.labels[0]?.text) || (n.id === 'root' ? '' : n.id)}
           </text>
         )}
       </g>

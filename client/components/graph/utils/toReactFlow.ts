@@ -37,7 +37,7 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
       selected: false,
       draggable: true,
       data: {
-        label: node.labels?.[0]?.text || node.id,
+        label: node.labels?.[0]?.text || (node.id === 'root' ? '' : node.id),
         width: node.width || dimensions.width,
         height: node.height || dimensions.height,
         isParent: isGroupNode,

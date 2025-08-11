@@ -695,8 +695,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           fill="${fill}" stroke="#2d6bc4" stroke-width="2" rx="5" ry="5" />
       `;
       
-      // Add label if it exists
-      const label = node.data?.label || (node.labels && node.labels[0]?.text) || node.id;
+      // Add label if it exists (hide root label)
+      const label = node.data?.label || (node.labels && node.labels[0]?.text) || (node.id === 'root' ? '' : node.id);
       
       // Special handling - if it's the root node or if node has explicit icon in data
       let icon = node.data?.icon;

@@ -204,8 +204,8 @@ const DevPanel: React.FC<DevPanelProps> = ({
           fill="${fill}" stroke="#2d6bc4" stroke-width="2" rx="5" ry="5" />
       `;
       
-      // Add label if it exists
-      const label = node.data?.label || (node.labels && node.labels[0]?.text);
+      // Add label if it exists (hide root label)
+      const label = node.data?.label || (node.labels && node.labels[0]?.text) || (node.id === 'root' ? '' : node.id);
       if (label) {
         if (isContainer) {
           // Group node - label at center top

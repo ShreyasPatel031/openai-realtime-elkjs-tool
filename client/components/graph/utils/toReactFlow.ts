@@ -149,19 +149,7 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
             ? { x: elkLbl.x + containerAbs.x, y: elkLbl.y + containerAbs.y }
             : undefined;
           
-          // Debug deeply nested edge positioning
-          if (edge.id && (edge.id.includes('int_') || edge.id.includes('lb_') || edge.id.includes('gke_'))) {
-            console.log(`🔍 Edge ${edge.id}:`, {
-              sources: edge.sources,
-              targets: edge.targets,
-              sourceHandle: sourceHandle,
-              targetHandle: targetHandle,
-              containerAbs: containerAbs,
-              labelTxt: labelTxt,
-              sourceNodeExists: !!absolutePositions[edge.sources[0]],
-              targetNodeExists: !!absolutePositions[edge.targets[0]]
-            });
-          }
+
 
           edges.push({
             id: edgeId, 

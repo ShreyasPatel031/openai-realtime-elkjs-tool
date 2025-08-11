@@ -387,24 +387,24 @@ export function addEdge(
   const targetNode = findNodeById(layout, targetId);
   if (!sourceNode && !targetNode) {
     const error = `Nodes not found: ${sourceId}, ${targetId}`;
-    console.error(`❌ [ADD-EDGE] ${error}`);
+
     throw new Error(error);
   }
   if (!sourceNode) {
     const error = `Node not found: ${sourceId}`;
-    console.error(`❌ [ADD-EDGE] ${error}`);
+
     throw new Error(error);
   }
   if (!targetNode) {
     const error = `Node not found: ${targetId}`;
-    console.error(`❌ [ADD-EDGE] ${error}`);
+
     throw new Error(error);
   }
 
   const commonAncestor = findCommonAncestor(layout, sourceId, targetId);
   if (!commonAncestor) {
     const error = `Common ancestor not found for nodes: ${sourceId}, ${targetId}`;
-    console.error(`❌ [ADD-EDGE] ${error}`);
+
     throw new Error(error);
   }
   
@@ -473,7 +473,7 @@ export function groupNodes(
   if (existingGroup) {
     const path = getPathToNode(layout, groupId);
     const error = `Group ${groupId} already exists at: ${path?.map(n => n.id).join(' → ') || 'unknown'}`;
-    console.error(`❌ [GROUP-NODES] ${error}`);
+
     throw new Error(error);
   }
   
@@ -506,7 +506,7 @@ export function groupNodes(
         const [node] = parent.children.splice(nodeIndex, 1);
         movedNodes.push(node);
       } else {
-        console.warn(`⚠️ [GROUP-NODES] Node ${nodeId} not found in parent ${parentId}`);
+  
         failedNodes.push(nodeId);
       }
     }
@@ -516,7 +516,7 @@ export function groupNodes(
   if (failedNodes.length > 0) {
     const availableNodes = parent.children?.map(c => c.id).join(', ') || 'none';
     const error = `FAILED to move ${failedNodes.length} nodes: ${failedNodes.join(', ')}. Available nodes in parent ${parentId}: ${availableNodes}`;
-    console.error(`❌ [GROUP-NODES] ${error}`);
+
     
     // If no nodes were moved, this is a complete failure
     if (movedNodes.length === 0) {
@@ -655,7 +655,7 @@ export function batchUpdate(
           
         default:
           const error = `Unknown operation: ${(operation as any).name}`;
-          console.error(`❌ [BATCH-UPDATE] ${error}`);
+
           errors.push(`Operation ${i + 1}/${operations.length}: ${error}`);
           continue;
       }
@@ -666,8 +666,8 @@ export function batchUpdate(
       
     } catch (error) {
       const errorMsg = `Operation ${i + 1}/${operations.length} (${operation.name}) failed: ${error instanceof Error ? error.message : String(error)}`;
-      console.error(`❌ [BATCH-UPDATE] ${errorMsg}`);
-      console.error(`  Operation details:`, operation);
+
+
       errors.push(errorMsg);
       
       // Continue with next operation instead of stopping

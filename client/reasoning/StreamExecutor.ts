@@ -719,7 +719,9 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
             this.options.addLine(`🏁 Architecture generation completed (fallback)`);
             this.options.setBusy(false);
             this.options.onComplete?.();
+            // Dispatch final completion event
             window.dispatchEvent(new CustomEvent('processingComplete'));
+            window.dispatchEvent(new CustomEvent('allProcessingComplete'));
           }, 1000);
         }
       } else {
@@ -729,7 +731,9 @@ ${hasImages ? `The user has provided ${storedImages.length} image(s) showing the
         setTimeout(() => {
           this.options.setBusy(false);
           this.options.onComplete?.();
+          // Dispatch final completion event
           window.dispatchEvent(new CustomEvent('processingComplete'));
+          window.dispatchEvent(new CustomEvent('allProcessingComplete'));
         }, 500);
       }
     }

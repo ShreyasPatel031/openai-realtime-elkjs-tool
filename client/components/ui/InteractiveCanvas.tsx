@@ -46,10 +46,14 @@ import StreamViewer from "../StreamViewer"
 import Chatbox from "./Chatbox"
 import ChatWindow from "./ChatWindow"
 import EditButton from "./EditButton"
+import SignIn from "../auth/SignIn"
+import ComingSoonCard from "../auth/ComingSoonCard"
 // import DebugGeometry from '../DebugGeometry'
 import { diagnoseStateSynchronization, cleanupDuplicateGroups } from '../../utils/graph_helper_functions'
 import { ApiEndpointProvider } from '../../contexts/ApiEndpointContext'
 import ProcessingStatusIcon from "../ProcessingStatusIcon"
+import { auth, googleProvider } from "../../lib/firebase"
+import { onAuthStateChanged, User, signInWithPopup } from "firebase/auth"
 
 // Relaxed typing to avoid prop mismatch across layers
 const ChatBox = Chatbox as React.ComponentType<any>
@@ -86,6 +90,40 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   
   // State for StreamViewer visibility
   const [showStreamViewer, setShowStreamViewer] = useState(false);
+  
+  // State for auth flow
+  const [user, setUser] = useState<User | null>(null);
+  const [showSignIn, setShowSignIn] = useState(false);
+  const [showComingSoon, setShowComingSoon] = useState(false);
+
+  // Listen for auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      // If user signs in, hide the sign-in modal and show the coming soon card
+      if (currentUser) {
+        setShowSignIn(false);
+        setShowComingSoon(true);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Handler for the edit button click
+  const handleEditClick = async () => {
+    if (user) {
+      setShowComingSoon(true);
+    } else {
+      try {
+        await signInWithPopup(auth, googleProvider);
+        // The onAuthStateChanged listener will handle showing the card
+      } catch (error) {
+        console.error("Error signing in with Google", error);
+        // Optionally, show the sign-in modal as a fallback
+        setShowSignIn(true);
+      }
+    }
+  };
   
   // State for visualization mode (ReactFlow vs SVG)
   const [useReactFlow, setUseReactFlow] = useState(true);
@@ -848,8 +886,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   }, [useReactFlow, handleSvgZoom]);
 
   return (
-    <ApiEndpointProvider apiEndpoint={apiEndpoint}>
+    <ApiEndpointProvider value={apiEndpoint}>
     <div className="w-full h-full flex flex-col overflow-hidden bg-white dark:bg-black">
+      {/* Auth Modals */}
+      {showSignIn && <SignIn onClose={() => setShowSignIn(false)} />}
+      {user && showComingSoon && <ComingSoonCard onClose={() => setShowComingSoon(false)} />}
+
       {/* ProcessingStatusIcon - moved to top-left */}
       <div className="absolute top-4 left-4 z-[101]">
         <ProcessingStatusIcon />
@@ -857,7 +899,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
       {/* EditButton - new top-right button */}
       <div className="absolute top-4 right-4 z-[100]">
-        <EditButton />
+        <EditButton onClick={handleEditClick} />
       </div>
 
       {/* Connection status indicator - HIDDEN */}

@@ -46,14 +46,13 @@ import StreamViewer from "../StreamViewer"
 import Chatbox from "./Chatbox"
 import ChatWindow from "./ChatWindow"
 import EditButton from "./EditButton"
-import SignIn from "../auth/SignIn"
 import ComingSoonCard from "../auth/ComingSoonCard"
 // import DebugGeometry from '../DebugGeometry'
 import { diagnoseStateSynchronization, cleanupDuplicateGroups } from '../../utils/graph_helper_functions'
 import { ApiEndpointProvider } from '../../contexts/ApiEndpointContext'
 import ProcessingStatusIcon from "../ProcessingStatusIcon"
 import { auth, googleProvider } from "../../lib/firebase"
-import { onAuthStateChanged, User, signInWithPopup } from "firebase/auth"
+import { onAuthStateChanged, User, signInWithRedirect } from "firebase/auth"
 
 // Relaxed typing to avoid prop mismatch across layers
 const ChatBox = Chatbox as React.ComponentType<any>
@@ -93,7 +92,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   
   // State for auth flow
   const [user, setUser] = useState<User | null>(null);
-  const [showSignIn, setShowSignIn] = useState(false);
   const [showComingSoon, setShowComingSoon] = useState(false);
 
   // Listen for auth state changes
@@ -102,7 +100,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       setUser(currentUser);
       // If user signs in, hide the sign-in modal and show the coming soon card
       if (currentUser) {
-        setShowSignIn(false);
         setShowComingSoon(true);
       }
     });
@@ -115,12 +112,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       setShowComingSoon(true);
     } else {
       try {
-        await signInWithPopup(auth, googleProvider);
-        // The onAuthStateChanged listener will handle showing the card
+        await signInWithRedirect(auth, googleProvider);
       } catch (error) {
         console.error("Error signing in with Google", error);
-        // Optionally, show the sign-in modal as a fallback
-        setShowSignIn(true);
       }
     }
   };
@@ -889,7 +883,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     <ApiEndpointProvider value={apiEndpoint}>
     <div className="w-full h-full flex flex-col overflow-hidden bg-white dark:bg-black">
       {/* Auth Modals */}
-      {showSignIn && <SignIn onClose={() => setShowSignIn(false)} />}
       {user && showComingSoon && <ComingSoonCard onClose={() => setShowComingSoon(false)} />}
 
       {/* ProcessingStatusIcon - moved to top-left */}

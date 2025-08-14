@@ -18,12 +18,12 @@ class IconFallbackService {
       return;
     }
 
-    // Get API key from multiple sources (dev: window global, prod: env var)
-    let apiKey = (import.meta as any).env?.VITE_OPENAI_API_KEY || (window as any).__OPENAI_API_KEY__;
+    // Get API key ONLY from the secure Vite environment variable
+    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
 
     // If no API key is available, disable the service gracefully
     if (!apiKey) {
-      console.warn('⚠️ IconFallbackService: No OpenAI API key found. Icon fallback disabled. Set VITE_OPENAI_API_KEY environment variable to enable.');
+      console.warn('⚠️ IconFallbackService: No OpenAI API key found. Icon fallback disabled. Set VITE_OPENAI_API_KEY in your .env file to enable.');
       return;
     }
 

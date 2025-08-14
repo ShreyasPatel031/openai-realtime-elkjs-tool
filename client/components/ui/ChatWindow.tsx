@@ -135,18 +135,27 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
   const [isMinimized, setIsMinimized] = useState(propIsMinimized)
   const [dropdownStates, setDropdownStates] = useState<Record<string, boolean>>({})
   const [streamingMessages, setStreamingMessages] = useState<Record<string, { content: string; isStreaming: boolean; currentFunction?: string }>>({})
+  const [displayedMessages, setDisplayedMessages] = useState<Message[]>([])
   const chatWindowRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Use messages from props instead of sample messages
   const messages = propMessages || [];
+
+  // Defer message slicing to client-side only to prevent hydration errors
+  useEffect(() => {
+    if (messages.length > 3) {
+      setDisplayedMessages(messages.slice(-3));
+    } else {
+      setDisplayedMessages(messages);
+    }
+  }, [messages]);
 
   // Auto-scroll to bottom when new messages arrive or when streaming updates
   useEffect(() => {
     if (messagesEndRef.current && !isMinimized) {
         messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
       }
-  }, [messages, streamingMessages, isMinimized]);
+  }, [displayedMessages, streamingMessages, isMinimized]);
 
   // Additional effect for auto-scrolling during streaming
   useEffect(() => {
@@ -445,7 +454,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
                 ) : (
                                 <div className="space-y-1">
                     {/* Only show the most recent 3 messages for better UX */}
-                    {messages.slice(-3).map(renderMessage)}
+                    {displayedMessages.map(renderMessage)}
                     <div ref={messagesEndRef} />
                   </div>
                 )}

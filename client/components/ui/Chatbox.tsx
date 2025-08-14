@@ -23,7 +23,8 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit, isDisabled = false }) => {
   // Auto-focus input when component mounts
   useEffect(() => {
     if (inputRef.current) {
-      inputRef.current.focus();
+      // Prevent the page from scrolling down to the input on initial load
+      inputRef.current.focus({ preventScroll: true });
     }
   }, []);
 

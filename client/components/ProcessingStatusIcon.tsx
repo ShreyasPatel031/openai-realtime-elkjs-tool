@@ -78,50 +78,28 @@ const ProcessingStatusIcon: React.FC = () => {
       setStateWithMinDuration('function-call', 2000); // Minimum 2 seconds
     };
 
-  const handleComplete = () => {
-    // Always handle final completion regardless of current state
-    // Clear any existing timeout to avoid conflicts
-    if (stateTimeoutRef.current) {
-      clearTimeout(stateTimeoutRef.current);
-    }
-    
-    // Stop any blinking and show complete immediately
-    stopBlinking();
-    setState('complete');
-    currentStateStartTime.current = Date.now();
-    isFinalizingRef.current = true;
-    
-    // Reset to idle after 2 seconds to show completion longer
-    stateTimeoutRef.current = setTimeout(() => {
-      setState('idle');
+    const handleFinalComplete = () => {
+      // Force completion regardless of current state or timing
+      if (stateTimeoutRef.current) {
+        clearTimeout(stateTimeoutRef.current);
+      }
+      
+      stopBlinking();
+      setState('complete');
       currentStateStartTime.current = Date.now();
-      isFinalizingRef.current = false;
-    }, 2000);
-  };
-
-  const handleFinalComplete = () => {
-    // Force completion regardless of current state or timing
-    if (stateTimeoutRef.current) {
-      clearTimeout(stateTimeoutRef.current);
-    }
-    
-    stopBlinking();
-    setState('complete');
-    currentStateStartTime.current = Date.now();
-    isFinalizingRef.current = true;
-    
-    // Reset to idle after showing completion
-    stateTimeoutRef.current = setTimeout(() => {
-      setState('idle');
-      currentStateStartTime.current = Date.now();
-      isFinalizingRef.current = false;
-    }, 2000);
-  };
+      isFinalizingRef.current = true;
+      
+      // Reset to idle after showing completion
+      stateTimeoutRef.current = setTimeout(() => {
+        setState('idle');
+        currentStateStartTime.current = Date.now();
+        isFinalizingRef.current = false;
+      }, 2000);
+    };
 
     // Listen for custom events
     window.addEventListener('userRequirementsStart', handleUserRequirementsStart);
     window.addEventListener('functionCallStart', handleFunctionCall);
-    window.addEventListener('processingComplete', handleComplete);
     window.addEventListener('allProcessingComplete', handleFinalComplete);
 
     return () => {
@@ -133,7 +111,6 @@ const ProcessingStatusIcon: React.FC = () => {
       }
       window.removeEventListener('userRequirementsStart', handleUserRequirementsStart);
       window.removeEventListener('functionCallStart', handleFunctionCall);
-      window.removeEventListener('processingComplete', handleComplete);
       window.removeEventListener('allProcessingComplete', handleFinalComplete);
     };
   }, []);

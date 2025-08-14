@@ -447,7 +447,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ messages: propMessages, isMinim
           
           <CardContent className="flex-1 p-0">
             <ScrollArea className="h-[400px] p-4">
-                {messages.length === 0 ? (
+                {displayedMessages.length === 0 ? (
                   <div className="flex items-center justify-center h-32 text-gray-500">
                   <p className="text-sm">No messages yet. Start by describing your architecture requirements below.</p>
                   </div>

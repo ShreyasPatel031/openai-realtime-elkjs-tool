@@ -6,7 +6,6 @@ import { getGroupIconHex, allGroupIcons } from '../generated/groupIconColors';
 import { cn } from '../lib/utils';
 import { iconFallbackService } from '../utils/iconFallbackService';
 import { useApiEndpoint, buildAssetUrl } from '../contexts/ApiEndpointContext';
-import { useElkToReactflowGraphConverter } from '../../hooks/useElkToReactflowGraphConverter';
 
 interface GroupNodeProps {
   data: {
@@ -234,23 +233,8 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
     })
   };
 
-  // Special handling for the root node to make it invisible
-  const isRootNode = id === 'root';
-  
   return (
-    <div
-      style={{
-        width: data.width,
-        height: data.height,
-        position: 'relative',
-        border: isRootNode ? 'none' : '2px solid #ddd',
-        borderRadius: '12px',
-        backgroundColor: isRootNode ? 'transparent' : 'rgba(240, 240, 240, 0.3)',
-        boxShadow: isRootNode ? 'none' : '0 4px 12px rgba(0,0,0,0.05)',
-        pointerEvents: isRootNode ? 'none' : 'all'
-      }}
-      className="elk-group-node"
-    >
+    <div style={groupStyle}>
       {/* Left handles */}
       {data.leftHandles && data.leftHandles.map((yPos: string, index: number) => (
         <React.Fragment key={`left-${index}`}>
@@ -348,53 +332,55 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
         </React.Fragment>
       ))}
       
-      {/* Node label with icon */}
-      <div style={{ 
-        position: 'absolute', 
-        top: '5px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontWeight: 'bold',
-        fontSize: '14px',
-        color: '#333',
-        backgroundColor: headerBgColorFinal,
-        padding: '2px 8px',
-        borderRadius: '4px',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-        border: data.groupIcon ? `2px solid ${customBorderColor}` : `1px solid ${customBorderColor}`,
-        zIndex: 10,
-        whiteSpace: 'nowrap',
-        minWidth: 'min-content',
-        maxWidth: 'calc(100% - 20px)'
-      }}>
-        {/* Display icon if available */}
-        {finalIconSrc && !iconError && (
-          <img
-            src={finalIconSrc}
-            alt={data.label}
-            style={{ 
-              width: '20px', 
-              height: '20px', 
-              marginRight: '6px',
-              objectFit: 'contain'
-            }}
-            onError={() => {
-              console.warn(`Failed to load group icon: ${finalIconSrc}`);
-              setIconError(true);
-            }}
-          />
-        )}
-        <span style={{ 
-          overflow: 'hidden', 
-          textOverflow: 'ellipsis',
-          maxWidth: '100%'
+      {/* Node label with icon - do not render for the root node */}
+      {id !== 'root' && (
+        <div style={{ 
+          position: 'absolute', 
+          top: '5px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontWeight: 'bold',
+          fontSize: '14px',
+          color: '#333',
+          backgroundColor: headerBgColorFinal,
+          padding: '2px 8px',
+          borderRadius: '4px',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+          border: data.groupIcon ? `2px solid ${customBorderColor}` : `1px solid ${customBorderColor}`,
+          zIndex: 10,
+          whiteSpace: 'nowrap',
+          minWidth: 'min-content',
+          maxWidth: 'calc(100% - 20px)'
         }}>
-          {data.label}
-        </span>
-      </div>
+          {/* Display icon if available */}
+          {finalIconSrc && !iconError && (
+            <img
+              src={finalIconSrc}
+              alt={data.label}
+              style={{ 
+                width: '20px', 
+                height: '20px', 
+                marginRight: '6px',
+                objectFit: 'contain'
+              }}
+              onError={() => {
+                console.warn(`Failed to load group icon: ${finalIconSrc}`);
+                setIconError(true);
+              }}
+            />
+          )}
+          <span style={{ 
+            overflow: 'hidden', 
+            textOverflow: 'ellipsis',
+            maxWidth: '100%'
+          }}>
+            {data.label}
+          </span>
+        </div>
+      )}
     </div>
   );
 };

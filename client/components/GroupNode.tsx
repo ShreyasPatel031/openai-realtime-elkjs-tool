@@ -6,6 +6,7 @@ import { getGroupIconHex, allGroupIcons } from '../generated/groupIconColors';
 import { cn } from '../lib/utils';
 import { iconFallbackService } from '../utils/iconFallbackService';
 import { useApiEndpoint, buildAssetUrl } from '../contexts/ApiEndpointContext';
+import { useElkToReactflowGraphConverter } from '../../hooks/useElkToReactflowGraphConverter';
 
 interface GroupNodeProps {
   data: {
@@ -233,8 +234,23 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
     })
   };
 
+  // Special handling for the root node to make it invisible
+  const isRootNode = id === 'root';
+  
   return (
-    <div style={groupStyle}>
+    <div
+      style={{
+        width: data.width,
+        height: data.height,
+        position: 'relative',
+        border: isRootNode ? 'none' : '2px solid #ddd',
+        borderRadius: '12px',
+        backgroundColor: isRootNode ? 'transparent' : 'rgba(240, 240, 240, 0.3)',
+        boxShadow: isRootNode ? 'none' : '0 4px 12px rgba(0,0,0,0.05)',
+        pointerEvents: isRootNode ? 'none' : 'all'
+      }}
+      className="elk-group-node"
+    >
       {/* Left handles */}
       {data.leftHandles && data.leftHandles.map((yPos: string, index: number) => (
         <React.Fragment key={`left-${index}`}>

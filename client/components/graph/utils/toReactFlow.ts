@@ -24,8 +24,9 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
 
   /* ---------- helper to create RF nodes -------------------------------- */
   const createNode = (node: any, parentAbsolutePosition = { x: 0, y: 0 }, parentId?: string) => {
-    const absPos = absolutePositions[node.id]; 
-    const isGroupNode = (node.children?.length ?? 0) > 0;
+    const absPos = absolutePositions[node.id];
+
+    const isGroupNode = Array.isArray(node.children) && node.children.length > 0;
 
     nodes.push({
       id: node.id,

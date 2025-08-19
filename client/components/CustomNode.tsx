@@ -174,65 +174,58 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
           setFallbackAttempted(false);
         })
         .catch(() => {
-
+          // Show letter fallback immediately, then try AI search asynchronously
+          setIconError(true);
           
-          // Try AI search using precomputed embeddings
-          if (!fallbackAttempted) {
-            setFallbackAttempted(true);
-
-            
-            iconFallbackService.findFallbackIcon(data.icon)
-              .then(async (fallbackIcon) => {
-
-                if (fallbackIcon) {
-                  try {
-                    const fallbackPath = await tryLoadIcon(fallbackIcon);
-
-                    setFinalIconSrc(fallbackPath);
-                    setIconLoaded(true);
-                    return;
-                  } catch (fallbackLoadError) {
-
+          // Delay AI search to avoid flooding the API
+          setTimeout(() => {
+            if (!fallbackAttempted) {
+              setFallbackAttempted(true);
+              
+              iconFallbackService.findFallbackIcon(data.icon)
+                .then(async (fallbackIcon) => {
+                  if (fallbackIcon) {
+                    try {
+                      const fallbackPath = await tryLoadIcon(fallbackIcon);
+                      setFinalIconSrc(fallbackPath);
+                      setIconLoaded(true);
+                      setIconError(false);
+                      return;
+                    } catch (fallbackLoadError) {
+                      // Keep letter fallback
+                    }
                   }
-                }
-                // If AI search fails, show letter fallback
-
-                setIconError(true);
-              })
-              .catch((searchError) => {
-
-                setIconError(true);
-              });
-          } else {
-            setIconError(true);
-          }
+                })
+                .catch((searchError) => {
+                  // Keep letter fallback on error
+                });
+            }
+          }, Math.random() * 3000 + 1000); // Random delay 1-4 seconds
         });
     } else {
-      // No icon specified - trigger AI search based on node ID/label
+      // No icon specified - show letter fallback immediately, then try AI search asynchronously
+      setIconError(true);
       
-      // Use node ID as search term for AI fallback
-      iconFallbackService.findFallbackIcon(`gcp_${id}`)
-        .then(async (fallbackIcon) => {
-
-          if (fallbackIcon) {
-            try {
-              const fallbackPath = await tryLoadIcon(fallbackIcon);
-
-              setFinalIconSrc(fallbackPath);
-              setIconLoaded(true);
-              return;
-            } catch (fallbackLoadError) {
-
+      // Delay AI search to avoid flooding the API
+      setTimeout(() => {
+        iconFallbackService.findFallbackIcon(`gcp_${id}`)
+          .then(async (fallbackIcon) => {
+            if (fallbackIcon) {
+              try {
+                const fallbackPath = await tryLoadIcon(fallbackIcon);
+                setFinalIconSrc(fallbackPath);
+                setIconLoaded(true);
+                setIconError(false);
+                return;
+              } catch (fallbackLoadError) {
+                // Keep letter fallback
+              }
             }
-          }
-          // If AI search fails, show letter fallback
-
-          setIconError(true);
-        })
-        .catch((searchError) => {
-
-          setIconError(true);
-        });
+          })
+          .catch((searchError) => {
+            // Keep letter fallback on error
+          });
+      }, Math.random() * 3000 + 1000); // Random delay 1-4 seconds
     }
   }, [data.icon, id]);
   

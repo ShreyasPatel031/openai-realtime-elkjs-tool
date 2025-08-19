@@ -1,37 +1,23 @@
 "use client"
 
-import React, { useState, useEffect, useCallback, useRef, useMemo, use } from "react"
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import ReactFlow, { 
   Background, 
   Controls, 
   BackgroundVariant,
-  useNodesState,
-  useEdgesState,
-  Position,
-  Handle,
-  BaseEdge,
   Node,
   Edge,
-  MarkerType,
-  NodeProps,
-  useReactFlow,
-  NodeMouseHandler,
-  applyNodeChanges,
-  applyEdgeChanges,
-  NodeChange,
-  EdgeChange
+  OnConnectStartParams
 } from "reactflow"
 import "reactflow/dist/style.css"
 import { cn } from "../../lib/utils"
 
 // Import types from separate type definition files
-import { ChatBoxProps, Message as ChatMessage, ChatWindowProps, InteractiveCanvasProps } from "../../types/chat"
-import { CustomNode, NodeData, EdgeData, ElkGraph, ElkGraphNode, ElkGraphEdge } from "../../types/graph"
+import { InteractiveCanvasProps } from "../../types/chat"
 import { RawGraph } from "../graph/types/index"
-import { getInitialElkGraph } from "../graph/initialGraph"
-import { addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate } from "../graph/mutations"
+import { deleteNode, deleteEdge } from "../graph/mutations"
+import { batchUpdate } from "../graph/mutations"
 import { CANVAS_STYLES, getEdgeStyle, getEdgeZIndex } from "../graph/styles/canvasStyles"
-import { process_user_requirements } from "../graph/userRequirements"
 import { useElkToReactflowGraphConverter } from "../../hooks/useElkToReactflowGraphConverter"
 import { useChatSession } from '../../hooks/useChatSession'
 import { elkGraphDescription, agentInstruction } from '../../realtime/agentConfig'
@@ -40,29 +26,20 @@ import { elkGraphDescription, agentInstruction } from '../../realtime/agentConfi
 import CustomNodeComponent from "../CustomNode"
 import GroupNode from "../GroupNode"
 import StepEdge from "../StepEdge"
-import ConnectionStatus from "../ConnectionStatus"
 import DevPanel from "../DevPanel"
 import StreamViewer from "../StreamViewer"
 
 import Chatbox from "./Chatbox"
-import ChatWindow from "./ChatWindow"
-import EditButton from "./EditButton"
 import ComingSoonCard from "../auth/ComingSoonCard"
-// import DebugGeometry from '../DebugGeometry'
-import { diagnoseStateSynchronization, cleanupDuplicateGroups } from '../../utils/graph_helper_functions'
 import { ApiEndpointProvider } from '../../contexts/ApiEndpointContext'
 import ProcessingStatusIcon from "../ProcessingStatusIcon"
-import { auth, googleProvider } from "../../lib/firebase"
-import { onAuthStateChanged, User, signInWithRedirect } from "firebase/auth"
+import { auth } from "../../lib/firebase"
+import { onAuthStateChanged, User } from "firebase/auth"
 import { Settings } from "lucide-react"
+import { DEFAULT_ARCHITECTURE as EXTERNAL_DEFAULT_ARCHITECTURE } from "../../data/defaultArchitecture"
 
 // Relaxed typing to avoid prop mismatch across layers
 const ChatBox = Chatbox as React.ComponentType<any>
-
-const initialMessages: ChatMessage[] = [
-  { id: "1", content: "Hello! How can I help you with the migration?", sender: "assistant" },
-  { id: "2", content: "I need to migrate my database schema.", sender: "user" },
-]
 
 // Helper function to add appropriate icons to nodes based on their IDs
 const addIconsToArchitecture = (architecture: any) => {
@@ -126,521 +103,8 @@ const addIconsToArchitecture = (architecture: any) => {
   return architecture;
 };
 
-// Default architecture that loads on startup (memoized to prevent infinite loops)
-const DEFAULT_ARCHITECTURE = addIconsToArchitecture({
-  "id": "root",
-  "children": [
-    {
-      "id": "external_clients",
-      "labels": [
-        {
-          "text": "external_clients"
-        }
-      ],
-      "children": [
-        {
-          "id": "external_client",
-          "labels": [
-            {
-              "text": "External Client"
-            }
-          ],
-          "children": [],
-          "edges": [],
-          "data": {
-            "icon": "browser_client"
-          }
-        }
-      ],
-      "edges": []
-    },
-    {
-      "id": "gcp_env",
-      "labels": [
-        {
-          "text": "GCP"
-        }
-      ],
-      "children": [
-        {
-          "id": "api_gateway",
-          "labels": [
-            {
-              "text": "api_gateway"
-            }
-          ],
-          "children": [
-            {
-              "id": "cloud_lb",
-              "labels": [
-                {
-                  "text": "Cloud Load Balancing"
-                }
-              ],
-              "children": [],
-              "edges": [],
-              "data": {
-                "icon": "gcp_cloud_load_balancing"
-              }
-            },
-            {
-              "id": "cloud_armor",
-              "labels": [
-                {
-                  "text": "Cloud Armor"
-                }
-              ],
-              "children": [],
-              "edges": [],
-              "data": {
-                "icon": "gcp_cloud_armor"
-              }
-            },
-            {
-              "id": "certificate_manager",
-              "labels": [
-                {
-                  "text": "Certificate Manager"
-                }
-              ],
-              "children": [],
-              "edges": [],
-              "data": {
-                "icon": "gcp_certificate_manager"
-              }
-            },
-            {
-              "id": "cloud_cdn",
-              "labels": [
-                {
-                  "text": "Cloud CDN"
-                }
-              ],
-              "children": [],
-              "edges": [],
-              "data": {
-                "icon": "gcp_cloud_cdn"
-              }
-            }
-          ],
-          "edges": [
-            {
-              "id": "edge_cdn_lb",
-              "sources": ["cloud_cdn"],
-              "targets": ["cloud_lb"],
-              "labels": [
-                {
-                  "text": "caches"
-                }
-              ]
-            },
-            {
-              "id": "edge_armor_lb",
-              "sources": ["cloud_armor"],
-              "targets": ["cloud_lb"],
-              "labels": [
-                {
-                  "text": "protects"
-                }
-              ]
-            },
-            {
-              "id": "edge_cert_lb",
-              "sources": ["certificate_manager"],
-              "targets": ["cloud_lb"],
-              "labels": [
-                {
-                  "text": "manages"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "id": "gateway_mgmt",
-          "labels": [
-            {
-              "text": "gateway_mgmt"
-            }
-          ],
-          "children": [
-            {
-              "id": "cloud_dns",
-              "labels": [
-                {
-                  "text": "Cloud DNS"
-                }
-              ],
-              "children": [],
-              "edges": [],
-              "data": {
-                "icon": "gcp_cloud_dns"
-              }
-            },
-            {
-              "id": "gke_gateway_controller",
-              "labels": [
-                {
-                  "text": "GKE Gateway Controller"
-                }
-              ],
-              "children": [],
-              "edges": [],
-              "data": {}
-            },
-            {
-              "id": "k8s_gateway_api",
-              "labels": [
-                {
-                  "text": "Kubernetes Gateway API"
-                }
-              ],
-              "children": [],
-              "edges": [],
-              "data": {}
-            }
-          ],
-          "edges": []
-        },
-        {
-          "id": "service_mesh",
-          "labels": [
-            {
-              "text": "service_mesh"
-            }
-          ],
-          "children": [
-            {
-              "id": "service_mesh_c1",
-              "labels": [
-                {
-                  "text": "service_mesh_c1"
-                }
-              ],
-              "children": [
-                {
-                  "id": "cluster1",
-                  "labels": [
-                    {
-                      "text": "cluster1"
-                    }
-                  ],
-                  "children": [],
-                  "edges": [],
-                  "data": {}
-                },
-                {
-                  "id": "anthos_svc1_c1",
-                  "labels": [
-                    {
-                      "text": "Service 1 (Cluster1)"
-                    }
-                  ],
-                  "children": [],
-                  "edges": [],
-                  "data": {}
-                },
-                {
-                  "id": "anthos_svc2_c1",
-                  "labels": [
-                    {
-                      "text": "Service 2 (Cluster1)"
-                    }
-                  ],
-                  "children": [],
-                  "edges": [],
-                  "data": {}
-                }
-              ],
-              "edges": [
-                {
-                  "id": "edge_svc1_c1_svc2_c1",
-                  "sources": ["anthos_svc1_c1"],
-                  "targets": ["anthos_svc2_c1"],
-                  "labels": [
-                    {
-                      "text": "calls"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "id": "service_mesh_c2",
-              "labels": [
-                {
-                  "text": "service_mesh_c2"
-                }
-              ],
-              "children": [
-                {
-                  "id": "cluster2",
-                  "labels": [
-                    {
-                      "text": "cluster2"
-                    }
-                  ],
-                  "children": [],
-                  "edges": [],
-                  "data": {}
-                },
-                {
-                  "id": "anthos_svc1_c2",
-                  "labels": [
-                    {
-                      "text": "Service 1 (Cluster2)"
-                    }
-                  ],
-                  "children": [],
-                  "edges": [],
-                  "data": {}
-                },
-                {
-                  "id": "anthos_svc2_c2",
-                  "labels": [
-                    {
-                      "text": "Service 2 (Cluster2)"
-                    }
-                  ],
-                  "children": [],
-                  "edges": [],
-                  "data": {}
-                }
-              ],
-              "edges": [
-                {
-                  "id": "edge_svc1_c2_svc2_c2",
-                  "sources": ["anthos_svc1_c2"],
-                  "targets": ["anthos_svc2_c2"],
-                  "labels": [
-                    {
-                      "text": "calls"
-                    }
-                  ]
-                }
-              ]
-            }
-          ],
-          "edges": [
-            {
-              "id": "edge_svc1_c1_svc1_c2",
-              "sources": ["anthos_svc1_c1"],
-              "targets": ["anthos_svc1_c2"],
-              "labels": [
-                {
-                  "text": "syncs"
-                }
-              ]
-            },
-            {
-              "id": "edge_svc1_c1_svc2_c2",
-              "sources": ["anthos_svc1_c1"],
-              "targets": ["anthos_svc2_c2"],
-              "labels": [
-                {
-                  "text": "communicates"
-                }
-              ]
-            },
-            {
-              "id": "edge_svc2_c2_svc1_c1",
-              "sources": ["anthos_svc2_c2"],
-              "targets": ["anthos_svc1_c1"],
-              "labels": [
-                {
-                  "text": "communicates"
-                }
-              ]
-            },
-            {
-              "id": "edge_svc1_c2_svc2_c1",
-              "sources": ["anthos_svc1_c2"],
-              "targets": ["anthos_svc2_c1"],
-              "labels": [
-                {
-                  "text": "communicates"
-                }
-              ]
-            },
-            {
-              "id": "edge_svc2_c1_svc2_c2",
-              "sources": ["anthos_svc2_c1"],
-              "targets": ["anthos_svc2_c2"],
-              "labels": [
-                {
-                  "text": "syncs"
-                }
-              ]
-            },
-            {
-              "id": "edge_svc2_c1_svc1_c2",
-              "sources": ["anthos_svc2_c1"],
-              "targets": ["anthos_svc1_c2"],
-              "labels": [
-                {
-                  "text": "communicates"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "id": "api_and_auth",
-          "labels": [
-            {
-              "text": "api_and_auth"
-            }
-          ],
-          "children": [
-            {
-              "id": "api_gw",
-              "labels": [
-                {
-                  "text": "API Gateway"
-                }
-              ],
-              "children": [],
-              "edges": [],
-              "data": {}
-            },
-            {
-              "id": "iap",
-              "labels": [
-                {
-                  "text": "Identity-Aware Proxy"
-                }
-              ],
-              "children": [],
-              "edges": [],
-              "data": {}
-            }
-          ],
-          "edges": [
-            {
-              "id": "e_iap_to_apigw",
-              "sources": ["iap"],
-              "targets": ["api_gw"],
-              "labels": [
-                {
-                  "text": "authenticates"
-                }
-              ]
-            }
-          ]
-        }
-      ],
-      "edges": [
-        {
-          "id": "edge_dns_lb",
-          "sources": ["cloud_dns"],
-          "targets": ["cloud_lb"],
-          "labels": [
-            {
-              "text": "resolves"
-            }
-          ]
-        },
-        {
-          "id": "edge_gkeconf_lb",
-          "sources": ["gke_gateway_controller"],
-          "targets": ["cloud_lb"],
-          "labels": [
-            {
-              "text": "configures"
-            }
-          ]
-        },
-        {
-          "id": "edge_k8s_svc1_c1",
-          "sources": ["k8s_gateway_api"],
-          "targets": ["anthos_svc1_c1"],
-          "labels": [
-            {
-              "text": "routes"
-            }
-          ]
-        },
-        {
-          "id": "edge_k8s_svc1_c2",
-          "sources": ["k8s_gateway_api"],
-          "targets": ["anthos_svc1_c2"],
-          "labels": [
-            {
-              "text": "routes"
-            }
-          ]
-        },
-        {
-          "id": "e_lb_to_apigw",
-          "sources": ["cloud_lb"],
-          "targets": ["api_gw"],
-          "labels": [
-            {
-              "text": "routes"
-            }
-          ]
-        }
-      ],
-      "data": {}
-    },
-    {
-      "id": "root_gcp",
-      "labels": [
-        {
-          "text": "Google Cloud"
-        }
-      ],
-      "children": [],
-      "edges": [],
-      "data": {}
-    },
-    {
-      "id": "users",
-      "labels": [
-        {
-          "text": "users"
-        }
-      ],
-      "children": [
-        {
-          "id": "web_client",
-          "labels": [
-            {
-              "text": "Web Client"
-            }
-          ],
-          "children": [],
-          "edges": [],
-          "data": {}
-        },
-        {
-          "id": "mobile_client",
-          "labels": [
-            {
-              "text": "Mobile Client"
-            }
-          ],
-          "children": [],
-          "edges": [],
-          "data": {}
-        }
-      ],
-      "edges": []
-    }
-  ],
-  "edges": [
-    {
-      "id": "edge_client_lb",
-      "sources": ["external_client"],
-      "targets": ["cloud_lb"],
-      "labels": [
-        {
-          "text": "requests"
-        }
-      ]
-    }
-  ]
-});
+// Use external architecture file instead of hardcoded data
+const DEFAULT_ARCHITECTURE = addIconsToArchitecture(EXTERNAL_DEFAULT_ARCHITECTURE);
 
 // Register node and edge types
 const nodeTypes = {
@@ -668,7 +132,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const [showDev, setShowDev] = useState(false);
   
   // State for StreamViewer visibility
-  const [showStreamViewer, setShowStreamViewer] = useState(false);
+  // const [showStreamViewer, setShowStreamViewer] = useState(false);
   
   // State for auth flow
   const [user, setUser] = useState<User | null>(null);
@@ -695,23 +159,22 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     }
   }, []);
 
-  // Handler for the edit button click
-  const handleEditClick = async () => {
-    if (!auth || !googleProvider) {
-      console.log('🚫 Firebase authentication not available');
-      return;
-    }
-    
-    if (user) {
-      setShowComingSoon(true);
-    } else {
-      try {
-        await signInWithRedirect(auth, googleProvider);
-      } catch (error) {
-        console.error("Error signing in with Google", error);
-      }
-    }
-  };
+  // Handler for the edit button click (unused)
+  // const handleEditClick = async () => {
+  //   if (!auth || !googleProvider) {
+  //     console.log('🚫 Firebase authentication not available');
+  //     return;
+  //   }
+  //   if (user) {
+  //     setShowComingSoon(true);
+  //   } else {
+  //     try {
+  //       await signInWithRedirect(auth, googleProvider);
+  //     } catch (error) {
+  //       console.error("Error signing in with Google", error);
+  //     }
+  //   }
+  // };
   
   // State for visualization mode (ReactFlow vs SVG)
   const [useReactFlow, setUseReactFlow] = useState(true);
@@ -806,8 +269,27 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     onNodesChange,
     onEdgesChange,
     onConnect,
+    handleLabelChange,
     
   } = useElkToReactflowGraphConverter(DEFAULT_ARCHITECTURE);
+
+  const handleAddNodeToGroup = useCallback((groupId: string) => {
+    const nodeName = `new_node_${Date.now()}`;
+    const updated = batchUpdate([
+      {
+        name: "add_node",
+        nodename: nodeName,
+        parentId: groupId,
+        data: { label: "New Node" }
+      }
+    ], structuredClone(rawGraph));
+    setRawGraph(updated);
+    // Try to focus edit on the newly created node in RF layer
+    const newNodeId = nodeName.toLowerCase();
+    setTimeout(() => {
+      setNodes(nds => nds.map(n => n.id === newNodeId ? { ...n, data: { ...n.data, isEditing: true } } : n));
+    }, 0);
+  }, [rawGraph, setRawGraph, setNodes]);
   
   // Ref to store ReactFlow instance for auto-zoom functionality
   const reactFlowRef = useRef<any>(null);
@@ -986,8 +468,47 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   }, [selectedNodes, selectedEdges, rawGraph, handleGraphChange]);
   
   // Memoize node and edge types to prevent recreation on each render
-  const memoizedNodeTypes = useMemo(() => nodeTypes, []);
-  const memoizedEdgeTypes = useMemo(() => edgeTypes, []);
+  const memoizedNodeTypes = useMemo(() => ({
+    custom: (props: any) => <CustomNodeComponent {...props} onLabelChange={handleLabelChange} />,
+    group: (props: any) => <GroupNode {...props} onAddNode={handleAddNodeToGroup} />,
+  }) as any, [handleAddNodeToGroup, handleLabelChange]);
+  const memoizedEdgeTypes = useMemo(() => edgeTypes as any, []);
+
+  // Edge creation: track source node when starting a connection
+  const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+
+  const handleConnectStart = useCallback((_e: any, params: OnConnectStartParams) => {
+    setConnectingFrom(params.nodeId ?? null);
+  }, []);
+
+  const handleConnectEnd = useCallback((event: any) => {
+    const target = event.target as HTMLElement;
+    const droppedOnPane = target?.classList?.contains('react-flow__pane');
+    if (!droppedOnPane || !connectingFrom) {
+      setConnectingFrom(null);
+      return;
+    }
+
+    // Create a new node next to the cursor and connect from source → new
+    const sourceNode = nodes.find(n => n.id === connectingFrom);
+    const parentForNew = (sourceNode as any)?.parentId || 'root';
+    const nodeName = `node_${Date.now()}`;
+    const edgeId = `edge_${Math.random().toString(36).slice(2, 9)}`;
+    const newNodeId = nodeName.toLowerCase();
+
+    const updated = batchUpdate([
+      { name: 'add_node', nodename: nodeName, parentId: parentForNew, data: { label: 'New Node' } },
+      { name: 'add_edge', edgeId, sourceId: connectingFrom, targetId: newNodeId }
+    ], structuredClone(rawGraph));
+
+    setRawGraph(updated);
+    // Focus edit the newly added node in RF view once nodes sync
+    setTimeout(() => {
+      setNodes(nds => nds.map(n => n.id === newNodeId ? { ...n, data: { ...n.data, isEditing: true } } : n));
+    }, 0);
+
+    setConnectingFrom(null);
+  }, [connectingFrom, nodes, rawGraph, setNodes, setRawGraph]);
   
   const {
     messages,
@@ -1004,16 +525,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     elkGraph: rawGraph,
     setElkGraph: setRawGraph,
     elkGraphDescription,
-    agentInstruction,
-    addNode: addNode as any,
-    deleteNode: deleteNode as any,
-    moveNode: moveNode as any,
-    addEdge: addEdge as any,
-    deleteEdge: deleteEdge as any,
-    groupNodes: groupNodes as any,
-    removeGroup: removeGroup as any,
-    batchUpdate: batchUpdate as any,
-    process_user_requirements: process_user_requirements as any
+    agentInstruction
   });
   
   // Process events when they change
@@ -1021,78 +533,14 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     processEvents();
   }, [events, processEvents]);
   
-  // Expose diagnostic functions to the window object for debugging
+  // Expose diagnostic functions to the window object for debugging (kept minimal)
   useEffect(() => {
-    // Import the diagnostic functions
-    import('../../utils/graph_helper_functions').then(({ analyzeGraphState, forceEdgeReattachmentAnalysis, showGraphStructure, validateBatchOperations }) => {
-      // Expose functions to window object
-      (window as any).analyzeGraphState = () => {
-        if (rawGraph) {
-          analyzeGraphState(rawGraph as any);
-        } else {
-          console.warn('No graph available to analyze');
-        }
-      };
-      
-      (window as any).forceEdgeReattachmentAnalysis = () => {
-        if (rawGraph) {
-          const updatedGraph = forceEdgeReattachmentAnalysis(rawGraph as any);
-          setRawGraph(updatedGraph);
-          console.log('🔄 Edge reattachment analysis complete - graph updated');
-        } else {
-          console.warn('No graph available for edge reattachment analysis');
-        }
-      };
-      
-      (window as any).showGraphStructure = () => {
-        if (rawGraph) {
-          showGraphStructure(rawGraph as any);
-        } else {
-          console.warn('No graph available to show structure');
-        }
-      };
-      
-      (window as any).validateBatchOperations = (operations) => {
-        if (!operations) {
-          console.warn('Please provide operations array: validateBatchOperations([...operations])');
-          return [];
-        }
-        return validateBatchOperations(operations);
-      };
-      
-      // Also expose the current graph for direct access
-      (window as any).getCurrentGraph = () => {
-        return rawGraph;
-      };
-      
-      // Expose setElkGraph for StreamExecutor
-      (window as any).setElkGraph = (newGraph: any) => {
-  
-        setRawGraph(newGraph);
-      };
-      
-      // Expose state synchronization diagnostic and cleanup function
-      (window as any).diagnoseStateSynchronization = diagnoseStateSynchronization;
-      (window as any).cleanupDuplicateGroups = () => {
-        const cleaned = cleanupDuplicateGroups(rawGraph as any);
-        setRawGraph(cleaned as any);
-        return cleaned;
-      };
-      
-          // Diagnostic functions exposed to window object for debugging
-    });
-    
-    // Cleanup on unmount
+    // Minimal exposure if needed elsewhere
+    (window as any).getCurrentGraph = () => rawGraph;
     return () => {
-      delete (window as any).analyzeGraphState;
-      delete (window as any).forceEdgeReattachmentAnalysis;
-      delete (window as any).showGraphStructure;
-      delete (window as any).validateBatchOperations;
       delete (window as any).getCurrentGraph;
-      delete (window as any).diagnoseStateSynchronization;
-      delete (window as any).cleanupDuplicateGroups;
     };
-  }, [rawGraph, setRawGraph]);
+  }, [rawGraph]);
   
   // State to track edge visibility (keeping minimal state for the fix)
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
@@ -1535,7 +983,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   }, [useReactFlow, handleSvgZoom]);
 
   return (
-    <ApiEndpointProvider value={apiEndpoint}>
+    <ApiEndpointProvider apiEndpoint={apiEndpoint}>
     <div className="w-full h-full flex flex-col overflow-hidden bg-white dark:bg-black">
       {/* Auth Modals */}
       {user && showComingSoon && <ComingSoonCard onClose={() => setShowComingSoon(false)} />}
@@ -1615,6 +1063,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               disableKeyboardA11y={false}
               edgesFocusable={true}
               edgesUpdatable={true}
+              onConnectStart={handleConnectStart}
+              onConnectEnd={handleConnectEnd}
 
               deleteKeyCode="Delete"
               connectOnClick={false}
@@ -1760,510 +1210,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               <div className="px-4 py-3 border-b border-gray-200 bg-green-50 flex-shrink-0">
                 <button
                   onClick={() => {
-                    const defaultArchitecture = {
-                      "id": "root",
-                      "children": [
-                        {
-                          "id": "external_clients",
-                          "labels": [
-                            {
-                              "text": "external_clients"
-                            }
-                          ],
-                          "children": [
-                            {
-                              "id": "external_client",
-                              "labels": [
-                                {
-                                  "text": "External Client"
-                                }
-                              ],
-                              "children": [],
-                              "edges": [],
-                              "data": {}
-                            }
-                          ],
-                          "edges": []
-                        },
-                        {
-                          "id": "gcp_env",
-                          "labels": [
-                            {
-                              "text": "GCP"
-                            }
-                          ],
-                          "children": [
-                            {
-                              "id": "api_gateway",
-                              "labels": [
-                                {
-                                  "text": "api_gateway"
-                                }
-                              ],
-                              "children": [
-                                {
-                                  "id": "cloud_lb",
-                                  "labels": [
-                                    {
-                                      "text": "Cloud Load Balancing"
-                                    }
-                                  ],
-                                  "children": [],
-                                  "edges": [],
-                                  "data": {}
-                                },
-                                {
-                                  "id": "cloud_armor",
-                                  "labels": [
-                                    {
-                                      "text": "Cloud Armor"
-                                    }
-                                  ],
-                                  "children": [],
-                                  "edges": [],
-                                  "data": {}
-                                },
-                                {
-                                  "id": "certificate_manager",
-                                  "labels": [
-                                    {
-                                      "text": "Certificate Manager"
-                                    }
-                                  ],
-                                  "children": [],
-                                  "edges": [],
-                                  "data": {}
-                                },
-                                {
-                                  "id": "cloud_cdn",
-                                  "labels": [
-                                    {
-                                      "text": "Cloud CDN"
-                                    }
-                                  ],
-                                  "children": [],
-                                  "edges": [],
-                                  "data": {}
-                                }
-                              ],
-                              "edges": [
-                                {
-                                  "id": "edge_cdn_lb",
-                                  "sources": ["cloud_cdn"],
-                                  "targets": ["cloud_lb"],
-                                  "labels": [
-                                    {
-                                      "text": "caches"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "id": "edge_armor_lb",
-                                  "sources": ["cloud_armor"],
-                                  "targets": ["cloud_lb"],
-                                  "labels": [
-                                    {
-                                      "text": "protects"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "id": "edge_cert_lb",
-                                  "sources": ["certificate_manager"],
-                                  "targets": ["cloud_lb"],
-                                  "labels": [
-                                    {
-                                      "text": "manages"
-                                    }
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "id": "gateway_mgmt",
-                              "labels": [
-                                {
-                                  "text": "gateway_mgmt"
-                                }
-                              ],
-                              "children": [
-                                {
-                                  "id": "cloud_dns",
-                                  "labels": [
-                                    {
-                                      "text": "Cloud DNS"
-                                    }
-                                  ],
-                                  "children": [],
-                                  "edges": [],
-                                  "data": {}
-                                },
-                                {
-                                  "id": "gke_gateway_controller",
-                                  "labels": [
-                                    {
-                                      "text": "GKE Gateway Controller"
-                                    }
-                                  ],
-                                  "children": [],
-                                  "edges": [],
-                                  "data": {}
-                                },
-                                {
-                                  "id": "k8s_gateway_api",
-                                  "labels": [
-                                    {
-                                      "text": "Kubernetes Gateway API"
-                                    }
-                                  ],
-                                  "children": [],
-                                  "edges": [],
-                                  "data": {}
-                                }
-                              ],
-                              "edges": []
-                            },
-                            {
-                              "id": "service_mesh",
-                              "labels": [
-                                {
-                                  "text": "service_mesh"
-                                }
-                              ],
-                              "children": [
-                                {
-                                  "id": "service_mesh_c1",
-                                  "labels": [
-                                    {
-                                      "text": "service_mesh_c1"
-                                    }
-                                  ],
-                                  "children": [
-                                    {
-                                      "id": "cluster1",
-                                      "labels": [
-                                        {
-                                          "text": "cluster1"
-                                        }
-                                      ],
-                                      "children": [],
-                                      "edges": [],
-                                      "data": {}
-                                    },
-                                    {
-                                      "id": "anthos_svc1_c1",
-                                      "labels": [
-                                        {
-                                          "text": "Service 1 (Cluster1)"
-                                        }
-                                      ],
-                                      "children": [],
-                                      "edges": [],
-                                      "data": {}
-                                    },
-                                    {
-                                      "id": "anthos_svc2_c1",
-                                      "labels": [
-                                        {
-                                          "text": "Service 2 (Cluster1)"
-                                        }
-                                      ],
-                                      "children": [],
-                                      "edges": [],
-                                      "data": {}
-                                    }
-                                  ],
-                                  "edges": [
-                                    {
-                                      "id": "edge_svc1_c1_svc2_c1",
-                                      "sources": ["anthos_svc1_c1"],
-                                      "targets": ["anthos_svc2_c1"],
-                                      "labels": [
-                                        {
-                                          "text": "calls"
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "id": "service_mesh_c2",
-                                  "labels": [
-                                    {
-                                      "text": "service_mesh_c2"
-                                    }
-                                  ],
-                                  "children": [
-                                    {
-                                      "id": "cluster2",
-                                      "labels": [
-                                        {
-                                          "text": "cluster2"
-                                        }
-                                      ],
-                                      "children": [],
-                                      "edges": [],
-                                      "data": {}
-                                    },
-                                    {
-                                      "id": "anthos_svc1_c2",
-                                      "labels": [
-                                        {
-                                          "text": "Service 1 (Cluster2)"
-                                        }
-                                      ],
-                                      "children": [],
-                                      "edges": [],
-                                      "data": {}
-                                    },
-                                    {
-                                      "id": "anthos_svc2_c2",
-                                      "labels": [
-                                        {
-                                          "text": "Service 2 (Cluster2)"
-                                        }
-                                      ],
-                                      "children": [],
-                                      "edges": [],
-                                      "data": {}
-                                    }
-                                  ],
-                                  "edges": [
-                                    {
-                                      "id": "edge_svc1_c2_svc2_c2",
-                                      "sources": ["anthos_svc1_c2"],
-                                      "targets": ["anthos_svc2_c2"],
-                                      "labels": [
-                                        {
-                                          "text": "calls"
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ],
-                              "edges": [
-                                {
-                                  "id": "edge_svc1_c1_svc1_c2",
-                                  "sources": ["anthos_svc1_c1"],
-                                  "targets": ["anthos_svc1_c2"],
-                                  "labels": [
-                                    {
-                                      "text": "syncs"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "id": "edge_svc1_c1_svc2_c2",
-                                  "sources": ["anthos_svc1_c1"],
-                                  "targets": ["anthos_svc2_c2"],
-                                  "labels": [
-                                    {
-                                      "text": "communicates"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "id": "edge_svc2_c2_svc1_c1",
-                                  "sources": ["anthos_svc2_c2"],
-                                  "targets": ["anthos_svc1_c1"],
-                                  "labels": [
-                                    {
-                                      "text": "communicates"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "id": "edge_svc1_c2_svc2_c1",
-                                  "sources": ["anthos_svc1_c2"],
-                                  "targets": ["anthos_svc2_c1"],
-                                  "labels": [
-                                    {
-                                      "text": "communicates"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "id": "edge_svc2_c1_svc2_c2",
-                                  "sources": ["anthos_svc2_c1"],
-                                  "targets": ["anthos_svc2_c2"],
-                                  "labels": [
-                                    {
-                                      "text": "syncs"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "id": "edge_svc2_c1_svc1_c2",
-                                  "sources": ["anthos_svc2_c1"],
-                                  "targets": ["anthos_svc1_c2"],
-                                  "labels": [
-                                    {
-                                      "text": "communicates"
-                                    }
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "id": "api_and_auth",
-                              "labels": [
-                                {
-                                  "text": "api_and_auth"
-                                }
-                              ],
-                              "children": [
-                                {
-                                  "id": "api_gw",
-                                  "labels": [
-                                    {
-                                      "text": "API Gateway"
-                                    }
-                                  ],
-                                  "children": [],
-                                  "edges": [],
-                                  "data": {}
-                                },
-                                {
-                                  "id": "iap",
-                                  "labels": [
-                                    {
-                                      "text": "Identity-Aware Proxy"
-                                    }
-                                  ],
-                                  "children": [],
-                                  "edges": [],
-                                  "data": {}
-                                }
-                              ],
-                              "edges": [
-                                {
-                                  "id": "e_iap_to_apigw",
-                                  "sources": ["iap"],
-                                  "targets": ["api_gw"],
-                                  "labels": [
-                                    {
-                                      "text": "authenticates"
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ],
-                          "edges": [
-                            {
-                              "id": "edge_dns_lb",
-                              "sources": ["cloud_dns"],
-                              "targets": ["cloud_lb"],
-                              "labels": [
-                                {
-                                  "text": "resolves"
-                                }
-                              ]
-                            },
-                            {
-                              "id": "edge_gkeconf_lb",
-                              "sources": ["gke_gateway_controller"],
-                              "targets": ["cloud_lb"],
-                              "labels": [
-                                {
-                                  "text": "configures"
-                                }
-                              ]
-                            },
-                            {
-                              "id": "edge_k8s_svc1_c1",
-                              "sources": ["k8s_gateway_api"],
-                              "targets": ["anthos_svc1_c1"],
-                              "labels": [
-                                {
-                                  "text": "routes"
-                                }
-                              ]
-                            },
-                            {
-                              "id": "edge_k8s_svc1_c2",
-                              "sources": ["k8s_gateway_api"],
-                              "targets": ["anthos_svc1_c2"],
-                              "labels": [
-                                {
-                                  "text": "routes"
-                                }
-                              ]
-                            },
-                            {
-                              "id": "e_lb_to_apigw",
-                              "sources": ["cloud_lb"],
-                              "targets": ["api_gw"],
-                              "labels": [
-                                {
-                                  "text": "routes"
-                                }
-                              ]
-                            }
-                          ],
-                          "data": {}
-                        },
-                        {
-                          "id": "root_gcp",
-                          "labels": [
-                            {
-                              "text": "Google Cloud"
-                            }
-                          ],
-                          "children": [],
-                          "edges": [],
-                          "data": {}
-                        },
-                        {
-                          "id": "users",
-                          "labels": [
-                            {
-                              "text": "users"
-                            }
-                          ],
-                          "children": [
-                            {
-                              "id": "web_client",
-                              "labels": [
-                                {
-                                  "text": "Web Client"
-                                }
-                              ],
-                              "children": [],
-                              "edges": [],
-                              "data": {}
-                            },
-                            {
-                              "id": "mobile_client",
-                              "labels": [
-                                {
-                                  "text": "Mobile Client"
-                                }
-                              ],
-                              "children": [],
-                              "edges": [],
-                              "data": {}
-                            }
-                          ],
-                          "edges": []
-                        }
-                      ],
-                      "edges": [
-                        {
-                          "id": "edge_client_lb",
-                          "sources": ["external_client"],
-                          "targets": ["cloud_lb"],
-                          "labels": [
-                            {
-                              "text": "requests"
-                            }
-                          ]
-                        }
-                      ]
-                    };
-                    console.log('Loading EXACT user architecture...');
-                    setRawGraph(defaultArchitecture);
+                    console.log('Loading default architecture...');
+                    setRawGraph(DEFAULT_ARCHITECTURE);
                   }}
                   className="w-full px-3 py-2 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700 transition-colors"
                 >
@@ -2273,8 +1221,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               
               {/* Panel Content - Scrollable */}
               <div className="p-4 space-y-4 overflow-y-auto flex-1">
-                {/* Streaming Controls */}
-                <div className="space-y-2">
+                {/* Streaming Controls - removed toggle as StreamViewer is always shown */}
+                {/* <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">AI Streaming</label>
                   <button
                     onClick={() => setShowStreamViewer((p) => !p)}
@@ -2286,7 +1234,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                   >
                     {showStreamViewer ? 'Hide AI Stream' : 'Show AI Stream'}
                   </button>
-                </div>
+                </div> */}
                 
                 {/* Visualization Mode */}
                 <div className="space-y-2">

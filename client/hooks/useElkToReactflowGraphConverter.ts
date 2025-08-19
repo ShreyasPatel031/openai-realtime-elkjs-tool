@@ -90,6 +90,36 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
     handleBatchUpdate : (...a: any[]) => mutate(batchUpdate,  ...a),
   }), [mutate]);
   
+  const handleAddNode = useCallback(
+    (groupId: string) => {
+      const newNodeId = `new-node-${Date.now()}`;
+      const newNode = {
+        id: newNodeId,
+        data: { label: 'New Node', isEditing: true },
+        position: { x: 20, y: 20 },
+        type: 'custom',
+        parentNode: groupId,
+        extent: 'parent',
+      };
+      setNodes((nds) => nds.concat(newNode));
+    },
+    [setNodes]
+  );
+
+  const handleLabelChange = useCallback(
+    (id: string, label: string) => {
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === id) {
+            node.data = { ...node.data, label, isEditing: false };
+          }
+          return node;
+        })
+      );
+    },
+    [setNodes]
+  );
+  
   /* -------------------------------------------------- */
   /* 🔹 5. layout side-effect                           */
   /* -------------------------------------------------- */
@@ -163,6 +193,8 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
     rawGraph, layoutGraph, nodes, edges, layoutVersion,
     setRawGraph, setNodes, setEdges,
     ...handlers,
-    onNodesChange, onEdgesChange, onConnect
+    onNodesChange, onEdgesChange, onConnect,
+    handleAddNode,
+    handleLabelChange,
   } as const;
 }

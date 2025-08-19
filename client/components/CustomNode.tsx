@@ -65,123 +65,90 @@ interface CustomNodeProps {
     rightHandles?: string[];
     topHandles?: string[];
     bottomHandles?: string[];
+    isEditing?: boolean; // Added isEditing prop
   };
   id: string;
   selected?: boolean;
+  onLabelChange: (id: string, label: string) => void;
 }
 
-const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
+const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChange }) => {
   const { leftHandles = [], rightHandles = [], topHandles = [], bottomHandles = [] } = data;
+  const [isEditing, setIsEditing] = useState(data.isEditing);
+  const [label, setLabel] = useState(data.label);
   const [iconLoaded, setIconLoaded] = useState(false);
   const [iconError, setIconError] = useState(false);
   const [finalIconSrc, setFinalIconSrc] = useState<string | undefined>(undefined);
   const [fallbackAttempted, setFallbackAttempted] = useState(false);
   const apiEndpoint = useApiEndpoint();
-  
 
-  
+  // helpers hoisted for reuse
+  const findIconCategory = (provider: string, iconName: string): string | null => {
+    const providerIcons = iconLists[provider as keyof typeof iconLists];
+    if (!providerIcons) return null;
+    for (const [category, icons] of Object.entries(providerIcons)) {
+      if (icons.includes(iconName)) return category;
+    }
+    return null;
+  };
+
+  const tryLoadIcon = async (iconName: string) => {
+    const prefixMatch = iconName.match(/^(aws|gcp|azure)_(.+)$/);
+    if (prefixMatch) {
+      const [, provider, actualIconName] = prefixMatch;
+      const category = findIconCategory(provider, actualIconName);
+      if (category) {
+        const iconPath = `/icons/${provider}/${category}/${actualIconName}.png`;
+        const fullIconUrl = buildAssetUrl(iconPath, apiEndpoint);
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = fullIconUrl;
+        });
+        return fullIconUrl;
+      }
+    }
+    const actualIconName = iconName.replace(/^(aws|gcp|azure)_/, '');
+    const legacyPaths = [
+      `/assets/canvas/${actualIconName}.svg`,
+      `/assets/canvas/${actualIconName}.png`,
+      `/assets/canvas/${actualIconName}.jpeg`
+    ];
+    for (const legacyPath of legacyPaths) {
+      const fullUrl = buildAssetUrl(legacyPath, apiEndpoint);
+      const img = new Image();
+      try {
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = fullUrl;
+        });
+        return fullUrl;
+      } catch {}
+    }
+    throw new Error(`Icon not found: ${iconName}`);
+  };
+
   useEffect(() => {
     // Reset states
     setIconLoaded(false);
     setIconError(false);
     setFallbackAttempted(false);
-    
-    // Function to find which category an icon belongs to
-    const findIconCategory = (provider: string, iconName: string): string | null => {
-      const providerIcons = iconLists[provider as keyof typeof iconLists];
-      if (!providerIcons) return null;
-      
-      for (const [category, icons] of Object.entries(providerIcons)) {
-        if (icons.includes(iconName)) {
-          return category;
-        }
-      }
-      return null;
-    };
-    
-    // Function to try loading an icon
-    const tryLoadIcon = async (iconName: string) => {
-        // Check if icon has provider prefix (e.g., 'gcp_cloud_monitoring')
-        const prefixMatch = iconName.match(/^(aws|gcp|azure)_(.+)$/);
 
-        if (prefixMatch) {
-          const [, provider, actualIconName] = prefixMatch;
-          // Find the correct category for this icon
-          const category = findIconCategory(provider, actualIconName);
-
-          if (category) {
-            const iconPath = `/icons/${provider}/${category}/${actualIconName}.png`;
-            const fullIconUrl = buildAssetUrl(iconPath, apiEndpoint);
-
-            try {
-              const img = new Image();
-              await new Promise((resolve, reject) => {
-                img.onload = resolve;
-                img.onerror = reject;
-                img.src = fullIconUrl;
-              });
-
-              return fullIconUrl;
-            } catch (error) {
-
-              // Fall through to legacy paths
-            }
-          } else {
-
-          }
-        }
-        
-        // Get the actual icon name (remove provider prefix if present)
-        const actualIconName = prefixMatch ? prefixMatch[2] : iconName;
-
-        
-        // Try legacy paths for backward compatibility
-        const legacyPaths = [
-          `/assets/canvas/${actualIconName}.svg`,
-          `/assets/canvas/${actualIconName}.png`,
-          `/assets/canvas/${actualIconName}.jpeg`
-        ];
-        
-        for (const legacyPath of legacyPaths) {
-          const fullUrl = buildAssetUrl(legacyPath, apiEndpoint);
-          
-          try {
-            const img = new Image();
-            await new Promise((resolve, reject) => {
-              img.onload = resolve;
-              img.onerror = reject;
-              img.src = fullUrl;
-            });
-            
-            return fullUrl;
-          } catch (error) {
-
-            // Continue to next path
-          }
-        }
-        
-        throw new Error(`Icon not found: ${iconName}`);
-      };
-    
     if (data.icon) {
-      // Try to load the specified icon
       tryLoadIcon(data.icon)
         .then((path) => {
-          // Force re-render by batching state updates
           setFinalIconSrc(path);
           setIconLoaded(true);
-          setIconError(false); // Ensure no error state
+          setIconError(false);
           setFallbackAttempted(false);
         })
         .catch(() => {
-          // Show letter fallback immediately, then try AI search asynchronously
           setIconError(true);
-          
-          // Delay AI search to avoid flooding the API
           setTimeout(() => {
             if (!fallbackAttempted) {
               setFallbackAttempted(true);
-              
               iconFallbackService.findFallbackIcon(data.icon)
                 .then(async (fallbackIcon) => {
                   if (fallbackIcon) {
@@ -191,22 +158,15 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
                       setIconLoaded(true);
                       setIconError(false);
                       return;
-                    } catch (fallbackLoadError) {
-                      // Keep letter fallback
-                    }
+                    } catch {}
                   }
                 })
-                .catch((searchError) => {
-                  // Keep letter fallback on error
-                });
+                .catch(() => {});
             }
-          }, Math.random() * 3000 + 1000); // Random delay 1-4 seconds
+          }, Math.random() * 3000 + 1000);
         });
     } else {
-      // No icon specified - show letter fallback immediately, then try AI search asynchronously
       setIconError(true);
-      
-      // Delay AI search to avoid flooding the API
       setTimeout(() => {
         iconFallbackService.findFallbackIcon(`gcp_${id}`)
           .then(async (fallbackIcon) => {
@@ -217,18 +177,69 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
                 setIconLoaded(true);
                 setIconError(false);
                 return;
-              } catch (fallbackLoadError) {
-                // Keep letter fallback
-              }
+              } catch {}
             }
           })
-          .catch((searchError) => {
-            // Keep letter fallback on error
-          });
-      }, Math.random() * 3000 + 1000); // Random delay 1-4 seconds
+          .catch(() => {});
+      }, Math.random() * 3000 + 1000);
     }
   }, [data.icon, id]);
-  
+
+  // keep local label in sync
+  useEffect(() => {
+    setLabel(data.label);
+  }, [data.label]);
+
+  const handleLabelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLabel(e.target.value);
+  };
+
+  // On Enter: commit label and fetch icon (existing behavior)
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      setIsEditing(false);
+      onLabelChange(id, label);
+      iconFallbackService.findFallbackIcon(`gcp_${label}`)
+        .then(async (fallbackIcon) => {
+          if (fallbackIcon) {
+            try {
+              const fallbackPath = await tryLoadIcon(fallbackIcon);
+              setFinalIconSrc(fallbackPath);
+              setIconLoaded(true);
+              setIconError(false);
+            } catch {}
+          }
+        });
+    }
+  };
+
+  // Debounced icon update while editing
+  useEffect(() => {
+    if (!isEditing) return;
+    if (!label || label.trim() === '') return;
+    const t = setTimeout(() => {
+      iconFallbackService.findFallbackIcon(`gcp_${label}`)
+        .then(async (fallbackIcon) => {
+          if (fallbackIcon) {
+            try {
+              const fallbackPath = await tryLoadIcon(fallbackIcon);
+              setFinalIconSrc(fallbackPath);
+              setIconLoaded(true);
+              setIconError(false);
+            } catch {
+              // ignore
+            }
+          }
+        })
+        .catch(() => {});
+    }, 600);
+    return () => clearTimeout(t);
+  }, [isEditing, label]);
+
+  const handleDoubleClick = () => {
+    setIsEditing(true);
+  };
+
   const nodeStyle = {
     background: selected ? '#f8f9fa' : 'white',
     border: selected ? '2px solid #6c757d' : '1px solid #ccc',
@@ -376,14 +387,9 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
           marginTop: '2px',
           overflow: 'hidden'
         }}>
-          {/* If we have an icon and no error loading it, show the image */}
-          {(() => {
-
-            return null;
-          })()}
           {finalIconSrc && !iconError && (
             <img
-              key={`${id}-${finalIconSrc}`} // Force re-render when finalIconSrc changes
+              key={`${id}-${finalIconSrc}`}
               src={finalIconSrc}
               alt={data.label}
               style={{ 
@@ -391,37 +397,40 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
                 height: '100%', 
                 objectFit: 'contain'
               }}
-              onLoad={() => {
-
-              }}
-              onError={() => {
-
-                setIconError(true);
-              }}
+              onError={() => setIconError(true)}
             />
           )}
-          
-          {/* If we have an error loading the icon or no icon specified, show the first letter */}
           {(!finalIconSrc || iconError) && (
             <span>{data.label.charAt(0).toUpperCase()}</span>
           )}
         </div>
-        
-        {/* Label at bottom */}
-        <div style={{ 
-          position: 'absolute',
-          bottom: '-8px',
-          left: '0',
-          right: '0',
-          padding: '2px 4px',
-          fontSize: '11px',
-          textAlign: 'center',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap' as const
-        }}>
-          {data.label}
-        </div>
+        {isEditing ? (
+          <input
+            type="text"
+            value={label}
+            onChange={handleLabelChange}
+            onKeyDown={handleKeyDown}
+            autoFocus
+            style={{
+              width: '100%',
+              padding: '4px',
+              border: '1px solid #ccc',
+              borderRadius: '4px',
+              textAlign: 'center',
+            }}
+          />
+        ) : (
+          <div
+            onDoubleClick={handleDoubleClick}
+            style={{
+              padding: '4px',
+              textAlign: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            {label}
+          </div>
+        )}
       </div>
     </div>
   );

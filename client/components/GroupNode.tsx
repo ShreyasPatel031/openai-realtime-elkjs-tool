@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Handle, Position } from 'reactflow';
 import { baseHandleStyle } from './graph/handles';
 import { getStyle } from './graph/styles';
+import { CANVAS_STYLES } from './graph/styles/canvasStyles';
 import { getGroupIconHex, allGroupIcons } from '../generated/groupIconColors';
 import { cn } from '../lib/utils';
 import { iconLists } from '../generated/iconLists';
@@ -27,9 +28,10 @@ interface GroupNodeProps {
   id: string;
   selected?: boolean;
   isConnectable: boolean;
+  onAddNode: (groupId: string) => void;
 }
 
-const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable }) => {
+const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable, onAddNode }) => {
   const [iconLoaded, setIconLoaded] = useState(false);
   const [iconError, setIconError] = useState(false);
   const [finalIconSrc, setFinalIconSrc] = useState<string | undefined>(undefined);
@@ -208,20 +210,18 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
   const fallbackColor = defaultColors[cloudProvider];
   
   // If we have a group icon, use its color as the background
-  let customBgColor = resolvedStyle.bg || 'rgba(240, 240, 240, 0.6)';
-  let customBorderColor = resolvedStyle.border || (selected ? '#6c757d' : fallbackColor);
+  let customBgColor = resolvedStyle.bg || CANVAS_STYLES.nodes.group.background;
+  let customBorderColor = resolvedStyle.border || CANVAS_STYLES.nodes.group.border;
   
   if (groupIconHex && data.groupIcon) {
     // Find the group icon data to check if it's filled
     const groupIconData = allGroupIcons.find(icon => icon.name === data.groupIcon);
     
     if (groupIconData && groupIconData.fill) {
-      // For filled group icons, use the hex color as background with transparency
-      customBgColor = `${groupIconHex}80`; // 50% opacity
+      // Do not override background; only set border color
       customBorderColor = groupIconHex;
     } else {
-      // For border-only group icons, use the hex color as border only
-      customBgColor = 'rgba(255, 255, 255, 0.1)'; // Very light background
+      // For border-only group icons, only set the border color
       customBorderColor = groupIconHex;
     }
   }
@@ -254,13 +254,13 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
   // Style for the outer container that ReactFlow adds
   const groupStyle = {
     // Use custom styling if available
-    background: customBgColor,
+    backgroundColor: customBgColor,
     border: data.groupIcon 
       ? (selected ? `3px solid ${customBorderColor}` : `2px solid ${customBorderColor}`) 
       : (selected ? `2px dashed ${customBorderColor}` : `1px dashed ${customBorderColor}`),
     borderRadius: '8px',
     // Add padding for root node, minimal for others
-    padding: id === 'root' ? '20px' : '0px',
+    padding: id === 'root' ? '20px' : '8px',
     width: '100%',
     height: '100%',
     fontSize: '12px',
@@ -273,7 +273,7 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
     overflow: 'visible',
     // Add grey border specifically for GCP groups
     ...(cloudProvider === 'gcp' && {
-      border: selected ? '3px solid #adb5bd' : '2px solid #adb5bd'
+      border: selected ? `3px solid ${CANVAS_STYLES.nodes.group.border}` : `2px solid ${CANVAS_STYLES.nodes.group.border}`
     })
   };
 
@@ -425,8 +425,35 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
           </span>
         </div>
       )}
+
+      {/* Plus button to add a node */}
+      {selected && (
+        <button
+          style={{
+            position: 'absolute',
+            top: '-12px',
+            right: '-12px',
+            width: '24px',
+            height: '24px',
+            background: '#333',
+            color: 'white',
+            border: 'none',
+            borderRadius: '50%',
+            cursor: 'pointer',
+            fontSize: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10
+          }}
+          title="Add Node"
+          onClick={() => onAddNode(id)}
+        >
+          +
+        </button>
+      )}
     </div>
   );
 };
 
-export default GroupNode; 
+export default GroupNode;

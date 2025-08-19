@@ -7,7 +7,7 @@ export const CANVAS_STYLES = {
   // Edge styles
   edges: {
     default: {
-      stroke: '#999',
+      stroke: '#bbb',
       strokeWidth: 2,
       opacity: 1,
     },
@@ -30,6 +30,10 @@ export const CANVAS_STYLES = {
   nodes: {
     selected: {
       // Node selection styles can be added here
+    },
+    group: {
+      background: 'rgba(240, 240, 240, 0.5)',
+      border: '#adb5bd',
     },
   },
 

@@ -139,6 +139,14 @@ const vite = await createViteServer({
 app.use('/.well-known', (req, res) => {
   res.status(404).send('Not found');
 });
+
+// Serve precomputed embeddings JSON file with correct Content-Type
+app.get('/precomputed-icon-embeddings.json', (req, res) => {
+  const filePath = resolve(__dirname, '../public/precomputed-icon-embeddings.json');
+  res.setHeader('Content-Type', 'application/json');
+  res.sendFile(filePath);
+});
+
 app.use(vite.middlewares);
 
 // API route for token generation

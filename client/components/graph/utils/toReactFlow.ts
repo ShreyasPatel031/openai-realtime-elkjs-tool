@@ -2,6 +2,7 @@ import { Edge, MarkerType } from "reactflow";
 import { CustomNode } from "../../../types/graph";
 import { computeAbsolutePositions } from "./elk/absPositions";
 import { buildNodeEdgePoints } from "./edgePoints";
+import { CANVAS_STYLES } from "../styles/canvasStyles";
 
 interface NodeDimensions {
   width: number;
@@ -156,19 +157,17 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
             source: sourceNodeId, 
             target: targetNodeId,
             type: edge.sections?.[0]?.bendPoints?.length >= 2 ? "step" : "smoothstep",
-            zIndex: 1000,
+            zIndex: CANVAS_STYLES.zIndex.edges,
             sourceHandle: sourceHandle,
             targetHandle: targetHandle,
-            style: { 
-              strokeWidth: 2,
-              stroke: '#000',
-              opacity: 1,
-            },
+            selectable: true,
+            focusable: true,
+            style: CANVAS_STYLES.edges.default,
             markerEnd: {
               type: MarkerType.ArrowClosed,
-              width: 20,
-              height: 20,
-              color: '#555'
+              width: CANVAS_STYLES.edges.marker.width,
+              height: CANVAS_STYLES.edges.marker.height,
+              color: CANVAS_STYLES.edges.marker.color
             },
             /* put it in BOTH places so every consumer is happy */
             label: labelTxt,

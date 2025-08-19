@@ -78,36 +78,41 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
   const [fallbackAttempted, setFallbackAttempted] = useState(false);
   const apiEndpoint = useApiEndpoint();
   
+
+  
   useEffect(() => {
-    if (data.icon) {
-      setIconLoaded(false);
-      setIconError(false);
-      setFallbackAttempted(false);
+    // Reset states
+    setIconLoaded(false);
+    setIconError(false);
+    setFallbackAttempted(false);
+    
+    // Function to find which category an icon belongs to
+    const findIconCategory = (provider: string, iconName: string): string | null => {
+      const providerIcons = iconLists[provider as keyof typeof iconLists];
+      if (!providerIcons) return null;
       
-      // Function to find which category an icon belongs to
-      const findIconCategory = (provider: string, iconName: string): string | null => {
-        const providerIcons = iconLists[provider as keyof typeof iconLists];
-        if (!providerIcons) return null;
-        
-        for (const [category, icons] of Object.entries(providerIcons)) {
-          if (icons.includes(iconName)) {
-            return category;
-          }
+      for (const [category, icons] of Object.entries(providerIcons)) {
+        if (icons.includes(iconName)) {
+          return category;
         }
-        return null;
-      };
-      
-      // Function to try loading an icon
-      const tryLoadIcon = async (iconName: string) => {
+      }
+      return null;
+    };
+    
+    // Function to try loading an icon
+    const tryLoadIcon = async (iconName: string) => {
         // Check if icon has provider prefix (e.g., 'gcp_cloud_monitoring')
         const prefixMatch = iconName.match(/^(aws|gcp|azure)_(.+)$/);
+
         if (prefixMatch) {
           const [, provider, actualIconName] = prefixMatch;
           // Find the correct category for this icon
           const category = findIconCategory(provider, actualIconName);
+
           if (category) {
             const iconPath = `/icons/${provider}/${category}/${actualIconName}.png`;
             const fullIconUrl = buildAssetUrl(iconPath, apiEndpoint);
+
             try {
               const img = new Image();
               await new Promise((resolve, reject) => {
@@ -115,15 +120,20 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
                 img.onerror = reject;
                 img.src = fullIconUrl;
               });
+
               return fullIconUrl;
-            } catch {
+            } catch (error) {
+
               // Fall through to legacy paths
             }
+          } else {
+
           }
         }
         
         // Get the actual icon name (remove provider prefix if present)
         const actualIconName = prefixMatch ? prefixMatch[2] : iconName;
+
         
         // Try legacy paths for backward compatibility
         const legacyPaths = [
@@ -134,6 +144,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
         
         for (const legacyPath of legacyPaths) {
           const fullUrl = buildAssetUrl(legacyPath, apiEndpoint);
+          
           try {
             const img = new Image();
             await new Promise((resolve, reject) => {
@@ -141,87 +152,89 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
               img.onerror = reject;
               img.src = fullUrl;
             });
+            
             return fullUrl;
-          } catch {
+          } catch (error) {
+
             // Continue to next path
           }
         }
         
         throw new Error(`Icon not found: ${iconName}`);
       };
-      
-      // Try to load the icon
+    
+    if (data.icon) {
+      // Try to load the specified icon
       tryLoadIcon(data.icon)
         .then((path) => {
+          // Force re-render by batching state updates
           setFinalIconSrc(path);
           setIconLoaded(true);
+          setIconError(false); // Ensure no error state
           setFallbackAttempted(false);
         })
         .catch(() => {
-          console.warn(`Failed to load icon: ${data.icon}`);
+
           
-          // Try to find a fallback icon using AI embeddings (async without blocking render)
+          // Try AI search using precomputed embeddings
           if (!fallbackAttempted) {
             setFallbackAttempted(true);
-                              // console.log(`🤖 Attempting AI fallback for: ${data.icon}`);
+
             
-            // Run fallback search asynchronously without blocking
             iconFallbackService.findFallbackIcon(data.icon)
               .then(async (fallbackIcon) => {
-                if (fallbackIcon && fallbackIcon !== data.icon) {
+
+                if (fallbackIcon) {
                   try {
-                    // Try loading the fallback icon
                     const fallbackPath = await tryLoadIcon(fallbackIcon);
+
                     setFinalIconSrc(fallbackPath);
                     setIconLoaded(true);
                     return;
                   } catch (fallbackLoadError) {
-                    console.warn(`❌ Failed to load fallback icon: ${fallbackIcon}`, fallbackLoadError);
+
                   }
                 }
-                
-                // Try simple heuristic fallback when AI service is unavailable
-                const heuristicFallback = getHeuristicFallback(data.icon);
-                if (heuristicFallback) {
-                  try {
-                    const heuristicPath = await tryLoadIcon(heuristicFallback);
-                    setFinalIconSrc(heuristicPath);
-                    setIconLoaded(true);
-                    console.log(`✅ Using heuristic fallback: ${data.icon} → ${heuristicFallback}`);
-                    return;
-                  } catch (heuristicError) {
-                    console.warn(`❌ Heuristic fallback also failed for ${heuristicFallback}`);
-                  }
-                }
-                
-                // If no fallback found or fallback failed to load
+                // If AI search fails, show letter fallback
+
                 setIconError(true);
               })
-              .catch((fallbackError) => {
-                console.warn(`❌ Fallback search failed for ${data.icon}:`, fallbackError);
-                
-                // Try simple heuristic fallback when AI service fails
-                const heuristicFallback = getHeuristicFallback(data.icon);
-                if (heuristicFallback) {
-                  tryLoadIcon(heuristicFallback)
-                    .then((heuristicPath) => {
-                      setFinalIconSrc(heuristicPath);
-                      setIconLoaded(true);
-                      console.log(`✅ Using heuristic fallback after AI failure: ${data.icon} → ${heuristicFallback}`);
-                    })
-                    .catch(() => {
-                      setIconError(true);
-                    });
-                } else {
-                  setIconError(true);
-                }
+              .catch((searchError) => {
+
+                setIconError(true);
               });
           } else {
             setIconError(true);
           }
         });
+    } else {
+      // No icon specified - trigger AI search based on node ID/label
+      
+      // Use node ID as search term for AI fallback
+      iconFallbackService.findFallbackIcon(`gcp_${id}`)
+        .then(async (fallbackIcon) => {
+
+          if (fallbackIcon) {
+            try {
+              const fallbackPath = await tryLoadIcon(fallbackIcon);
+
+              setFinalIconSrc(fallbackPath);
+              setIconLoaded(true);
+              return;
+            } catch (fallbackLoadError) {
+
+            }
+          }
+          // If AI search fails, show letter fallback
+
+          setIconError(true);
+        })
+        .catch((searchError) => {
+
+          setIconError(true);
+        });
     }
-  }, [data.icon]);
+  }, [data.icon, id]);
   
   const nodeStyle = {
     background: selected ? '#f8f9fa' : 'white',
@@ -371,8 +384,13 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
           overflow: 'hidden'
         }}>
           {/* If we have an icon and no error loading it, show the image */}
+          {(() => {
+
+            return null;
+          })()}
           {finalIconSrc && !iconError && (
             <img
+              key={`${id}-${finalIconSrc}`} // Force re-render when finalIconSrc changes
               src={finalIconSrc}
               alt={data.label}
               style={{ 
@@ -380,8 +398,11 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected }) => {
                 height: '100%', 
                 objectFit: 'contain'
               }}
+              onLoad={() => {
+
+              }}
               onError={() => {
-                console.warn(`Failed to load icon: ${finalIconSrc}`);
+
                 setIconError(true);
               }}
             />

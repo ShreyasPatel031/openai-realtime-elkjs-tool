@@ -4,6 +4,7 @@ import { baseHandleStyle } from './graph/handles';
 import { getStyle } from './graph/styles';
 import { getGroupIconHex, allGroupIcons } from '../generated/groupIconColors';
 import { cn } from '../lib/utils';
+import { iconLists } from '../generated/iconLists';
 import { iconFallbackService } from '../utils/iconFallbackService';
 import { useApiEndpoint, buildAssetUrl } from '../contexts/ApiEndpointContext';
 
@@ -33,107 +34,143 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
   const [iconError, setIconError] = useState(false);
   const [finalIconSrc, setFinalIconSrc] = useState<string | undefined>(undefined);
   const [fallbackAttempted, setFallbackAttempted] = useState(false);
-  const apiEndpoint = useApiEndpoint();
-  
-  // Use the icon from the data if it exists
-  const iconName = data.icon || '';
+    const apiEndpoint = useApiEndpoint();
+
+  // Function to find which category an icon belongs to
+  const findIconCategory = (provider: string, iconName: string): string | null => {
+    const providerIcons = iconLists[provider as keyof typeof iconLists];
+    if (!providerIcons) return null;
+    
+    for (const [category, icons] of Object.entries(providerIcons)) {
+      if (icons.includes(iconName)) {
+        return category;
+      }
+    }
+    return null;
+  };
+
+  // Function to try loading an icon (same as CustomNode)
+  const tryLoadIcon = async (iconName: string) => {
+    // Check if icon has provider prefix (e.g., 'gcp_cloud_monitoring')
+    const prefixMatch = iconName.match(/^(aws|gcp|azure)_(.+)$/);
+
+    if (prefixMatch) {
+      const [, provider, actualIconName] = prefixMatch;
+      // Find the correct category for this icon
+      const category = findIconCategory(provider, actualIconName);
+
+      if (category) {
+        const iconPath = `/icons/${provider}/${category}/${actualIconName}.png`;
+        const fullIconUrl = buildAssetUrl(iconPath, apiEndpoint);
+
+        try {
+          const img = new Image();
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = fullIconUrl;
+          });
+
+          return fullIconUrl;
+        } catch (error) {
+          // Fall through to legacy paths
+        }
+      }
+    }
+    
+    // Get the actual icon name (remove provider prefix if present)
+    const actualIconName = prefixMatch ? prefixMatch[2] : iconName;
+    
+    // Try legacy paths for backward compatibility
+    const legacyPaths = [
+      `/assets/canvas/${actualIconName}.svg`,
+      `/assets/canvas/${actualIconName}.png`,
+      `/assets/canvas/${actualIconName}.jpeg`
+    ];
+    
+    for (const legacyPath of legacyPaths) {
+      const fullUrl = buildAssetUrl(legacyPath, apiEndpoint);
+      
+      try {
+        const img = new Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = fullUrl;
+        });
+        
+        return fullUrl;
+      } catch (error) {
+        // Continue to next path
+      }
+    }
+    
+    throw new Error(`Icon not found: ${iconName}`);
+  };
   
   useEffect(() => {
-    // Reset states when icon changes
+    // Reset states
+    setIconLoaded(false);
+    setIconError(false);
+    setFallbackAttempted(false);
+
     if (data.icon) {
-      setIconLoaded(false);
-      setIconError(false);
-      setFallbackAttempted(false);
-      
-      // Try loading SVG first
-      const svgSrc = `/assets/canvas/${data.icon}.svg`;
-      const fullSvgUrl = buildAssetUrl(svgSrc, apiEndpoint);
-      const imgSvg = new Image();
-      imgSvg.onload = () => {
-        setFinalIconSrc(fullSvgUrl);
-        setIconLoaded(true);
-      };
-      imgSvg.onerror = () => {
-        // Try PNG if SVG fails
-        const pngSrc = `/assets/canvas/${data.icon}.png`;
-        const fullPngUrl = buildAssetUrl(pngSrc, apiEndpoint);
-        const imgPng = new Image();
-        imgPng.onload = () => {
-          setFinalIconSrc(fullPngUrl);
+      // Try to load the specified icon
+      tryLoadIcon(data.icon)
+        .then((path) => {
+          setFinalIconSrc(path);
           setIconLoaded(true);
-        };
-        imgPng.onerror = () => {
-          // If both fail, try JPEG
-          const jpgSrc = `/assets/canvas/${data.icon}.jpeg`;
-          const imgJpg = new Image();
-          imgJpg.onload = () => {
-            setFinalIconSrc(jpgSrc);
-            setIconLoaded(true);
-          };
-          imgJpg.onerror = () => {
-            // Try AI fallback before giving up (async without blocking render)
-            if (!fallbackAttempted) {
-              setFallbackAttempted(true);
-                                    // console.log(`🤖 Attempting AI fallback for group icon: ${data.icon}`);
-              
-              // Run fallback search asynchronously without blocking
-              iconFallbackService.findFallbackIcon(data.icon)
-                .then((fallbackIcon) => {
-                  if (fallbackIcon && fallbackIcon !== data.icon) {
-                    // console.log(`🎯 AI suggested group fallback: ${data.icon} → ${fallbackIcon}`);
-                    
-                    // Try loading the fallback icon with all formats
-                    const tryFallback = (src: string) => new Promise<void>((resolve, reject) => {
-                      const img = new Image();
-                      img.onload = () => {
-                        setFinalIconSrc(src);
-                        setIconLoaded(true);
-                        resolve();
-                      };
-                      img.onerror = reject;
-                      img.src = src;
-                    });
-                    
-                    // Try SVG first, then PNG, then JPEG
-                    tryFallback(buildAssetUrl(`/assets/canvas/${fallbackIcon}.svg`, apiEndpoint))
-                      .then(() => {
-                        console.log(`✅ Successfully loaded fallback group icon: ${fallbackIcon}`);
-                      })
-                      .catch(() => {
-                        tryFallback(buildAssetUrl(`/assets/canvas/${fallbackIcon}.png`, apiEndpoint))
-                          .then(() => {
-                            console.log(`✅ Successfully loaded fallback group icon: ${fallbackIcon}`);
-                          })
-                          .catch(() => {
-                            tryFallback(buildAssetUrl(`/assets/canvas/${fallbackIcon}.jpeg`, apiEndpoint))
-                              .then(() => {
-                                console.log(`✅ Successfully loaded fallback group icon: ${fallbackIcon}`);
-                              })
-                              .catch(() => {
-                                // console.warn(`❌ All formats failed for fallback: ${fallbackIcon}`);
-                                setIconError(true);
-                              });
-                          });
-                      });
-                  } else {
-                    setIconError(true);
+          setIconError(false);
+          setFallbackAttempted(false);
+        })
+        .catch(() => {
+          // Try AI search using precomputed embeddings
+          if (!fallbackAttempted) {
+            setFallbackAttempted(true);
+            
+            iconFallbackService.findFallbackIcon(data.icon)
+              .then(async (fallbackIcon) => {
+                if (fallbackIcon) {
+                  try {
+                    const fallbackPath = await tryLoadIcon(fallbackIcon);
+                    setFinalIconSrc(fallbackPath);
+                    setIconLoaded(true);
+                    return;
+                  } catch (fallbackLoadError) {
+                    // Continue to letter fallback
                   }
-                })
-                .catch((fallbackError) => {
-                  console.warn(`❌ Group icon fallback search failed for ${data.icon}:`, fallbackError);
-                  setIconError(true);
-                });
-            } else {
-              setIconError(true);
+                }
+                setIconError(true);
+              })
+              .catch((searchError) => {
+                setIconError(true);
+              });
+          } else {
+            setIconError(true);
+          }
+        });
+    } else {
+      // No icon specified - trigger AI search based on node ID/label
+      iconFallbackService.findFallbackIcon(`gcp_${id}`)
+        .then(async (fallbackIcon) => {
+          if (fallbackIcon) {
+            try {
+              const fallbackPath = await tryLoadIcon(fallbackIcon);
+              setFinalIconSrc(fallbackPath);
+              setIconLoaded(true);
+              return;
+            } catch (fallbackLoadError) {
+              // Continue to letter fallback
             }
-          };
-          imgJpg.src = jpgSrc;
-        };
-        imgPng.src = fullPngUrl;
-      };
-              imgSvg.src = fullSvgUrl;
+          }
+          // If AI search fails, show letter fallback
+          setIconError(true);
+        })
+        .catch((searchError) => {
+          setIconError(true);
+        });
     }
-  }, [data.icon]);
+  }, [data.icon, id]);
 
   // Get group icon colors if specified
   const groupIconHex = data.groupIcon ? getGroupIconHex(data.groupIcon) : null;

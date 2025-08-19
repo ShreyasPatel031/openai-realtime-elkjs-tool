@@ -19,18 +19,25 @@ dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
 
 const envPath = path.join(__dirname, '..', '.env');
 
-// Simple .env file loader
+// Simple .env file loader with proper quote handling
 if (fs.existsSync(envPath)) {
   const envContent = fs.readFileSync(envPath, 'utf-8');
   envContent.split('\n').forEach(line => {
     if (line.trim() && !line.startsWith('#')) {
       const [key, ...valueParts] = line.split('=');
       if (key && valueParts.length > 0) {
-        process.env[key.trim()] = valueParts.join('=').trim();
+        let value = valueParts.join('=').trim();
+        // Remove surrounding quotes if present
+        if ((value.startsWith('"') && value.endsWith('"')) || 
+            (value.startsWith("'") && value.endsWith("'"))) {
+          value = value.slice(1, -1);
+        }
+        process.env[key.trim()] = value;
       }
     }
   });
   console.log('✅ Loaded .env file');
+  console.log('API Key loaded:', process.env.OPENAI_API_KEY ? `${process.env.OPENAI_API_KEY.substring(0, 10)}...` : 'NOT FOUND');
 } else {
   console.log('⚠️ No .env file found');
 }

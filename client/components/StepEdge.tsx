@@ -1,5 +1,6 @@
 import React from 'react';
 import { BaseEdge, EdgeLabelRenderer, EdgeProps } from 'reactflow';
+import { getEdgeStyle } from './graph/styles/canvasStyles';
 
 const StepEdge: React.FC<EdgeProps> = ({ 
   id, 
@@ -8,9 +9,10 @@ const StepEdge: React.FC<EdgeProps> = ({
   targetX, 
   targetY, 
   label,
-  data, 
+  data,
   style = {}, 
-  markerEnd 
+  markerEnd,
+  selected = false
 }) => {
   let edgePath = '';
   
@@ -83,8 +85,7 @@ const StepEdge: React.FC<EdgeProps> = ({
         path={edgePath}
         style={{
           ...style,
-          stroke: '#999',
-          strokeWidth: 1.5
+          ...getEdgeStyle(selected, false), // Use centralized styling
         }}
         markerEnd={markerEnd}
       />

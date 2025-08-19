@@ -50,6 +50,715 @@ const DevPanel: React.FC<DevPanelProps> = ({
   // Add state for SVG zoom
   const [svgZoom, setSvgZoom] = useState(1);
   
+  // Default architecture data
+  const defaultArchitecture = {
+    "id": "root",
+    "children": [
+      {
+        "id": "gcp_env",
+        "labels": [
+          {
+            "text": "Google Cloud Platform"
+          }
+        ],
+        "children": [
+          {
+            "id": "api_gateway",
+            "labels": [
+              {
+                "text": "api_gateway"
+              }
+            ],
+            "children": [
+              {
+                "id": "cloud_lb",
+                "labels": [
+                  {
+                    "text": "Cloud Load Balancing"
+                  }
+                ],
+                "children": [],
+                "edges": [],
+                "data": {}
+              },
+              {
+                "id": "edge_security",
+                "labels": [
+                  {
+                    "text": "edge_security"
+                  }
+                ],
+                "children": [
+                  {
+                    "id": "cloud_armor",
+                    "labels": [
+                      {
+                        "text": "Cloud Armor"
+                      }
+                    ],
+                    "children": [],
+                    "edges": [],
+                    "data": {}
+                  },
+                  {
+                    "id": "certificate_manager",
+                    "labels": [
+                      {
+                        "text": "Certificate Manager"
+                      }
+                    ],
+                    "children": [],
+                    "edges": [],
+                    "data": {}
+                  },
+                  {
+                    "id": "cloud_cdn",
+                    "labels": [
+                      {
+                        "text": "Cloud CDN"
+                      }
+                    ],
+                    "children": [],
+                    "edges": [],
+                    "data": {}
+                  }
+                ],
+                "edges": []
+              },
+              {
+                "id": "gateway_mgmt",
+                "labels": [
+                  {
+                    "text": "gateway_mgmt"
+                  }
+                ],
+                "children": [
+                  {
+                    "id": "cloud_dns",
+                    "labels": [
+                      {
+                        "text": "Cloud DNS"
+                      }
+                    ],
+                    "children": [],
+                    "edges": [],
+                    "data": {}
+                  },
+                  {
+                    "id": "gke_gateway_controller",
+                    "labels": [
+                      {
+                        "text": "GKE Gateway Controller"
+                      }
+                    ],
+                    "children": [],
+                    "edges": [],
+                    "data": {}
+                  },
+                  {
+                    "id": "k8s_gateway_api",
+                    "labels": [
+                      {
+                        "text": "Kubernetes Gateway API"
+                      }
+                    ],
+                    "children": [],
+                    "edges": [],
+                    "data": {}
+                  }
+                ],
+                "edges": []
+              }
+            ],
+            "edges": [
+              {
+                "id": "edge_dns_lb",
+                "labels": [
+                  {
+                    "text": "resolves"
+                  }
+                ]
+              },
+              {
+                "id": "edge_gkeconf_lb",
+                "labels": [
+                  {
+                    "text": "configures"
+                  }
+                ]
+              },
+              {
+                "id": "edge_armor_lb",
+                "labels": [
+                  {
+                    "text": "protects"
+                  }
+                ]
+              },
+              {
+                "id": "edge_cert_lb",
+                "labels": [
+                  {
+                    "text": "manages"
+                  }
+                ]
+              },
+              {
+                "id": "edge_cdn_lb",
+                "labels": [
+                  {
+                    "text": "caches"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "service_mesh",
+            "labels": [
+              {
+                "text": "service_mesh"
+              }
+            ],
+            "children": [
+              {
+                "id": "cluster1",
+                "labels": [
+                  {
+                    "text": "cluster1"
+                  }
+                ],
+                "children": [
+                  {
+                    "id": "cluster1_svc1",
+                    "labels": [
+                      {
+                        "text": "Service 1 (Cluster1)"
+                      }
+                    ],
+                    "children": [],
+                    "edges": [],
+                    "data": {}
+                  },
+                  {
+                    "id": "cluster1_svc2",
+                    "labels": [
+                      {
+                        "text": "Service 2 (Cluster1)"
+                      }
+                    ],
+                    "children": [],
+                    "edges": [],
+                    "data": {}
+                  }
+                ],
+                "edges": [
+                  {
+                    "id": "edge_svc1_c1_svc2_c1",
+                    "labels": [
+                      {
+                        "text": "calls"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "cluster2",
+                "labels": [
+                  {
+                    "text": "cluster2"
+                  }
+                ],
+                "children": [
+                  {
+                    "id": "cluster2_svc1",
+                    "labels": [
+                      {
+                        "text": "Service 1 (Cluster2)"
+                      }
+                    ],
+                    "children": [],
+                    "edges": [],
+                    "data": {}
+                  },
+                  {
+                    "id": "cluster2_svc2",
+                    "labels": [
+                      {
+                        "text": "Service 2 (Cluster2)"
+                      }
+                    ],
+                    "children": [],
+                    "edges": [],
+                    "data": {}
+                  }
+                ],
+                "edges": [
+                  {
+                    "id": "edge_svc1_c2_svc2_c2",
+                    "labels": [
+                      {
+                        "text": "calls"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "edges": [
+              {
+                "id": "edge_svc1_c1_svc1_c2",
+                "labels": [
+                  {
+                    "text": "syncs"
+                  }
+                ]
+              },
+              {
+                "id": "edge_svc1_c1_svc2_c2",
+                "labels": [
+                  {
+                    "text": "communicates"
+                  }
+                ]
+              },
+              {
+                "id": "edge_svc2_c2_svc1_c1",
+                "labels": [
+                  {
+                    "text": "communicates"
+                  }
+                ]
+              },
+              {
+                "id": "edge_svc1_c2_svc2_c1",
+                "labels": [
+                  {
+                    "text": "communicates"
+                  }
+                ]
+              },
+              {
+                "id": "edge_svc2_c1_svc2_c2",
+                "labels": [
+                  {
+                    "text": "syncs"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "api_and_identity",
+            "labels": [
+              {
+                "text": "api_and_identity"
+              }
+            ],
+            "children": [
+              {
+                "id": "api_gateway_svc",
+                "labels": [
+                  {
+                    "text": "API Gateway"
+                  }
+                ],
+                "children": [],
+                "edges": [],
+                "data": {}
+              },
+              {
+                "id": "idp",
+                "labels": [
+                  {
+                    "text": "Identity Platform"
+                  }
+                ],
+                "children": [],
+                "edges": [],
+                "data": {}
+              }
+            ],
+            "edges": [
+              {
+                "id": "e_idp_apigw",
+                "labels": [
+                  {
+                    "text": "authenticates"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "backend_services",
+            "labels": [
+              {
+                "text": "backend_services"
+              }
+            ],
+            "children": [
+              {
+                "id": "svc_api",
+                "labels": [
+                  {
+                    "text": "API Service"
+                  }
+                ],
+                "children": [],
+                "edges": [],
+                "data": {}
+              },
+              {
+                "id": "svc_auth",
+                "labels": [
+                  {
+                    "text": "Auth Service"
+                  }
+                ],
+                "children": [],
+                "edges": [],
+                "data": {}
+              },
+              {
+                "id": "svc_data",
+                "labels": [
+                  {
+                    "text": "Data Service"
+                  }
+                ],
+                "children": [],
+                "edges": [],
+                "data": {}
+              }
+            ],
+            "edges": [
+              {
+                "id": "e_api_auth",
+                "labels": [
+                  {
+                    "text": "validates"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "datastores",
+            "labels": [
+              {
+                "text": "datastores"
+              }
+            ],
+            "children": [
+              {
+                "id": "spanner_db",
+                "labels": [
+                  {
+                    "text": "Cloud Spanner"
+                  }
+                ],
+                "children": [],
+                "edges": [],
+                "data": {}
+              },
+              {
+                "id": "firestore_db",
+                "labels": [
+                  {
+                    "text": "Firestore"
+                  }
+                ],
+                "children": [],
+                "edges": [],
+                "data": {}
+              }
+            ],
+            "edges": []
+          },
+          {
+            "id": "messaging",
+            "labels": [
+              {
+                "text": "messaging"
+              }
+            ],
+            "children": [
+              {
+                "id": "pubsub_topic",
+                "labels": [
+                  {
+                    "text": "Pub/Sub Topic"
+                  }
+                ],
+                "children": [],
+                "edges": [],
+                "data": {}
+              },
+              {
+                "id": "dlq_topic",
+                "labels": [
+                  {
+                    "text": "DLQ Topic"
+                  }
+                ],
+                "children": [],
+                "edges": [],
+                "data": {}
+              }
+            ],
+            "edges": [
+              {
+                "id": "e_topic_dlq",
+                "labels": [
+                  {
+                    "text": "routes failures"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "observability",
+            "labels": [
+              {
+                "text": "observability"
+              }
+            ],
+            "children": [
+              {
+                "id": "cloud_monitoring",
+                "labels": [
+                  {
+                    "text": "Cloud Monitoring"
+                  }
+                ],
+                "children": [],
+                "edges": [],
+                "data": {}
+              },
+              {
+                "id": "cloud_logging",
+                "labels": [
+                  {
+                    "text": "Cloud Logging"
+                  }
+                ],
+                "children": [],
+                "edges": [],
+                "data": {}
+              },
+              {
+                "id": "cloud_trace",
+                "labels": [
+                  {
+                    "text": "Cloud Trace"
+                  }
+                ],
+                "children": [],
+                "edges": [],
+                "data": {}
+              }
+            ],
+            "edges": []
+          }
+        ],
+        "edges": [
+          {
+            "id": "edge_k8s_svc1_c1",
+            "labels": [
+              {
+                "text": "routes"
+              }
+            ]
+          },
+          {
+            "id": "edge_k8s_svc1_c2",
+            "labels": [
+              {
+                "text": "routes"
+              }
+            ]
+          },
+          {
+            "id": "e_lb_apigw",
+            "labels": [
+              {
+                "text": "forwards"
+              }
+            ]
+          },
+          {
+            "id": "e_apigw_api",
+            "labels": [
+              {
+                "text": "proxies"
+              }
+            ]
+          },
+          {
+            "id": "e_apigw_data",
+            "labels": [
+              {
+                "text": "proxies"
+              }
+            ]
+          },
+          {
+            "id": "e_backend_datastore",
+            "labels": [
+              {
+                "text": "reads/writes"
+              }
+            ]
+          },
+          {
+            "id": "e_data_firestore",
+            "labels": [
+              {
+                "text": "stores documents"
+              }
+            ]
+          },
+          {
+            "id": "e_data_publish",
+            "labels": [
+              {
+                "text": "publishes events"
+              }
+            ]
+          },
+          {
+            "id": "e_backend_logging",
+            "labels": [
+              {
+                "text": "writes logs"
+              }
+            ]
+          },
+          {
+            "id": "e_backend_monitoring",
+            "labels": [
+              {
+                "text": "exports metrics"
+              }
+            ]
+          },
+          {
+            "id": "e_backend_trace",
+            "labels": [
+              {
+                "text": "traces"
+              }
+            ]
+          }
+        ],
+        "data": {}
+      },
+      {
+        "id": "external_clients",
+        "labels": [
+          {
+            "text": "external_clients"
+          }
+        ],
+        "children": [
+          {
+            "id": "external_client",
+            "labels": [
+              {
+                "text": "External Client"
+              }
+            ],
+            "children": [],
+            "edges": [],
+            "data": {}
+          }
+        ],
+        "edges": []
+      },
+      {
+        "id": "gcp",
+        "labels": [
+          {
+            "text": "Google Cloud Platform"
+          }
+        ],
+        "children": [],
+        "edges": [],
+        "data": {}
+      },
+      {
+        "id": "users",
+        "labels": [
+          {
+            "text": "users"
+          }
+        ],
+        "children": [
+          {
+            "id": "users_web",
+            "labels": [
+              {
+                "text": "Web Users"
+              }
+            ],
+            "children": [],
+            "edges": [],
+            "data": {}
+          },
+          {
+            "id": "users_mobile",
+            "labels": [
+              {
+                "text": "Mobile Users"
+              }
+            ],
+            "children": [],
+            "edges": [],
+            "data": {}
+          }
+        ],
+        "edges": []
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge_client_lb",
+        "labels": [
+          {
+            "text": "requests"
+          }
+        ]
+      },
+      {
+        "id": "edge_external_to_lb",
+        "labels": [
+          {
+            "text": "HTTPS routes"
+          }
+        ]
+      },
+      {
+        "id": "e_users_cdn_web",
+        "labels": [
+          {
+            "text": "requests"
+          }
+        ]
+      },
+      {
+        "id": "e_users_cdn_mobile",
+        "labels": [
+          {
+            "text": "requests"
+          }
+        ]
+      }
+    ]
+  };
+  
   // Get all possible node IDs from the graph
   const nodeIds = React.useMemo(() => {
     const ids: string[] = ['root'];
@@ -380,6 +1089,12 @@ const DevPanel: React.FC<DevPanelProps> = ({
         handleGenerateSVG();
       }
     }
+  };
+
+  // Handle loading default architecture
+  const handleLoadDefaultArchitecture = () => {
+    console.log('Loading default architecture...');
+    onGraphChange(defaultArchitecture as ElkGraph);
   };
   
   // Helper function to find a node by ID
@@ -811,6 +1526,13 @@ const DevPanel: React.FC<DevPanelProps> = ({
             className="w-full px-3 py-1 bg-purple-600 text-white rounded text-sm"
           >
             {useReactFlow ? 'Switch to SVG View' : 'Switch to ReactFlow View'}
+          </button>
+          
+          <button
+            onClick={handleLoadDefaultArchitecture}
+            className="w-full px-3 py-1 bg-green-600 text-white rounded text-sm"
+          >
+            Load Default Architecture
           </button>
         </div>
       </div>

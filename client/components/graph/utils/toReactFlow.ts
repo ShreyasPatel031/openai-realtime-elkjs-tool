@@ -178,7 +178,6 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
             },
             selected: false,
             hidden: false,
-            focusable: true,
           });
         } else {
           // Keep essential edge skip warning for debugging

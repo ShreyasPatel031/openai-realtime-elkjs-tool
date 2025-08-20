@@ -1,0 +1,205 @@
+import React, { useState, useEffect } from 'react';
+import { auth } from '../../lib/firebase';
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, User, onAuthStateChanged, getIdToken } from 'firebase/auth';
+import { Save, LogOut } from 'lucide-react';
+
+interface SaveAuthProps {
+  onSave?: (user: User) => void;
+  className?: string;
+}
+
+const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "" }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  // Listen for auth state changes and redirect results
+  useEffect(() => {
+    if (auth) {
+      // Check for redirect result first
+      getRedirectResult(auth)
+        .then(async (result) => {
+          if (result && result.user) {
+            console.log('✅ User signed in via redirect:', result.user.email);
+            if (onSave) {
+              try {
+                console.log('🔄 Getting fresh auth token after redirect...');
+                await getIdToken(result.user, /* forceRefresh */ true);
+                console.log('✅ Fresh auth token obtained after redirect');
+                onSave(result.user);
+              } catch (tokenError) {
+                console.error('❌ Failed to get auth token after redirect:', tokenError);
+                // Still try to save in case token isn't the issue
+                onSave(result.user);
+              }
+            }
+          }
+        })
+        .catch((error) => {
+          console.error('❌ Error with redirect result:', error);
+        });
+
+      const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+        setUser(currentUser);
+      });
+      return () => unsubscribe();
+    }
+  }, [onSave]);
+
+  const handleGoogleSignIn = async () => {
+    if (!auth) {
+      console.log('🚫 Firebase authentication not available');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      
+      // Try popup first, fallback to redirect if CORP issues
+      try {
+        const result = await signInWithPopup(auth, provider);
+        console.log('✅ User signed in via popup:', result.user.email);
+        
+        // Wait for fresh auth token before triggering save
+        if (onSave && result.user) {
+          try {
+            console.log('🔄 Getting fresh auth token...');
+            await getIdToken(result.user, /* forceRefresh */ true);
+            console.log('✅ Fresh auth token obtained');
+            onSave(result.user);
+          } catch (tokenError) {
+            console.error('❌ Failed to get auth token:', tokenError);
+            // Still try to save in case token isn't the issue
+            onSave(result.user);
+          }
+        }
+      } catch (popupError: any) {
+        // If popup fails due to CORP or other issues, try redirect
+        if (popupError.code === 'auth/popup-blocked' || 
+            popupError.code === 'auth/popup-closed-by-user' ||
+            popupError.message?.includes('Cross-Origin-Opener-Policy')) {
+          console.log('🔄 Popup blocked, trying redirect...');
+          await signInWithRedirect(auth, provider);
+          // Note: redirect will cause page reload, so we handle result in useEffect
+        } else {
+          throw popupError;
+        }
+      }
+    } catch (error: any) {
+      console.error('❌ Error signing in with Google:', error);
+      // Handle specific error cases
+      if (error.code === 'auth/popup-closed-by-user') {
+        console.log('🚫 Sign-in popup was closed by user');
+      } else if (error.code === 'auth/popup-blocked') {
+        console.log('🚫 Sign-in popup was blocked by browser');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    if (!auth) return;
+    
+    try {
+      await signOut(auth);
+      console.log('✅ User signed out');
+      setShowDropdown(false);
+    } catch (error) {
+      console.error('❌ Error signing out:', error);
+    }
+  };
+
+  const handleSaveClick = () => {
+    if (user && onSave) {
+      onSave(user);
+    } else if (!user) {
+      handleGoogleSignIn();
+    }
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.save-auth-dropdown')) {
+        setShowDropdown(false);
+      }
+    };
+
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDropdown]);
+
+  return (
+    <div className={`relative save-auth-dropdown ${className}`}>
+      <button
+        onClick={user ? () => setShowDropdown(!showDropdown) : handleSaveClick}
+        disabled={isLoading}
+        className={`flex items-center justify-center w-10 h-10 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
+          user 
+            ? 'bg-green-500 text-white hover:bg-green-600' 
+            : 'bg-white text-gray-700 hover:bg-gray-50'
+        } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+        title={user ? `Save (${user.email})` : "Save - Sign in required"}
+      >
+        {isLoading ? (
+          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <Save className="w-4 h-4" />
+        )}
+      </button>
+
+      {/* Dropdown menu for authenticated user */}
+      {user && showDropdown && (
+        <div className="absolute top-12 right-0 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
+          <div className="p-4 border-b border-gray-100">
+            <div className="flex items-center space-x-3">
+              {user.photoURL && (
+                <img 
+                  src={user.photoURL} 
+                  alt="Profile" 
+                  className="w-8 h-8 rounded-full"
+                />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  {user.displayName || 'User'}
+                </p>
+                <p className="text-xs text-gray-500 truncate">
+                  {user.email}
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="p-2">
+            <button
+              onClick={handleSaveClick}
+              className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
+            >
+              <Save className="w-4 h-4" />
+              <span>Save Current Architecture</span>
+            </button>
+            
+            <button
+              onClick={handleSignOut}
+              className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sign Out</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SaveAuth;

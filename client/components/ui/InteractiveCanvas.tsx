@@ -30,13 +30,14 @@ import DevPanel from "../DevPanel"
 import StreamViewer from "../StreamViewer"
 
 import Chatbox from "./Chatbox"
-import ComingSoonCard from "../auth/ComingSoonCard"
 import { ApiEndpointProvider } from '../../contexts/ApiEndpointContext'
 import ProcessingStatusIcon from "../ProcessingStatusIcon"
 import { auth } from "../../lib/firebase"
 import { onAuthStateChanged, User } from "firebase/auth"
 import { Settings } from "lucide-react"
 import { DEFAULT_ARCHITECTURE as EXTERNAL_DEFAULT_ARCHITECTURE } from "../../data/defaultArchitecture"
+import SaveAuth from "../auth/SaveAuth"
+import ArchitectureService from "../../services/architectureService"
 
 // Relaxed typing to avoid prop mismatch across layers
 const ChatBox = Chatbox as React.ComponentType<any>
@@ -136,7 +137,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   
   // State for auth flow
   const [user, setUser] = useState<User | null>(null);
-  const [showComingSoon, setShowComingSoon] = useState(false);
   
   // State for selected nodes and edges (for delete functionality)
   const [selectedNodes, setSelectedNodes] = useState<Node[]>([]);
@@ -148,16 +148,15 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     if (auth) {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      // If user signs in, hide the sign-in modal and show the coming soon card
-      if (currentUser) {
-        setShowComingSoon(true);
-      }
+      // Just set the user, no need to show coming soon card
     });
     return () => unsubscribe();
     } else {
       console.log('🚫 Firebase auth not available - authentication disabled');
     }
   }, []);
+
+
 
   // Handler for the edit button click (unused)
   // const handleEditClick = async () => {
@@ -272,6 +271,78 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     handleLabelChange,
     
   } = useElkToReactflowGraphConverter(DEFAULT_ARCHITECTURE);
+
+  // Handler for save functionality
+  const handleSave = useCallback(async (user: User) => {
+    console.log('💾 Save triggered by user:', user.email);
+    
+    try {
+      // Validate that we have data to save
+      if (!user || !user.uid || !user.email) {
+        throw new Error('Invalid user data');
+      }
+
+      if (!nodes || !edges || !rawGraph) {
+        throw new Error('No architecture data to save');
+      }
+
+      // Generate a meaningful name for the architecture
+      const architectureName = ArchitectureService.generateArchitectureName(nodes, edges);
+      
+      // Prepare the architecture data for saving with validation
+      const architectureData = {
+        name: architectureName || 'Untitled Architecture',
+        description: `Architecture with ${nodes.length} components and ${edges.length} connections`,
+        rawGraph: rawGraph || {},
+        nodes: nodes || [],
+        edges: edges || [],
+        userId: user.uid,
+        userEmail: user.email,
+        isPublic: false, // Private by default
+        tags: [] // Could be enhanced to auto-generate tags based on content
+      };
+      
+      console.log('📊 Saving architecture data:', {
+        name: architectureData.name,
+        nodeCount: architectureData.nodes.length,
+        edgeCount: architectureData.edges.length,
+        userId: architectureData.userId,
+        hasRawGraph: !!architectureData.rawGraph
+      });
+      
+      // Log the data being sent for debugging
+      console.log('🔍 Raw architecture data before service call:', {
+        name: architectureData.name,
+        userId: architectureData.userId,
+        userEmail: architectureData.userEmail,
+        nodeCount: architectureData.nodes.length,
+        edgeCount: architectureData.edges.length,
+        rawGraphExists: !!architectureData.rawGraph,
+        firstNode: architectureData.nodes[0],
+        firstEdge: architectureData.edges[0]
+      });
+
+      // Save to Firestore
+      const savedId = await ArchitectureService.saveArchitecture(architectureData);
+      
+      // Show success feedback
+      alert(`✅ Architecture saved successfully!\n\nName: ${architectureData.name}\nID: ${savedId}\nNodes: ${architectureData.nodes.length}\nEdges: ${architectureData.edges.length}`);
+      
+    } catch (error) {
+      console.error('❌ Error saving architecture:', error);
+      let errorMessage = 'Failed to save architecture. Please try again.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Invalid user data')) {
+          errorMessage = 'Authentication error. Please sign in again.';
+        } else if (error.message.includes('No architecture data')) {
+          errorMessage = 'No architecture to save. Please create some components first.';
+        }
+      }
+      
+      alert(`❌ ${errorMessage}`);
+    }
+  }, [rawGraph, nodes, edges]);
 
   const handleAddNodeToGroup = useCallback((groupId: string) => {
     const nodeName = `new_node_${Date.now()}`;
@@ -985,16 +1056,16 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   return (
     <ApiEndpointProvider apiEndpoint={apiEndpoint}>
     <div className="w-full h-full flex flex-col overflow-hidden bg-white dark:bg-black">
-      {/* Auth Modals */}
-      {user && showComingSoon && <ComingSoonCard onClose={() => setShowComingSoon(false)} />}
+
 
       {/* ProcessingStatusIcon - moved to top-left */}
       <div className="absolute top-4 left-4 z-[101]">
         <ProcessingStatusIcon />
       </div>
 
-      {/* Settings button - top-right */}
-      <div className="absolute top-4 right-4 z-[100]">
+      {/* Save and Settings buttons - top-right */}
+      <div className="absolute top-4 right-4 z-[100] flex gap-2">
+        <SaveAuth onSave={handleSave} />
         <button
           onClick={() => setShowDev(!showDev)}
           className={`flex items-center justify-center w-10 h-10 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${

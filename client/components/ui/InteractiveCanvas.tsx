@@ -34,10 +34,12 @@ import { ApiEndpointProvider } from '../../contexts/ApiEndpointContext'
 import ProcessingStatusIcon from "../ProcessingStatusIcon"
 import { auth } from "../../lib/firebase"
 import { onAuthStateChanged, User } from "firebase/auth"
-import { Settings } from "lucide-react"
+import { Settings, PanelRightOpen, PanelRightClose } from "lucide-react"
 import { DEFAULT_ARCHITECTURE as EXTERNAL_DEFAULT_ARCHITECTURE } from "../../data/defaultArchitecture"
+import { SAVED_ARCHITECTURES } from "../../data/savedArchitectures"
 import SaveAuth from "../auth/SaveAuth"
 import ArchitectureService from "../../services/architectureService"
+import ArchitectureSidebar from "./ArchitectureSidebar"
 
 // Relaxed typing to avoid prop mismatch across layers
 const ChatBox = Chatbox as React.ComponentType<any>
@@ -131,6 +133,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 }) => {
   // State for DevPanel visibility
   const [showDev, setShowDev] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Architecture data from saved architectures
+  const [savedArchitectures, setSavedArchitectures] = useState<any[]>(
+    Object.values(SAVED_ARCHITECTURES).sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+  );
+  const [selectedArchitectureId, setSelectedArchitectureId] = useState<string>();
   
   // State for StreamViewer visibility
   // const [showStreamViewer, setShowStreamViewer] = useState(false);
@@ -343,6 +351,75 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       alert(`❌ ${errorMessage}`);
     }
   }, [rawGraph, nodes, edges]);
+
+  // Sidebar handlers
+  const handleNewArchitecture = useCallback(() => {
+    // Create a new architecture entry with blank canvas
+    const newArchId = `arch-${Date.now()}`;
+    const newArch = {
+      id: newArchId,
+      name: `New Architecture ${savedArchitectures.length + 1}`,
+      timestamp: new Date(),
+      rawGraph: {
+        id: "root",
+        children: [],
+        edges: []
+      }
+    };
+    
+    // Add to the top of the list (most recent first)
+    setSavedArchitectures(prev => [newArch, ...prev]);
+    setSelectedArchitectureId(newArchId);
+    
+    // Clear the canvas by setting empty graph
+    console.log('🆕 Creating new blank architecture:', newArch.name);
+    setRawGraph(newArch.rawGraph);
+    
+  }, [savedArchitectures.length, setRawGraph]);
+
+  const handleSelectArchitecture = useCallback((architectureId: string) => {
+    console.log('🔄 Selecting architecture:', architectureId);
+    setSelectedArchitectureId(architectureId);
+    
+    // Load the architecture data
+    const architecture = SAVED_ARCHITECTURES[architectureId] || 
+                         savedArchitectures.find(arch => arch.id === architectureId);
+    
+    if (architecture && architecture.rawGraph) {
+      console.log('📂 Loading architecture:', architecture.name);
+      setRawGraph(architecture.rawGraph);
+    } else {
+      console.warn('⚠️ Architecture not found:', architectureId);
+    }
+  }, [savedArchitectures, setRawGraph]);
+
+  // Handle canvas resize when sidebar state changes
+  useEffect(() => {
+    // Small delay to ensure sidebar animation has started
+    const timeoutId = setTimeout(() => {
+      if (reactFlowRef.current) {
+        // Force React Flow to recalculate its dimensions
+        window.dispatchEvent(new Event('resize'));
+        
+        // Then fit the view with animation
+        setTimeout(() => {
+          if (reactFlowRef.current) {
+            reactFlowRef.current.fitView({ 
+              padding: 0.1,
+              includeHiddenNodes: false,
+              duration: 300
+            });
+          }
+        }, 100);
+      }
+    }, 150);
+
+    return () => clearTimeout(timeoutId);
+  }, [sidebarCollapsed]);
+
+  const handleToggleSidebar = useCallback(() => {
+    setSidebarCollapsed(prev => !prev);
+  }, []);
 
   const handleAddNodeToGroup = useCallback((groupId: string) => {
     const nodeName = `new_node_${Date.now()}`;
@@ -1055,17 +1132,41 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   return (
     <ApiEndpointProvider apiEndpoint={apiEndpoint}>
-    <div className="w-full h-full flex flex-col overflow-hidden bg-white dark:bg-black">
+    <div className="w-full h-full flex overflow-hidden bg-white dark:bg-black">
+      
+      {/* Architecture Sidebar */}
+      <ArchitectureSidebar
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={handleToggleSidebar}
+        onNewArchitecture={handleNewArchitecture}
+        onSelectArchitecture={handleSelectArchitecture}
+        selectedArchitectureId={selectedArchitectureId}
+        architectures={savedArchitectures}
+      />
 
-
-      {/* ProcessingStatusIcon - moved to top-left */}
-      <div className="absolute top-4 left-4 z-[101]">
-        <ProcessingStatusIcon />
-      </div>
+      {/* Main Content Area */}
+      <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${sidebarCollapsed ? 'ml-0' : 'ml-0'}`}>
+        {/* ProcessingStatusIcon with sidebar toggle */}
+        <div className="absolute top-4 left-4 z-[101]">
+          {/* Atelier icon with hover overlay */}
+          <div className="relative group">
+            <ProcessingStatusIcon onClick={sidebarCollapsed ? handleToggleSidebar : undefined} />
+            {/* Hover overlay - show panel-right-close on hover when sidebar is CLOSED */}
+            {sidebarCollapsed && (
+              <button 
+                onClick={handleToggleSidebar}
+                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-200 shadow-lg"
+                title="Open Sidebar"
+              >
+                <PanelRightClose className="w-4 h-4 text-gray-700" />
+              </button>
+            )}
+          </div>
+        </div>
 
       {/* Save and Settings buttons - top-right */}
       <div className="absolute top-4 right-4 z-[100] flex gap-2">
-        <SaveAuth onSave={handleSave} />
+        <SaveAuth onSave={handleSave} isCollapsed={true} />
         <button
           onClick={() => setShowDev(!showDev)}
           className={`flex items-center justify-center w-10 h-10 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
@@ -1403,6 +1504,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             console.log("Reasoning trigger - now handled directly by process_user_requirements");
           }}
         />
+      </div>
       </div>
     </div>
     </ApiEndpointProvider>

@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../../lib/firebase';
 import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, User, onAuthStateChanged, getIdToken } from 'firebase/auth';
-import { Save, LogOut } from 'lucide-react';
+import { Save, LogOut, User as UserIcon } from 'lucide-react';
 
 interface SaveAuthProps {
   onSave?: (user: User) => void;
   className?: string;
+  isCollapsed?: boolean;
 }
 
-const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "" }) => {
+const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed = false }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -142,17 +143,33 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "" }) => {
       <button
         onClick={user ? () => setShowDropdown(!showDropdown) : handleSaveClick}
         disabled={isLoading}
-        className={`flex items-center justify-center w-10 h-10 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
-          user 
-            ? 'bg-green-500 text-white hover:bg-green-600' 
-            : 'bg-white text-gray-700 hover:bg-gray-50'
+        className={`flex items-center gap-3 rounded-lg shadow-lg border border-gray-200 hover:bg-gray-50 hover:shadow-md transition-all duration-200 ${
+          isCollapsed ? 'w-10 h-10 justify-center' : 'w-full px-4 py-3 justify-start'
+        } ${user 
+          ? 'bg-white text-gray-700' 
+          : 'bg-white text-gray-700'
         } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-        title={user ? `Save (${user.email})` : "Save - Sign in required"}
+        title={user ? `Profile (${user.email})` : "Sign in"}
       >
         {isLoading ? (
-          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin flex-shrink-0" />
+        ) : user ? (
+          user.photoURL ? (
+            <img 
+              src={user.photoURL} 
+              alt="Profile" 
+              className="w-4 h-4 rounded-full flex-shrink-0"
+            />
+          ) : (
+            <UserIcon className="w-4 h-4 flex-shrink-0" />
+          )
         ) : (
-          <Save className="w-4 h-4" />
+          <UserIcon className="w-4 h-4 flex-shrink-0" />
+        )}
+        {!isCollapsed && (
+          <span className="font-medium truncate">
+            {user ? user.displayName || user.email?.split('@')[0] || 'Profile' : 'Sign in'}
+          </span>
         )}
       </button>
 

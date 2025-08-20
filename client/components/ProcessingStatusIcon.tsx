@@ -3,7 +3,11 @@ import { Search, Code, Check } from 'lucide-react';
 
 type ProcessingState = 'idle' | 'search' | 'function-call' | 'complete';
 
-const ProcessingStatusIcon: React.FC = () => {
+interface ProcessingStatusIconProps {
+  onClick?: () => void;
+}
+
+const ProcessingStatusIcon: React.FC<ProcessingStatusIconProps> = ({ onClick }) => {
   const [state, setState] = useState<ProcessingState>('idle');
   const [isVisible, setIsVisible] = useState(true);
   const stateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -160,8 +164,9 @@ const ProcessingStatusIcon: React.FC = () => {
 
   return (
     <button
-      className="w-10 h-10 flex items-center justify-center rounded-lg shadow-lg border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:shadow-md transition-all duration-200 p-0 overflow-hidden"
-      title={getTitle()}
+      className="w-10 h-10 flex items-center justify-center rounded-lg shadow-lg border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:shadow-md transition-all duration-200 p-0 overflow-hidden cursor-pointer"
+      title={onClick ? "Toggle Sidebar" : getTitle()}
+      onClick={onClick}
     >
       {getIcon()}
     </button>

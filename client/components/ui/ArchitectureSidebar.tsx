@@ -137,41 +137,41 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
       <div className="flex flex-col h-full pt-[4.75rem]"> {/* pt-[4.75rem] for consistent spacing with Atelier */}
         {/* Icon Bar - Fixed Positions */}
         <div className="flex flex-col gap-3 px-4">
-          {/* New Architecture - Fixed Icon */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onNewArchitecture}
-              className="w-10 h-10 flex items-center justify-center rounded-lg shadow-lg border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:shadow-md transition-all duration-200 flex-shrink-0"
-              title="New Architecture"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+          {/* New Architecture - Extended Button */}
+          <button
+            onClick={onNewArchitecture}
+            className={`flex items-center gap-3 h-10 rounded-lg shadow-lg border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:shadow-md transition-all duration-200 ${
+              isCollapsed ? 'w-10 justify-center' : 'w-full px-3 justify-start'
+            }`}
+            title="New Architecture"
+          >
+            <Plus className="w-4 h-4 flex-shrink-0" />
             {!isCollapsed && (
-              <span className="font-medium text-gray-700">New Architecture</span>
+              <span className="font-medium text-gray-700 whitespace-nowrap">New Architecture</span>
             )}
-          </div>
+          </button>
 
-          {/* Search - Fixed Icon with Input */}
-          <div className="flex items-center gap-3">
+          {/* Search - Extended Button/Input */}
+          {isCollapsed ? (
             <button
-              onClick={isCollapsed ? onToggleCollapse : undefined}
-              className="w-10 h-10 flex items-center justify-center rounded-lg shadow-lg border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:shadow-md transition-all duration-200 flex-shrink-0"
+              onClick={onToggleCollapse}
+              className="w-10 h-10 flex items-center justify-center rounded-lg shadow-lg border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:shadow-md transition-all duration-200"
               title="Search Architectures"
             >
               <Search className="w-4 h-4" />
             </button>
-            {!isCollapsed && (
-              <div className="flex-1">
-                <input
-                  type="text"
-                  placeholder="Search architectures..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            )}
-          </div>
+          ) : (
+            <div className="relative flex items-center h-10">
+              <Search className="absolute left-3 w-4 h-4 text-gray-400 z-10" />
+              <input
+                type="text"
+                placeholder="Search architectures..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-10 pl-10 pr-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-lg hover:shadow-md transition-all duration-200"
+              />
+            </div>
+          )}
         </div>
 
         {/* Divider */}

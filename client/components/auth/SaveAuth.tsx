@@ -57,43 +57,29 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
     try {
       const provider = new GoogleAuthProvider();
       
-      // Try popup first, fallback to redirect if CORP issues
-      try {
-        const result = await signInWithPopup(auth, provider);
-        console.log('✅ User signed in via popup:', result.user.email);
-        
-        // Wait for fresh auth token before triggering save
-        if (onSave && result.user) {
-          try {
-            console.log('🔄 Getting fresh auth token...');
-            await getIdToken(result.user, /* forceRefresh */ true);
-            console.log('✅ Fresh auth token obtained');
-            onSave(result.user);
-          } catch (tokenError) {
-            console.error('❌ Failed to get auth token:', tokenError);
-            // Still try to save in case token isn't the issue
-            onSave(result.user);
-          }
-        }
-      } catch (popupError: any) {
-        // If popup fails due to CORP or other issues, try redirect
-        if (popupError.code === 'auth/popup-blocked' || 
-            popupError.code === 'auth/popup-closed-by-user' ||
-            popupError.message?.includes('Cross-Origin-Opener-Policy')) {
-          console.log('🔄 Popup blocked, trying redirect...');
-          await signInWithRedirect(auth, provider);
-          // Note: redirect will cause page reload, so we handle result in useEffect
-        } else {
-          throw popupError;
+      // Force popup mode to stay in same window
+      const result = await signInWithPopup(auth, provider);
+      console.log('✅ User signed in:', result.user.email);
+      
+      // Wait for fresh auth token before triggering save
+      if (onSave && result.user) {
+        try {
+          console.log('🔄 Getting fresh auth token...');
+          await getIdToken(result.user, /* forceRefresh */ true);
+          console.log('✅ Fresh auth token obtained');
+          onSave(result.user);
+        } catch (tokenError) {
+          console.error('❌ Failed to get auth token:', tokenError);
+          // Still try to save in case token isn't the issue
+          onSave(result.user);
         }
       }
     } catch (error: any) {
       console.error('❌ Error signing in with Google:', error);
-      // Handle specific error cases
       if (error.code === 'auth/popup-closed-by-user') {
-        console.log('🚫 Sign-in popup was closed by user');
+        console.log('🚫 Sign-in was cancelled by user');
       } else if (error.code === 'auth/popup-blocked') {
-        console.log('🚫 Sign-in popup was blocked by browser');
+        console.log('🚫 Sign-in popup was blocked by browser - please allow popups for this site');
       }
     } finally {
       setIsLoading(false);

@@ -8,7 +8,7 @@ import { cn } from "../../lib/utils"
 import { process_user_requirements } from "../graph/userRequirements"
 import type { ChatBoxProps } from "../../types/chat"
 
-const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit, isDisabled = false }) => {
+const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit, isDisabled = false, onProcessStart }) => {
   const [textInput, setTextInput] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -35,14 +35,26 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit, isDisabled = false }) => {
     setIsProcessing(true);
     
     try {
-
+      // Notify parent that processing is starting
+      if (onProcessStart) {
+        onProcessStart();
+      }
       
       // Store text input globally for reasoning agent
+      (window as any).originalChatTextInput = example; // Keep original for chat naming
       (window as any).chatTextInput = example;
       (window as any).selectedImages = [];
       
+      console.log('🚀 Chatbox: Processing example:', example);
+      console.log('🌍 Global state set:', {
+        originalChatTextInput: (window as any).originalChatTextInput,
+        chatTextInput: (window as any).chatTextInput,
+        selectedImages: (window as any).selectedImages
+      });
+      
       // Call process_user_requirements to trigger the architecture generation
       process_user_requirements();
+      console.log('✅ Chatbox: process_user_requirements called');
       
       // Clear the input after processing starts
       setTextInput("");
@@ -68,14 +80,26 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit, isDisabled = false }) => {
       setIsProcessing(true);
       
       try {
-
+        // Notify parent that processing is starting
+        if (onProcessStart) {
+          onProcessStart();
+        }
         
         // Store text input globally for reasoning agent
+        (window as any).originalChatTextInput = textInput.trim(); // Keep original for chat naming
         (window as any).chatTextInput = textInput.trim();
         (window as any).selectedImages = [];
         
+        console.log('🚀 Chatbox: Processing user input:', textInput.trim());
+        console.log('🌍 Global state set:', {
+          originalChatTextInput: (window as any).originalChatTextInput,
+          chatTextInput: (window as any).chatTextInput,
+          selectedImages: (window as any).selectedImages
+        });
+        
         // Call process_user_requirements to trigger the architecture generation
         process_user_requirements();
+        console.log('✅ Chatbox: process_user_requirements called');
         
         // Clear the input after processing starts
         setTextInput("");

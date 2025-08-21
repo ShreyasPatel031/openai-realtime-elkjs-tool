@@ -1,5 +1,7 @@
 import { handleFunctionCall } from "../realtime/handleFunctionCall";
 import { addNode, deleteNode, moveNode, addEdge, deleteEdge, groupNodes, removeGroup, batchUpdate } from "../utils/graph_helper_functions";
+import { dispatchElkGraph } from '../events/graphEvents';
+import { assertRawGraph } from '../events/graphSchema';
 
 export interface FunctionExecutorCallbacks {
   addLine: (line: string) => void;
@@ -104,6 +106,15 @@ export const executeFunctionCall = async (
           elkGraphRef.current = newGraph;
           // Store graph globally for architecture completion notification
           (window as any).currentElkGraph = newGraph;
+          
+          // Dispatch typed event to update canvas in real-time
+          const currentArchitectureId = (window as any).currentArchitectureId || 'new-architecture';
+          dispatchElkGraph({
+            elkGraph: assertRawGraph(newGraph, 'FunctionExecutor.setElkGraph'),
+            source: 'FunctionExecutor',
+            reason: 'agent-update',
+            targetArchitectureId: currentArchitectureId
+          });
         },
         mutations: {
           addNode,

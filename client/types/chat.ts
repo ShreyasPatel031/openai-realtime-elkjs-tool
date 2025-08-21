@@ -1,5 +1,6 @@
 export interface ChatBoxProps {
   onSubmit: (message: string) => void;
+  onProcessStart?: () => void;
   isSessionActive?: boolean;
   isConnecting?: boolean;
   isAgentReady?: boolean;

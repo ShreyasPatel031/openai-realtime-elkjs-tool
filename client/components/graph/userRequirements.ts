@@ -2,13 +2,16 @@ import { StreamExecutor } from "../../reasoning/StreamExecutor";
   import { addReasoningMessage, addFunctionCallingMessage, updateStreamingMessage, addProcessCompleteMessage, makeChatVisible } from "../../utils/chatUtils";
 
 export async function process_user_requirements() {
-
+    console.log('🚀 process_user_requirements: FUNCTION CALLED!');
     
     // Signal that processing has started for the status icon
     window.dispatchEvent(new CustomEvent('userRequirementsStart'));
     
+    console.log('📤 Dispatched userRequirementsStart event');
     addReasoningMessage("⚡ Processing your request...");
+    console.log('💬 Added reasoning message');
     makeChatVisible();
+    console.log('👁️ Made chat visible');
   
   // START PERFORMANCE TIMING
   const processStart = performance.now();
@@ -19,13 +22,15 @@ export async function process_user_requirements() {
   try {
     // Get the current text input
     const currentTextInput = (window as any).chatTextInput || '';
-
+    console.log('📝 Current text input from global state:', currentTextInput);
     
     // Handle empty input
     if (!currentTextInput.trim()) {
       console.warn('⚠️ No text input provided');
       return;
     }
+    
+    console.log('✅ Text input validation passed, proceeding with:', currentTextInput.trim());
     
     // Clear any previous conversation data to start fresh
     (window as any).chatConversationData = "";
@@ -164,7 +169,9 @@ ${currentTextInput}`;
 
     
     // Execute the stream
+    console.log('🎯 About to execute StreamExecutor...');
     await streamExecutor.execute();
+    console.log('✅ StreamExecutor execution completed');
     
 
     

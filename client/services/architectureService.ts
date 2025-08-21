@@ -23,6 +23,7 @@ export interface SavedArchitecture {
   timestamp: Timestamp;
   userId: string;
   userEmail: string;
+  userPrompt?: string;
   isPublic?: boolean;
   tags?: string[];
 }
@@ -92,7 +93,9 @@ export class ArchitectureService {
         // Metadata
         nodeCount: architectureData.nodes?.length || 0,
         edgeCount: architectureData.edges?.length || 0,
-        timestamp: Timestamp.now()
+        timestamp: Timestamp.now(),
+        createdAt: Timestamp.now(),
+        lastModified: Timestamp.now()
       };
       
       // Clean the data to remove undefined values and functions
@@ -112,16 +115,7 @@ export class ArchitectureService {
       
       console.log('✅ ELK Architecture saved to Firebase with ID:', docRef.id);
       
-      // Show success message
-      alert(`✅ Architecture saved successfully!
-
-🔥 Firebase ID: ${docRef.id}
-🏗️ Name: ${cleanedData.name}
-👤 User: ${cleanedData.userEmail}
-📊 ELK Data: ${cleanedData.nodeCount} nodes, ${cleanedData.edgeCount} edges
-💾 Size: ${JSON.stringify(cleanedData).length} characters
-
-Your complete architecture with ELK layout data has been saved!`);
+      // Success message now handled by toast notifications in InteractiveCanvas
       
       return docRef.id;
     } catch (error: any) {
@@ -176,6 +170,110 @@ Your complete architecture with ELK layout data has been saved!`);
     }
     
     return `${archType} - ${timestamp}`;
+  }
+
+  static async loadUserArchitectures(userId: string): Promise<SavedArchitecture[]> {
+    try {
+      console.log('🔄 Loading architectures for user:', userId);
+      
+      const q = query(
+        collection(db, this.COLLECTION_NAME),
+        where('userId', '==', userId),
+        orderBy('timestamp', 'desc'),
+        limit(20) // Limit to recent 20 architectures
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const architectures: SavedArchitecture[] = [];
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        architectures.push({
+          id: doc.id,
+          ...data,
+          timestamp: data.timestamp || Timestamp.now()
+        } as SavedArchitecture);
+      });
+      
+      console.log(`✅ Loaded ${architectures.length} architectures from Firebase`);
+      return architectures;
+    } catch (error) {
+      console.error('❌ Error loading user architectures:', error);
+      return [];
+    }
+  }
+
+  static async updateArchitecture(
+    architectureId: string, 
+    updates: Partial<SavedArchitecture>
+  ): Promise<void> {
+    try {
+      console.log('🔄 Updating architecture in Firebase:', architectureId);
+      
+      const docRef = doc(db, this.COLLECTION_NAME, architectureId);
+      
+      // Clean the update data
+      const cleanedUpdates = ArchitectureService.cleanFirestoreData({
+        ...updates,
+        timestamp: Timestamp.now(),
+        lastModified: Timestamp.now()
+      });
+      
+      await updateDoc(docRef, cleanedUpdates);
+      console.log('✅ Architecture updated in Firebase:', architectureId);
+    } catch (error) {
+      console.error('❌ Error updating architecture:', error);
+      throw error;
+    }
+  }
+
+  static async cleanupInvalidArchitectures(userId: string): Promise<void> {
+    try {
+      console.log('🧹 Cleaning up invalid architectures for user:', userId);
+      
+      const q = query(
+        collection(db, this.COLLECTION_NAME),
+        where('userId', '==', userId)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const deletePromises: Promise<void>[] = [];
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        
+        // Check if architecture is invalid (missing required fields)
+        const isInvalid = !data.name || !data.rawGraph || !data.userId;
+        
+        if (isInvalid) {
+          console.log('🗑️ Deleting invalid architecture:', doc.id, data);
+          deletePromises.push(deleteDoc(doc.ref));
+        }
+      });
+      
+      if (deletePromises.length > 0) {
+        await Promise.all(deletePromises);
+        console.log(`✅ Cleaned up ${deletePromises.length} invalid architectures`);
+      } else {
+        console.log('✅ No invalid architectures found');
+      }
+    } catch (error) {
+      console.error('❌ Error cleaning up architectures:', error);
+    }
+  }
+
+  static async deleteArchitecture(architectureId: string): Promise<void> {
+    try {
+      console.log('🗑️ Deleting architecture from Firebase:', architectureId);
+      
+      const docRef = doc(db, this.COLLECTION_NAME, architectureId);
+      await deleteDoc(docRef);
+      
+      console.log('✅ Architecture deleted from Firebase:', architectureId);
+    } catch (error) {
+      console.error('❌ Error deleting architecture:', error);
+      throw error;
+    }
   }
 }
 

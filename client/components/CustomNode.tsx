@@ -167,6 +167,12 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
         });
     } else {
       setIconError(true);
+      
+      // Skip icon fallback for root node
+      if (id === 'root') {
+        return;
+      }
+      
       setTimeout(() => {
         iconFallbackService.findFallbackIcon(`gcp_${id}`)
           .then(async (fallbackIcon) => {

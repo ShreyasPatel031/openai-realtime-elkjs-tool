@@ -158,6 +158,11 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
       // No icon specified - show letter fallback immediately, then try AI search asynchronously
       setIconError(true);
       
+      // Skip icon fallback for root node
+      if (id === 'root') {
+        return;
+      }
+      
       // Delay AI search to avoid flooding the API
       setTimeout(() => {
         iconFallbackService.findFallbackIcon(`gcp_${id}`)

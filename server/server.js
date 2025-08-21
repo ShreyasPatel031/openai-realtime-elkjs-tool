@@ -47,6 +47,59 @@ import streamHandler from '../api/stream.ts';
 import embedHandler from '../api/embed.ts';
 app.post("/api/stream", upload.array('images', 5), streamHandler);
 app.post("/api/embed", embedHandler);
+
+// Chat naming endpoint with GPT
+app.post("/api/generateChatName", async (req, res) => {
+  try {
+    const { architecture, userPrompt, nodeCount, edgeCount } = req.body;
+    
+    // Use OpenAI to generate intelligent names
+    const OpenAI = (await import('openai')).default;
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    
+    let chatName = 'New Architecture';
+    
+    if (userPrompt) {
+      try {
+        const completion = await openai.chat.completions.create({
+          model: "gpt-3.5-turbo",
+          messages: [
+            { 
+              role: "system", 
+              content: "You are an expert at creating concise, professional names for cloud architecture projects. Generate 2-4 word names that capture the essence of the architecture. Focus on the main technology stack, pattern, or use case. Examples: 'Microservices Platform', 'Data Pipeline', 'Serverless API', 'Multi-Cloud Setup'."
+            },
+            { 
+              role: "user", 
+              content: `Create a professional name for this architecture: "${userPrompt}". The architecture has ${nodeCount} components and ${edgeCount} connections.`
+            }
+          ],
+          max_tokens: 15,
+          temperature: 0.7,
+        });
+
+        const generatedName = completion.choices[0].message.content?.trim();
+        if (generatedName) {
+          // Remove quotes from OpenAI response
+          chatName = generatedName.replace(/^["']|["']$/g, '');
+        }
+      } catch (openaiError) {
+        console.warn('OpenAI naming failed, using fallback:', openaiError.message);
+        // Simple fallback
+        if (userPrompt.toLowerCase().includes('microservice')) chatName = 'Microservices Platform';
+        else if (userPrompt.toLowerCase().includes('web')) chatName = 'Web Application';
+        else if (userPrompt.toLowerCase().includes('data')) chatName = 'Data Pipeline';
+        else chatName = 'Cloud Architecture';
+      }
+    }
+    
+    console.log(`🆕 Generated chat name: "${chatName}" for prompt: "${userPrompt}"`);
+    res.json({ name: chatName });
+    
+  } catch (error) {
+    console.error('❌ Error generating chat name:', error);
+    res.status(500).json({ error: 'Failed to generate chat name', name: 'New Architecture' });
+  }
+});
 app.post("/api/questionnaire", async (req, res) => {
   try {
     console.log("Received questionnaire request:", req.body);

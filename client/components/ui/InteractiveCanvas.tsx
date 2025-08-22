@@ -281,11 +281,22 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
     if (confirm(`Are you sure you want to delete "${architecture.name}"? This action cannot be undone.`)) {
       try {
-        // Delete from Firebase if it exists there
-        if (architecture.isFromFirebase && user?.uid) {
+        // Always attempt to delete from Firebase if user is signed in
+        if (user?.uid) {
           const firebaseId = architecture.firebaseId || architecture.id;
-          await ArchitectureService.deleteArchitecture(firebaseId);
-          console.log('✅ Architecture deleted from Firebase:', firebaseId);
+          console.log('🗑️ Attempting to delete from Firebase:', firebaseId);
+          
+          try {
+            await ArchitectureService.deleteArchitecture(firebaseId);
+            console.log('✅ Architecture deleted from Firebase:', firebaseId);
+          } catch (firebaseError: any) {
+            if (firebaseError.code === 'not-found' || firebaseError.message?.includes('NOT_FOUND')) {
+              console.log('ℹ️ Architecture was not in Firebase, only removing locally');
+            } else {
+              console.error('❌ Failed to delete from Firebase:', firebaseError);
+              // Don't block local deletion if Firebase fails
+            }
+          }
         }
 
         // Remove from local state
@@ -299,6 +310,15 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         }
 
         console.log('✅ Architecture deleted locally and from Firebase');
+        
+        // Force a Firebase sync to ensure the deletion is reflected
+        if (user?.uid) {
+          console.log('🔄 Forcing Firebase sync after deletion...');
+          setTimeout(() => {
+            syncWithFirebase(user.uid);
+          }, 1000); // Small delay to ensure deletion has propagated
+        }
+        
       } catch (error) {
         console.error('❌ Error deleting architecture:', error);
         alert(`Failed to delete architecture: ${error instanceof Error ? error.message : 'Unknown error'}`);

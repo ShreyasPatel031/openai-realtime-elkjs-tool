@@ -268,6 +268,20 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     return architectureOperations[architectureId] || false;
   }, [architectureOperations]);
   
+  // Helper function to ensure unique architecture names
+  const ensureUniqueName = useCallback((baseName: string, existingArchitectures: any[]) => {
+    const existingNames = existingArchitectures.map(arch => arch.name.toLowerCase());
+    let uniqueName = baseName;
+    let counter = 1;
+    
+    while (existingNames.includes(uniqueName.toLowerCase())) {
+      uniqueName = `${baseName} (${counter})`;
+      counter++;
+    }
+    
+    return uniqueName;
+  }, []);
+  
   // State for selected nodes and edges (for delete functionality)
   const [selectedNodes, setSelectedNodes] = useState<Node[]>([]);
   const [selectedEdges, setSelectedEdges] = useState<Edge[]>([]);
@@ -367,17 +381,26 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
     const newName = prompt('Enter new name for the architecture:', architecture.name);
     if (newName && newName.trim() && newName !== architecture.name) {
+      // Ensure the new name is unique
+      const otherArchitectures = savedArchitectures.filter(arch => arch.id !== architectureId);
+      const uniqueName = ensureUniqueName(newName.trim(), otherArchitectures);
+      
+      if (uniqueName !== newName.trim()) {
+        const proceed = confirm(`The name "${newName.trim()}" already exists. Use "${uniqueName}" instead?`);
+        if (!proceed) return;
+      }
+      
       // Update locally
       setSavedArchitectures(prev => prev.map(arch => 
         arch.id === architectureId 
-          ? { ...arch, name: newName.trim() }
+          ? { ...arch, name: uniqueName }
           : arch
       ));
 
       // Update in Firebase if it exists there
       if (architecture.isFromFirebase && user?.uid) {
         const firebaseId = architecture.firebaseId || architecture.id;
-        ArchitectureService.updateArchitecture(firebaseId, { name: newName.trim() })
+        ArchitectureService.updateArchitecture(firebaseId, { name: uniqueName })
           .then(() => console.log('✅ Architecture name updated in Firebase'))
           .catch(error => console.error('❌ Error updating name in Firebase:', error));
       }
@@ -1158,8 +1181,15 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           if (isFirstOperation) {
             // Rename "New Architecture" tab to AI-generated name
             const userPrompt = (window as any).originalChatTextInput || (window as any).chatTextInput || '';
-            const newChatName = await generateChatName(userPrompt, elkGraph);
+            const baseChatName = await generateChatName(userPrompt, elkGraph);
+            
+            // Ensure the name is unique by checking against existing architectures
+            const newChatName = ensureUniqueName(baseChatName, savedArchitectures);
+            
             console.log('🆕 Renaming "New Architecture" to:', newChatName, 'from prompt:', userPrompt);
+            if (newChatName !== baseChatName) {
+              console.log('🔄 Name collision detected, using unique name:', newChatName);
+            }
             
             // Update the "New Architecture" tab in place
             setSavedArchitectures(prev => prev.map(arch => 

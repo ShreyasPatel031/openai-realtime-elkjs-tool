@@ -740,12 +740,59 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       console.log('🔄 Updating Firebase for manual graph change...');
       try {
         const architecture = savedArchitectures.find(arch => arch.id === selectedArchitectureId);
-        if (architecture && architecture.isFromFirebase) {
+        console.log('🔍 Found architecture for update:', { 
+          id: architecture?.id, 
+          isFromFirebase: architecture?.isFromFirebase,
+          hasFirebaseId: !!architecture?.firebaseId 
+        });
+        
+        if (architecture) {
+          // Try to update in Firebase if this architecture exists there
           const firebaseId = architecture.firebaseId || architecture.id;
-          await ArchitectureService.updateArchitecture(firebaseId, {
-            rawGraph: newGraph
-          });
-          console.log('✅ Firebase updated for manual graph change');
+          console.log('🔄 Attempting Firebase update with ID:', firebaseId);
+          
+          try {
+            await ArchitectureService.updateArchitecture(firebaseId, {
+              rawGraph: newGraph
+            });
+            console.log('✅ Firebase updated for manual graph change');
+            
+            // Mark as from Firebase if update was successful
+            if (!architecture.isFromFirebase) {
+              setSavedArchitectures(prev => prev.map(arch => 
+                arch.id === selectedArchitectureId 
+                  ? { ...arch, isFromFirebase: true, firebaseId }
+                  : arch
+              ));
+            }
+          } catch (error: any) {
+            if (error.code === 'not-found' || error.message?.includes('NOT_FOUND')) {
+              console.log('📝 Architecture not in Firebase, creating new document...');
+              try {
+                const newDocId = await ArchitectureService.saveArchitecture({
+                  name: architecture.name,
+                  userId: user.uid,
+                  userEmail: user.email || '',
+                  rawGraph: newGraph,
+                  userPrompt: architecture.userPrompt || ''
+                });
+                console.log('✅ New Firebase document created:', newDocId);
+                
+                // Update local state with Firebase ID
+                setSavedArchitectures(prev => prev.map(arch => 
+                  arch.id === selectedArchitectureId 
+                    ? { ...arch, firebaseId: newDocId, isFromFirebase: true }
+                    : arch
+                ));
+              } catch (saveError) {
+                console.error('❌ Failed to create new Firebase document:', saveError);
+              }
+            } else {
+              throw error; // Re-throw if it's not a "not found" error
+            }
+          }
+        } else {
+          console.log('⚠️ Architecture not found for Firebase update');
         }
       } catch (error) {
         console.error('❌ Error updating Firebase for manual graph change:', error);
@@ -921,6 +968,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           });
           
           // Apply the final updated graph using the proper handler
+          console.log('🗑️ Applying graph changes after deletion:', {
+            selectedArchitectureId,
+            deletedNodes: selectedNodes.map(n => n.id),
+            deletedEdges: selectedEdges.map(e => e.id),
+            newGraphNodeCount: updatedGraph?.children?.length || 0
+          });
           handleGraphChange(updatedGraph);
           // Clear selection after deletion
           setSelectedNodes([]);

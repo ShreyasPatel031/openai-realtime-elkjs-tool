@@ -140,15 +140,26 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
         {isLoading ? (
           <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin flex-shrink-0" />
         ) : user ? (
-          user.photoURL ? (
-            <img 
-              src={user.photoURL} 
-              alt="Profile" 
-              className="w-4 h-4 rounded-full flex-shrink-0"
-            />
-          ) : (
-            <UserIcon className="w-4 h-4 flex-shrink-0" />
-          )
+          <div className="relative w-4 h-4">
+            {user.photoURL ? (
+              <>
+                <img 
+                  src={user.photoURL} 
+                  alt="Profile" 
+                  className="w-4 h-4 rounded-full flex-shrink-0"
+                  onError={(e) => {
+                    console.warn('Failed to load profile image, falling back to icon');
+                    e.currentTarget.style.display = 'none';
+                    const fallback = e.currentTarget.parentElement?.querySelector('.fallback-icon');
+                    if (fallback) fallback.classList.remove('hidden');
+                  }}
+                />
+                <UserIcon className="fallback-icon w-4 h-4 flex-shrink-0 hidden" />
+              </>
+            ) : (
+              <UserIcon className="w-4 h-4 flex-shrink-0" />
+            )}
+          </div>
         ) : (
           <UserIcon className="w-4 h-4 flex-shrink-0" />
         )}
@@ -164,13 +175,26 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
         <div className="absolute top-12 right-0 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
           <div className="p-4 border-b border-gray-100">
             <div className="flex items-center space-x-3">
-              {user.photoURL && (
-                <img 
-                  src={user.photoURL} 
-                  alt="Profile" 
-                  className="w-8 h-8 rounded-full"
-                />
-              )}
+              <div className="relative w-8 h-8">
+                {user.photoURL ? (
+                  <>
+                    <img 
+                      src={user.photoURL} 
+                      alt="Profile" 
+                      className="w-8 h-8 rounded-full"
+                      onError={(e) => {
+                        console.warn('Failed to load dropdown profile image, falling back to icon');
+                        e.currentTarget.style.display = 'none';
+                        const fallback = e.currentTarget.parentElement?.querySelector('.fallback-icon');
+                        if (fallback) fallback.classList.remove('hidden');
+                      }}
+                    />
+                    <UserIcon className="fallback-icon w-8 h-8 text-gray-400 hidden" />
+                  </>
+                ) : (
+                  <UserIcon className="w-8 h-8 text-gray-400" />
+                )}
+              </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
                   {user.displayName || 'User'}

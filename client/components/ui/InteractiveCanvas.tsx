@@ -153,6 +153,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   });
   const [selectedArchitectureId, setSelectedArchitectureId] = useState<string>('new-architecture');
   
+  // Initialize global architecture ID for agent targeting
+  useEffect(() => {
+    (window as any).currentArchitectureId = selectedArchitectureId;
+    console.log('🎯 Initialized agent target architecture ID to:', selectedArchitectureId);
+  }, [selectedArchitectureId]);
+  
   // State for auth flow
   const [user, setUser] = useState<User | null>(null);
 
@@ -698,6 +704,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     console.log('🔄 Selecting architecture:', architectureId);
     setSelectedArchitectureId(architectureId);
     
+    // CRITICAL: Update the global architecture ID for the agent
+    (window as any).currentArchitectureId = architectureId;
+    console.log('🎯 Updated agent target architecture ID to:', architectureId);
+    
     // Load the architecture data
     const architecture = SAVED_ARCHITECTURES[architectureId] || 
                          savedArchitectures.find(arch => arch.id === architectureId);
@@ -1179,6 +1189,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                     : arch
                 ));
                 setSelectedArchitectureId(docId);
+                
+                // CRITICAL: Update the global architecture ID for the agent
+                (window as any).currentArchitectureId = docId;
+                console.log('🎯 Updated agent target architecture ID to:', docId);
                 
                 console.log('✅ New architecture saved to Firebase:', newChatName);
               } catch (firebaseError) {

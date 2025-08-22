@@ -217,6 +217,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         console.log(`✅ Loaded ${validArchs.length} valid architectures from Firebase`);
         console.log(`📊 Total architectures: ${allArchs.length} (${validArchs.length} Firebase + ${mockArchs.length} mock)`);
         
+        // DEBUG: Log current tab order
+        console.log('🔍 Current tab order:', allArchs.map((arch, index) => `${index + 1}. ${arch.name} (${arch.id})`));
+        
         // If current selection is invalid, reset to "New Architecture"
         if (selectedArchitectureId && !allArchs.some(arch => arch.id === selectedArchitectureId)) {
           console.warn(`⚠️ Selected architecture ${selectedArchitectureId} not found, resetting to New Architecture`);
@@ -228,10 +231,18 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     }
   }, [selectedArchitectureId]);
 
+  // Track when we just created an architecture to prevent immediate re-sync
+  const [justCreatedArchId, setJustCreatedArchId] = useState<string | null>(null);
+
   // Sync Firebase architectures when user changes
   useEffect(() => {
     if (user?.uid) {
-      syncWithFirebase(user.uid);
+      // Don't sync immediately after creating an architecture
+      if (!justCreatedArchId) {
+        syncWithFirebase(user.uid);
+      } else {
+        console.log('🚫 Skipping Firebase sync - just created architecture:', justCreatedArchId);
+      }
     } else {
       // User signed out - reset to clean state
       const newArchTab = {
@@ -245,7 +256,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       setSavedArchitectures([newArchTab, ...mockArchs]);
       setSelectedArchitectureId('new-architecture');
     }
-  }, [user, syncWithFirebase]);
+  }, [user, syncWithFirebase, justCreatedArchId]);
   
   // State for StreamViewer visibility
   // const [showStreamViewer, setShowStreamViewer] = useState(false);
@@ -731,9 +742,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     (window as any).currentArchitectureId = architectureId;
     console.log('🎯 Updated agent target architecture ID to:', architectureId);
     
-    // Load the architecture data
-    const architecture = SAVED_ARCHITECTURES[architectureId] || 
-                         savedArchitectures.find(arch => arch.id === architectureId);
+    // Load the architecture data (prioritize dynamic savedArchitectures over static mock data)
+    const architecture = savedArchitectures.find(arch => arch.id === architectureId) ||
+                         SAVED_ARCHITECTURES[architectureId];
     
     if (architecture && architecture.rawGraph) {
       console.log('📂 Loading architecture:', architecture.name);
@@ -1148,8 +1159,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         });
       }
       
-      // Always update the architecture data in savedArchitectures for background tabs
-      if (targetArchitectureId && targetArchitectureId !== 'new-architecture') {
+      // Always update the architecture data in savedArchitectures for all tabs (including new-architecture)
+      if (targetArchitectureId) {
         setSavedArchitectures(prev => prev.map(arch => 
           arch.id === targetArchitectureId 
             ? { ...arch, rawGraph: elkGraph, lastModified: new Date() }
@@ -1212,17 +1223,50 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                   userPrompt: userPrompt
                 });
                 
-                // Update the tab with Firebase ID for future updates
-                setSavedArchitectures(prev => prev.map(arch => 
-                  arch.id === 'new-architecture' 
-                    ? { ...arch, id: docId, firebaseId: docId }
-                    : arch
-                ));
+                // Update the tab with Firebase ID and move to top of list
+                setSavedArchitectures(prev => {
+                  console.log('🔍 Before reordering - savedArchitectures:', prev.map((arch, index) => `${index + 1}. ${arch.name} (${arch.id})`));
+                  
+                  const updatedArchs = prev.map(arch => 
+                    arch.id === 'new-architecture' 
+                      ? { ...arch, id: docId, firebaseId: docId, timestamp: new Date(), createdAt: new Date(), lastModified: new Date() }
+                      : arch
+                  );
+                  
+                  // Move the newly created architecture to the top (after "New Architecture")
+                  const newArchTab = updatedArchs.find(arch => arch.id === 'new-architecture');
+                  const newArch = updatedArchs.find(arch => arch.id === docId);
+                  const otherArchs = updatedArchs.filter(arch => arch.id !== docId && arch.id !== 'new-architecture');
+                  
+                  const reordered = newArchTab && newArch ? [newArchTab, newArch, ...otherArchs] : updatedArchs;
+                  console.log('🔍 After reordering - savedArchitectures:', reordered.map((arch, index) => `${index + 1}. ${arch.name} (${arch.id})`));
+                  
+                  return reordered;
+                });
                 setSelectedArchitectureId(docId);
                 
                 // CRITICAL: Update the global architecture ID for the agent
                 (window as any).currentArchitectureId = docId;
                 console.log('🎯 Updated agent target architecture ID to:', docId);
+                
+                // Transfer operation state from 'new-architecture' to new Firebase ID
+                const isOperationRunning = architectureOperations['new-architecture'];
+                if (isOperationRunning) {
+                  setArchitectureOperations(prev => {
+                    const updated = { ...prev };
+                    updated[docId] = true;
+                    delete updated['new-architecture'];
+                    return updated;
+                  });
+                  console.log('🔄 Transferred operation state to new architecture ID:', docId);
+                }
+                
+                // Prevent Firebase sync from reordering for a few seconds
+                setJustCreatedArchId(docId);
+                setTimeout(() => {
+                  setJustCreatedArchId(null);
+                  console.log('🔄 Re-enabling Firebase sync after architecture creation');
+                }, 3000); // 3 seconds should be enough
                 
                 console.log('✅ New architecture saved to Firebase:', newChatName);
               } catch (firebaseError) {

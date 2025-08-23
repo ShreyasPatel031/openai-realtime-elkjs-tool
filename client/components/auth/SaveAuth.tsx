@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../../lib/firebase';
-import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, User, onAuthStateChanged, getIdToken } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signOut, User, onAuthStateChanged, getIdToken } from 'firebase/auth';
 import { Save, LogOut, User as UserIcon } from 'lucide-react';
 
 interface SaveAuthProps {
@@ -14,32 +14,9 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
   const [isLoading, setIsLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  // Listen for auth state changes and redirect results
+  // Listen for auth state changes
   useEffect(() => {
     if (auth) {
-      // Check for redirect result first
-      getRedirectResult(auth)
-        .then(async (result) => {
-          if (result && result.user) {
-            console.log('✅ User signed in via redirect:', result.user.email);
-            if (onSave) {
-              try {
-                console.log('🔄 Getting fresh auth token after redirect...');
-                await getIdToken(result.user, /* forceRefresh */ true);
-                console.log('✅ Fresh auth token obtained after redirect');
-                onSave(result.user);
-              } catch (tokenError) {
-                console.error('❌ Failed to get auth token after redirect:', tokenError);
-                // Still try to save in case token isn't the issue
-                onSave(result.user);
-              }
-            }
-          }
-        })
-        .catch((error) => {
-          console.error('❌ Error with redirect result:', error);
-        });
-
       const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
         setUser(currentUser);
       });
@@ -57,9 +34,14 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
     try {
       const provider = new GoogleAuthProvider();
       
-      // Force popup mode to stay in same window
+      // Configure provider to ensure popup behavior
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
+      
+      console.log('🔄 Attempting sign-in with popup (same tab)...');
       const result = await signInWithPopup(auth, provider);
-      console.log('✅ User signed in:', result.user.email);
+      console.log('✅ User signed in via popup:', result.user.email);
       
       // Wait for fresh auth token before triggering save
       if (onSave && result.user) {
@@ -79,7 +61,13 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
       if (error.code === 'auth/popup-closed-by-user') {
         console.log('🚫 Sign-in was cancelled by user');
       } else if (error.code === 'auth/popup-blocked') {
-        console.log('🚫 Sign-in popup was blocked by browser - please allow popups for this site');
+        console.log('🚫 Sign-in popup was blocked by browser');
+        console.log('💡 Please allow popups for this site and try again');
+        alert('Please allow popups for this site and try signing in again. The sign-in popup was blocked by your browser.');
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        console.log('🚫 Another popup request was cancelled');
+      } else {
+        console.log('❌ Unexpected error during popup sign-in:', error.message);
       }
     } finally {
       setIsLoading(false);

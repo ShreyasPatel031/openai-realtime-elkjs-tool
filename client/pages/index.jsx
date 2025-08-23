@@ -1,5 +1,5 @@
-import App from "../components/App";
+import AppRouter from "../components/AppRouter";
 
 export default function Index() {
-  return <App />;
+  return <AppRouter />;
 }

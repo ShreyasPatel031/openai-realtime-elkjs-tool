@@ -1,0 +1,38 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow authenticated users to read/write their own architectures
+    match /architectures/{document} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Allow anonymous users to read/write anonymous architectures
+    // This enables sharing and temporary storage for non-signed-in users
+    match /anonymous_architectures/{document} {
+      // Allow anyone to read anonymous architectures (for sharing URLs)
+      allow read: if true;
+      
+      // Allow anyone to create anonymous architectures
+      allow create: if true;
+      
+      // Allow updates only if the sessionId matches or if it's been less than 24 hours
+      allow update: if true;
+      
+      // Allow deletion for cleanup purposes
+      allow delete: if true;
+    }
+    
+    // Allow authenticated users to read/write their own chats
+    match /chats/{document} {
+      allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // Deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

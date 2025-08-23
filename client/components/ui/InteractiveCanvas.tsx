@@ -34,11 +34,13 @@ import { ApiEndpointProvider } from '../../contexts/ApiEndpointContext'
 import ProcessingStatusIcon from "../ProcessingStatusIcon"
 import { auth } from "../../lib/firebase"
 import { onAuthStateChanged, User } from "firebase/auth"
-import { Settings, PanelRightOpen, PanelRightClose, Save, Edit } from "lucide-react"
+import { Timestamp } from "firebase/firestore"
+import { Settings, PanelRightOpen, PanelRightClose, Save, Edit, Share } from "lucide-react"
 import { DEFAULT_ARCHITECTURE as EXTERNAL_DEFAULT_ARCHITECTURE } from "../../data/defaultArchitecture"
 import { SAVED_ARCHITECTURES } from "../../data/savedArchitectures"
 import SaveAuth from "../auth/SaveAuth"
 import ArchitectureService from "../../services/architectureService"
+import { anonymousArchitectureService } from "../../services/anonymousArchitectureService"
 import ArchitectureSidebar from "./ArchitectureSidebar"
 import { onElkGraph, dispatchElkGraph } from "../../events/graphEvents"
 import { assertRawGraph } from "../../events/graphSchema"
@@ -134,6 +136,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   sendClientEvent = () => {},
   events = [],
   apiEndpoint,
+  isPublicMode = false,
 }) => {
   // State for DevPanel visibility
   const [showDev, setShowDev] = useState(false);
@@ -153,6 +156,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   });
   const [selectedArchitectureId, setSelectedArchitectureId] = useState<string>('new-architecture');
   
+  // Pending architecture selection (for handling async state updates)
+  const [pendingArchitectureSelection, setPendingArchitectureSelection] = useState<string | null>(null);
+  
   // State to lock agent operations to specific architecture during sessions
   const [agentLockedArchitectureId, setAgentLockedArchitectureId] = useState<string | null>(null);
   
@@ -166,11 +172,28 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   
   // State for auth flow
   const [user, setUser] = useState<User | null>(null);
+  const [isLoadingArchitectures, setIsLoadingArchitectures] = useState(false);
 
   // Enhanced Firebase sync with cleanup
   const syncWithFirebase = useCallback(async (userId: string) => {
+    // Don't load architectures in public mode
+    if (isPublicMode) {
+      console.log('🔒 Public mode - skipping Firebase sync');
+      return;
+    }
+    
+    let timeoutId: NodeJS.Timeout;
+    
     try {
       console.log('🔄 Syncing with Firebase for user:', userId);
+      console.log('🔄 Setting loading state to true');
+      setIsLoadingArchitectures(true);
+      
+      // Add timeout to prevent infinite loading
+      timeoutId = setTimeout(() => {
+        console.warn('⚠️ Firebase sync timeout - forcing loading state to false');
+        setIsLoadingArchitectures(false);
+      }, 10000); // 10 second timeout
       
       // First, cleanup any invalid architectures
       await ArchitectureService.cleanupInvalidArchitectures(userId);
@@ -294,7 +317,64 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         const sortedValidArchs = validArchs.sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
         const sortedMockArchs = mockArchs.sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
         
-        const allArchs = [newArchTab, ...sortedValidArchs, ...sortedMockArchs];
+        // Check for priority architecture (transferred from anonymous session)
+        const priorityArchId = localStorage.getItem('priority_architecture_id');
+        let finalValidArchs = sortedValidArchs;
+        let foundPriorityArch = null; // Track if we found and processed the priority architecture
+        
+        if (priorityArchId) {
+          console.log('📌 Checking for priority architecture:', priorityArchId);
+          console.log('📌 DEBUG: Available Firebase architectures:', sortedValidArchs.map(arch => ({id: arch.id, name: arch.name})));
+          const priorityArchIndex = sortedValidArchs.findIndex(arch => arch.id === priorityArchId);
+          
+          if (priorityArchIndex >= 0) {
+            console.log('✅ Found priority architecture, moving to top');
+            const priorityArch = sortedValidArchs[priorityArchIndex];
+            console.log('✅ DEBUG: Priority architecture details:', {id: priorityArch.id, name: priorityArch.name});
+            finalValidArchs = [
+              priorityArch,
+              ...sortedValidArchs.filter(arch => arch.id !== priorityArchId)
+            ];
+            
+            foundPriorityArch = priorityArch;
+            // Clear the priority flag after using it
+            localStorage.removeItem('priority_architecture_id');
+            console.log('🧹 Cleared priority architecture flag');
+          } else {
+            console.log('⚠️ Priority architecture not found in initial results, fetching directly...');
+            console.log('⚠️ DEBUG: Looking for ID:', priorityArchId, 'in:', sortedValidArchs.map(arch => arch.id));
+            
+            // Try to fetch the priority architecture directly (with small delay for Firebase consistency)
+            try {
+              // Small delay to handle potential Firebase consistency issues
+              await new Promise(resolve => setTimeout(resolve, 500));
+              
+              const priorityArch = await ArchitectureService.getArchitectureById(priorityArchId);
+              if (priorityArch) {
+                console.log('✅ Found priority architecture via direct fetch:', priorityArch.name);
+                finalValidArchs = [
+                  priorityArch,
+                  ...sortedValidArchs
+                ];
+                
+                foundPriorityArch = priorityArch;
+                // Clear the priority flag after using it
+                localStorage.removeItem('priority_architecture_id');
+                console.log('🧹 Cleared priority architecture flag');
+              } else {
+                console.log('❌ Priority architecture not found even with direct fetch');
+                // Keep the priority flag for potential retry
+                console.log('🔄 Keeping priority flag for potential retry');
+              }
+            } catch (error) {
+              console.error('❌ Error fetching priority architecture:', error);
+              // Keep the priority flag for potential retry
+              console.log('🔄 Keeping priority flag for potential retry');
+            }
+          }
+        }
+        
+        const allArchs = [newArchTab, ...finalValidArchs, ...sortedMockArchs];
         setSavedArchitectures(allArchs);
         
         console.log(`✅ Loaded ${validArchs.length} valid architectures from Firebase`);
@@ -329,25 +409,60 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           console.warn(`⚠️ Selected architecture ${selectedArchitectureId} not found, resetting to New Architecture`);
           setSelectedArchitectureId('new-architecture');
         }
+        
+        // Check if we should auto-select a priority architecture or stay on New Architecture
+        if (foundPriorityArch) {
+          console.log('✅ User signed in - will auto-select transferred architecture after state update:', foundPriorityArch.id, foundPriorityArch.name);
+          // Set a flag to select this architecture after the state updates
+          setPendingArchitectureSelection(foundPriorityArch.id);
+        } else {
+          console.log('✅ User signed in - staying on New Architecture tab for fresh start');
+          
+          // FORCE selection to "New Architecture" to ensure no auto-selection happens
+          if (selectedArchitectureId !== 'new-architecture') {
+            console.log('🔄 Forcing selection back to New Architecture tab after sign-in');
+            setSelectedArchitectureId('new-architecture');
+          }
+        }
       }
     } catch (error) {
       console.error('❌ Failed to sync with Firebase:', error);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      console.log('🔄 Setting loading state to false');
+      setIsLoadingArchitectures(false);
     }
-  }, [selectedArchitectureId]);
+  }, [selectedArchitectureId, isPublicMode]);
 
   // Track when we just created an architecture to prevent immediate re-sync
   const [justCreatedArchId, setJustCreatedArchId] = useState<string | null>(null);
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [hasInitialSync, setHasInitialSync] = useState(false);
 
-  // Sync Firebase architectures when user changes
+  // Sync Firebase architectures ONLY when user changes (not when tabs change)
   useEffect(() => {
-    if (user?.uid) {
+    console.log('🔄 useEffect triggered - user:', user?.uid, 'justCreatedArchId:', justCreatedArchId, 'hasInitialSync:', hasInitialSync);
+    if (user?.uid && !hasInitialSync) {
       // Don't sync immediately after creating an architecture
       if (!justCreatedArchId) {
+        // Clear any existing timeout
+        if (syncTimeoutRef.current) {
+          clearTimeout(syncTimeoutRef.current);
+        }
+        
+        // Only sync once when user signs in
+        console.log('🚀 Initial sync for user:', user.uid);
         syncWithFirebase(user.uid);
+        setHasInitialSync(true);
       } else {
         console.log('🚫 Skipping Firebase sync - just created architecture:', justCreatedArchId);
       }
-    } else {
+    } else if (!user?.uid) {
+      // Reset sync flag when user signs out
+      setHasInitialSync(false);
+      
       // User signed out - reset to clean state
       const newArchTab = {
         id: 'new-architecture',
@@ -356,11 +471,71 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         rawGraph: { id: "root", children: [], edges: [] },
         isNew: true
       };
-      const mockArchs = Object.values(SAVED_ARCHITECTURES).sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
-      setSavedArchitectures([newArchTab, ...mockArchs]);
+      
+      // In public mode, only show "New Architecture"
+      if (isPublicMode) {
+        setSavedArchitectures([newArchTab]);
+      } else if (isLoadingArchitectures) {
+        // When loading, show only "New Architecture" but don't override if we already have architectures
+        console.log('🔄 User signed out but still loading - showing only New Architecture');
+        setSavedArchitectures([newArchTab]);
+      } else {
+        // Only show mock architectures when not in public mode and not loading
+        const mockArchs = Object.values(SAVED_ARCHITECTURES).sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
+        setSavedArchitectures([newArchTab, ...mockArchs]);
+      }
       setSelectedArchitectureId('new-architecture');
     }
-  }, [user, syncWithFirebase, justCreatedArchId]);
+    
+    // Cleanup timeout on unmount
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, [user, justCreatedArchId, isPublicMode, hasInitialSync]);
+
+  // Handle pending architecture selection after savedArchitectures state is updated
+  useEffect(() => {
+    if (pendingArchitectureSelection && savedArchitectures.length > 0) {
+      const targetArch = savedArchitectures.find(arch => arch.id === pendingArchitectureSelection);
+      if (targetArch) {
+        console.log('🎯 Executing pending architecture selection:', pendingArchitectureSelection, targetArch.name);
+        console.log('🎯 Target architecture data:', {id: targetArch.id, name: targetArch.name, hasRawGraph: !!targetArch.rawGraph});
+        
+        // Set the selected architecture ID
+        setSelectedArchitectureId(pendingArchitectureSelection);
+        
+        // Manually load the architecture content to ensure it's displayed
+        if (targetArch.rawGraph) {
+          console.log('📂 Manually loading transferred architecture content:', targetArch.name);
+          
+          // Use typed event system for architecture loading
+          dispatchElkGraph({
+            elkGraph: assertRawGraph(targetArch.rawGraph, 'PendingSelection'),
+            source: 'PendingSelection',
+            reason: 'transferred-architecture-load'
+          });
+        } else {
+          console.warn('⚠️ Target architecture has no rawGraph data');
+        }
+        
+        setPendingArchitectureSelection(null); // Clear the pending selection
+      } else {
+        console.warn('⚠️ Pending architecture not found in savedArchitectures:', pendingArchitectureSelection);
+        console.warn('⚠️ Available architectures:', savedArchitectures.map(arch => ({id: arch.id, name: arch.name})));
+      }
+    }
+  }, [savedArchitectures, pendingArchitectureSelection]);
+
+  // Function to manually refresh architectures (only when actually needed)
+  const refreshArchitectures = useCallback(() => {
+    if (user?.uid && hasInitialSync) {
+      console.log('🔄 Manual refresh of architectures requested');
+      syncWithFirebase(user.uid);
+    }
+  }, [user, hasInitialSync, syncWithFirebase]);
+
   
   // State for StreamViewer visibility
   // const [showStreamViewer, setShowStreamViewer] = useState(false);
@@ -445,14 +620,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         }
 
         console.log('✅ Architecture deleted locally and from Firebase');
-        
-        // Force a Firebase sync to ensure the deletion is reflected
-        if (user?.uid) {
-          console.log('🔄 Forcing Firebase sync after deletion...');
-          setTimeout(() => {
-            syncWithFirebase(user.uid);
-          }, 1000); // Small delay to ensure deletion has propagated
-        }
         
       } catch (error) {
         console.error('❌ Error deleting architecture:', error);
@@ -540,26 +707,82 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   // Listen for auth state changes
   useEffect(() => {
-    // Only set up auth listener if Firebase is properly initialized
-    if (auth) {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      console.log('🔐 Auth state changed:', currentUser ? currentUser.email : 'No user');
-      setUser(currentUser);
+    console.log('🌐 Current URL:', window.location.href, 'isPublicMode:', isPublicMode);
+    
+    // In public mode, completely skip Firebase auth monitoring and force clean state
+    if (isPublicMode) {
+      console.log('🔒 PUBLIC MODE ACTIVE - completely skipping Firebase auth, forcing clean state');
+      setUser(null);
+      setSidebarCollapsed(true);
       
-      // Auto-open sidebar when user signs in, close when they sign out
+      // Check if URL contains a shared anonymous architecture ID
+      const sharedArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
+      if (sharedArchId) {
+        console.log('🔗 Loading shared anonymous architecture:', sharedArchId);
+        loadSharedAnonymousArchitecture(sharedArchId);
+      }
+      
+      return; // Don't set up any Firebase listeners
+    }
+
+    // Only set up auth listener in canvas mode
+    if (auth) {
+      console.log('🔐 CANVAS MODE ACTIVE - setting up Firebase auth listener');
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+        console.log('🔐 Auth state changed:', currentUser ? currentUser.email : 'No user');
+        
+        // On canvas route, use actual auth state
+      setUser(currentUser);
+        
+        // Auto-open sidebar when user signs in, close when they sign out
       if (currentUser) {
-        console.log('👤 User signed in - opening sidebar');
-        setSidebarCollapsed(false);
-      } else {
-        console.log('👤 User signed out - closing sidebar');
-        setSidebarCollapsed(true);
+          console.log('👤 User signed in - opening sidebar');
+          setSidebarCollapsed(false);
+        } else {
+          console.log('👤 User signed out - closing sidebar');
+          setSidebarCollapsed(true);
       }
     });
     return () => unsubscribe();
     } else {
       console.log('🚫 Firebase auth not available - authentication disabled');
     }
-  }, []);
+  }, [isPublicMode]);
+
+
+
+  // Load stored canvas state from public mode (only in full app mode)
+  useEffect(() => {
+    if (!isPublicMode) {
+      const storedState = localStorage.getItem('publicCanvasState');
+      if (storedState) {
+        try {
+          const { elkGraph, timestamp } = JSON.parse(storedState);
+          const ageInMinutes = (Date.now() - timestamp) / (1000 * 60);
+          
+          // Only load if state is less than 30 minutes old
+          if (ageInMinutes < 30 && elkGraph) {
+            console.log('🔄 Loading canvas state from public mode');
+            dispatchElkGraph({
+              elkGraph,
+              source: 'PublicModeHandoff',
+              reason: 'state-restore',
+              targetArchitectureId: selectedArchitectureId
+            });
+            
+            // Clear the stored state after loading
+            localStorage.removeItem('publicCanvasState');
+          } else {
+            console.log('🗑️ Stored canvas state expired or invalid, clearing');
+            localStorage.removeItem('publicCanvasState');
+          }
+        } catch (error) {
+          console.error('❌ Failed to parse stored canvas state:', error);
+          localStorage.removeItem('publicCanvasState');
+        }
+      }
+    }
+  }, [isPublicMode, selectedArchitectureId]);
 
 
 
@@ -681,6 +904,156 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     edges: []
   });
 
+    // Real-time sync: Auto-save current canvas to Firebase when state changes
+  const [realtimeSyncId, setRealtimeSyncId] = useState<string | null>(null);
+  const [isRealtimeSyncing, setIsRealtimeSyncing] = useState(false);
+
+  useEffect(() => {
+    // Only sync if:
+    // 1. User is signed in
+    // 2. We're on "New Architecture" tab (creating new content)
+    // 3. There's actual content to sync
+    // 4. Not currently saving manually
+    // 5. Not already syncing in real-time
+    // 6. Not in the middle of a chat operation (which will handle its own saving)
+    if (
+      user && 
+      selectedArchitectureId === 'new-architecture' && 
+      rawGraph && 
+      rawGraph.children && 
+      rawGraph.children.length > 0 &&
+      !isSaving &&
+      !isRealtimeSyncing &&
+      !agentLockedArchitectureId // Don't sync if agent is actively working
+    ) {
+      console.log('🔄 Real-time sync: Graph changed, auto-saving to Firebase...');
+      
+      const syncToFirebase = async () => {
+        setIsRealtimeSyncing(true);
+        try {
+          // Generate a name for the architecture if we don't have a sync ID yet
+          const architectureName = realtimeSyncId ? 
+            `Live Architecture - ${new Date().toLocaleDateString()}` : 
+            ArchitectureService.generateArchitectureName(rawGraph.children || [], rawGraph.edges || []);
+          
+          let syncId = realtimeSyncId;
+          
+          if (!syncId) {
+            // Create new architecture for real-time sync
+            console.log('📝 Creating new live architecture:', architectureName);
+            syncId = await ArchitectureService.saveArchitecture({
+              name: architectureName,
+              userId: user.uid,
+              userEmail: user.email || '',
+              rawGraph: rawGraph,
+              userPrompt: ''
+            });
+            setRealtimeSyncId(syncId);
+            console.log('✅ Created live architecture with ID:', syncId);
+            
+            // Add the new architecture to local state without triggering Firebase sync
+            const newArchitecture = {
+              id: syncId,
+              firebaseId: syncId,
+              name: architectureName,
+              timestamp: new Date(),
+              createdAt: new Date(),
+              lastModified: new Date(),
+              rawGraph: rawGraph,
+              userPrompt: '',
+              isFromFirebase: true
+            };
+            
+            setSavedArchitectures(prev => {
+              // Check if it already exists to avoid duplicates
+              if (prev.some(arch => arch.id === syncId)) {
+                return prev;
+              }
+              // Add to the beginning (after "New Architecture")
+              const newArchIndex = prev.findIndex(arch => arch.id === 'new-architecture');
+              if (newArchIndex >= 0) {
+                const newList = [...prev];
+                newList.splice(newArchIndex + 1, 0, newArchitecture);
+                return newList;
+              }
+              return [newArchitecture, ...prev];
+            });
+            
+            console.log('✅ Added new live architecture to local state without Firebase sync');
+          } else {
+            // Update existing live architecture
+            console.log('🔄 Updating live architecture:', syncId);
+            await ArchitectureService.updateArchitecture(syncId, {
+              rawGraph: rawGraph,
+              lastModified: new Date()
+            });
+            console.log('✅ Updated live architecture');
+          }
+        } catch (error) {
+          console.error('❌ Real-time sync failed:', error);
+        } finally {
+          setIsRealtimeSyncing(false);
+        }
+      };
+      
+      syncToFirebase();
+    }
+  }, [user, selectedArchitectureId, rawGraph, isSaving, realtimeSyncId, isRealtimeSyncing, agentLockedArchitectureId]);
+
+  // Reset real-time sync when switching away from "New Architecture"
+  useEffect(() => {
+    if (selectedArchitectureId !== 'new-architecture') {
+      setRealtimeSyncId(null);
+      setIsRealtimeSyncing(false);
+    }
+  }, [selectedArchitectureId]);
+
+  // Handle shared architecture URLs in canvas mode (for both anonymous and signed-in user architectures)
+  useEffect(() => {
+    if (!isPublicMode) {
+      // Check if URL contains a shared architecture ID
+      const sharedArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
+      if (sharedArchId) {
+        console.log('🔗 Canvas mode: Loading shared architecture from URL:', sharedArchId);
+        
+        // Load the shared architecture directly using the service
+        (async () => {
+          try {
+            const sharedArch = await anonymousArchitectureService.loadAnonymousArchitectureById(sharedArchId);
+            if (sharedArch) {
+              console.log('✅ Loaded shared architecture from URL:', sharedArch.name);
+              setRawGraph(sharedArch.rawGraph);
+            }
+          } catch (error) {
+            console.error('❌ Failed to load shared architecture from URL:', error);
+          }
+        })();
+      }
+    }
+  }, [isPublicMode, setRawGraph]);
+
+  // Load shared anonymous architecture from URL
+  const loadSharedAnonymousArchitecture = useCallback(async (architectureId: string) => {
+    try {
+      const sharedArch = await anonymousArchitectureService.loadAnonymousArchitectureById(architectureId);
+      
+      if (sharedArch) {
+        console.log('✅ Loaded shared anonymous architecture:', sharedArch.name);
+        
+        // Set the graph to the shared architecture
+        setRawGraph(sharedArch.rawGraph);
+        
+        // Update the architecture name in the UI (optional - could show "Viewing: Architecture Name")
+        console.log('🎯 Displaying shared architecture:', sharedArch.name);
+      } else {
+        console.warn('⚠️ Shared architecture not found or expired');
+        // Could show a toast notification here
+      }
+    } catch (error) {
+      console.error('❌ Error loading shared anonymous architecture:', error);
+    }
+  }, [setRawGraph]);
+
   // Handler for manual save functionality
   const handleManualSave = useCallback(async () => {
     if (!user) {
@@ -725,7 +1098,54 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     }
   }, [user, selectedArchitectureId, savedArchitectures, rawGraph, nodes, edges]);
 
+  // Handler for sharing current architecture (works for both signed-in and anonymous users)
+  const handleShareCurrent = useCallback(async () => {
+    try {
+      // For anonymous users or when no architecture is selected, create a shareable anonymous architecture
+      if (!user || selectedArchitectureId === 'new-architecture') {
+        if (!rawGraph || !rawGraph.children || rawGraph.children.length === 0) {
+          alert('Please create some content first before sharing');
+          return;
+        }
 
+        console.log('📤 Creating shareable anonymous architecture...');
+        
+        // Generate a name for the architecture
+        const architectureName = `Shared Architecture ${new Date().toLocaleDateString()}`;
+        
+        // Save as anonymous architecture and get shareable ID
+        const anonymousId = await anonymousArchitectureService.saveAnonymousArchitecture(
+          architectureName,
+          rawGraph
+        );
+        
+        // Create shareable URL for anonymous architecture
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set('arch', anonymousId);
+        const shareUrl = currentUrl.toString();
+        
+        // Copy to clipboard
+        await navigator.clipboard.writeText(shareUrl);
+        console.log('✅ Anonymous architecture share link copied to clipboard:', shareUrl);
+        alert('🔗 Share link copied to clipboard! Anyone with this link can view your architecture.');
+        
+        return;
+      }
+
+      // For signed-in users with saved architectures
+      if (selectedArchitectureId && selectedArchitectureId !== 'new-architecture') {
+        await handleShareArchitecture(selectedArchitectureId);
+        alert('🔗 Share link copied to clipboard!');
+        return;
+      }
+
+      // Fallback
+      alert('Please create some content first before sharing');
+    } catch (error) {
+      console.error('❌ Error sharing current architecture:', error);
+      alert(`❌ Failed to share: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }, [selectedArchitectureId, handleShareArchitecture, user, rawGraph, anonymousArchitectureService]);
 
   // Initialize with empty canvas for "New Architecture" tab
   useEffect(() => {
@@ -916,7 +1336,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     setRawGraph(newGraph);
     console.log('…called setRawGraph');
     
-    // Update Firebase if user is signed in and not on "New Architecture" tab
+    // Save to Firebase (signed in) or anonymous storage (public mode)
     if (user && selectedArchitectureId !== 'new-architecture') {
       console.log('🔄 Updating Firebase for manual graph change...');
       try {
@@ -978,10 +1398,41 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       } catch (error) {
         console.error('❌ Error updating Firebase for manual graph change:', error);
       }
+    } else if (isPublicMode && !user && newGraph?.children && newGraph.children.length > 0) {
+      // Save or update anonymous architecture in public mode when there's actual content
+      // But skip if user is signed in (architecture may have been transferred)
+      console.log('💾 Saving/updating anonymous architecture in public mode...');
+      try {
+        const existingArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
+        
+        if (existingArchId) {
+          // Update existing anonymous architecture
+          console.log('🔄 Updating existing anonymous architecture:', existingArchId);
+          await anonymousArchitectureService.updateAnonymousArchitecture(existingArchId, {
+            rawGraph: newGraph,
+            timestamp: Timestamp.now()
+          });
+          console.log('✅ Anonymous architecture updated');
+        } else {
+          // Create new anonymous architecture
+          const architectureName = `Architecture - ${new Date().toLocaleDateString()}`;
+          const newArchId = await anonymousArchitectureService.saveAnonymousArchitecture(architectureName, newGraph);
+          console.log('✅ New anonymous architecture saved with ID:', newArchId);
+        }
+      } catch (error) {
+        // Check if this is the expected "No document to update" error after architecture transfer
+        if (error instanceof Error && error.message?.includes('No document to update')) {
+          console.log('ℹ️ Anonymous architecture was already transferred/deleted - this is expected after sign-in');
+        } else {
+          console.error('❌ Error saving/updating anonymous architecture:', error);
+        }
+      }
+    } else if (isPublicMode && user) {
+      console.log('🚫 DEBUG: Skipping anonymous architecture update in handleGraphChange - user is signed in, architecture may have been transferred');
     }
     
     console.groupEnd();
-  }, [setRawGraph, rawGraph, user, selectedArchitectureId, savedArchitectures]);
+  }, [setRawGraph, rawGraph, user, selectedArchitectureId, savedArchitectures, isPublicMode]);
 
   const handleAddNodeToGroup = useCallback((groupId: string) => {
     const nodeName = `new_node_${Date.now()}`;
@@ -1278,6 +1729,39 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       if (shouldUpdateCanvas) {
         console.log('✅ Updating canvas for selected architecture');
         setRawGraph(elkGraph);
+        
+        // Save anonymous architecture in public mode when AI updates the graph
+        // But skip if user is signed in (architecture may have been transferred)
+        if (isPublicMode && !user && elkGraph?.children && elkGraph.children.length > 0) {
+          console.log('💾 Saving anonymous architecture after AI update...');
+          try {
+            const existingArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
+            
+            if (existingArchId) {
+              // Update existing anonymous architecture
+              console.log('🔄 Updating existing anonymous architecture:', existingArchId);
+              await anonymousArchitectureService.updateAnonymousArchitecture(existingArchId, {
+                rawGraph: elkGraph,
+                timestamp: Timestamp.now()
+              });
+              console.log('✅ Anonymous architecture updated after AI update');
+            } else {
+              // Create new anonymous architecture
+              const architectureName = `Architecture - ${new Date().toLocaleDateString()}`;
+              const newArchId = await anonymousArchitectureService.saveAnonymousArchitecture(architectureName, elkGraph);
+              console.log('✅ New anonymous architecture saved after AI update with ID:', newArchId);
+            }
+                  } catch (error) {
+          // Check if this is the expected "No document to update" error after architecture transfer
+          if (error instanceof Error && error.message?.includes('No document to update')) {
+            console.log('ℹ️ Anonymous architecture was already transferred/deleted - this is expected after sign-in');
+          } else {
+            console.error('❌ Error saving anonymous architecture after AI update:', error);
+          }
+        }
+        } else if (isPublicMode && user) {
+          console.log('🚫 DEBUG: Skipping anonymous architecture update - user is signed in, architecture may have been transferred');
+        }
       } else {
         console.log('⏸️ Skipping canvas update - operation for different architecture:', {
           target: targetArchitectureId,
@@ -1480,7 +1964,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     });
     
     return unsubscribe;
-  }, [setRawGraph, user, rawGraph, selectedArchitectureId]);
+  }, [setRawGraph, user, rawGraph, selectedArchitectureId, isPublicMode]);
 
   // Listen for final processing completion (sync with ProcessingStatusIcon)
   useEffect(() => {
@@ -1975,10 +2459,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     <ApiEndpointProvider apiEndpoint={apiEndpoint}>
     <div className="w-full h-full flex overflow-hidden bg-white dark:bg-black">
       
-      {/* Architecture Sidebar */}
+      {/* Architecture Sidebar - Always show collapsed in public mode */}
       <ArchitectureSidebar
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={user ? handleToggleSidebar : undefined}
+        isCollapsed={isPublicMode ? true : sidebarCollapsed}
+        onToggleCollapse={!isPublicMode && user ? handleToggleSidebar : undefined}
         onNewArchitecture={handleNewArchitecture}
         onSelectArchitecture={handleSelectArchitecture}
         onDeleteArchitecture={handleDeleteArchitecture}
@@ -1988,36 +2472,54 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         architectures={savedArchitectures}
         isArchitectureOperationRunning={isArchitectureOperationRunning}
         user={user}
+        isLoadingArchitectures={isLoadingArchitectures}
       />
 
       {/* Main Content Area */}
       <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${sidebarCollapsed ? 'ml-0' : 'ml-0'}`}>
-        {/* ProcessingStatusIcon with sidebar toggle */}
+        {/* ProcessingStatusIcon with sidebar toggle - Always visible */}
       <div className="absolute top-4 left-4 z-[101]">
-          {/* Atelier icon with hover overlay */}
-          <div className="relative group">
-            <ProcessingStatusIcon onClick={sidebarCollapsed && user ? handleToggleSidebar : undefined} />
-            {/* Hover overlay - show panel-right-close on hover when sidebar is CLOSED and user is signed in */}
-            {sidebarCollapsed && user && (
-              <button 
-                onClick={handleToggleSidebar}
-                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-200 shadow-lg"
-                title="Open Sidebar"
-              >
-                <PanelRightClose className="w-4 h-4 text-gray-700" />
-              </button>
-            )}
-          </div>
+            {/* Atelier icon with hover overlay */}
+            <div className="relative group">
+              <ProcessingStatusIcon onClick={!isPublicMode && sidebarCollapsed && user ? handleToggleSidebar : undefined} />
+              {/* Hover overlay - show panel-right-close on hover when sidebar is CLOSED and user is signed in (not in public mode) */}
+              {!isPublicMode && sidebarCollapsed && user && (
+                <button 
+                  onClick={handleToggleSidebar}
+                  className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-200 shadow-lg"
+                  title="Open Sidebar"
+                >
+                  <PanelRightClose className="w-4 h-4 text-gray-700" />
+                </button>
+              )}
+      </div>
       </div>
 
 
 
       {/* Save/Edit and Settings buttons - top-right */}
       <div className="absolute top-4 right-4 z-[100] flex gap-2">
-        <SaveAuth onSave={handleSave} isCollapsed={true} />
-        
-        {/* Save Button (only show when signed in) or Edit Button (when not signed in) */}
-        {user ? (
+        {/* Share Button - Always visible for all users */}
+        <button
+          onClick={handleShareCurrent}
+          disabled={!rawGraph || !rawGraph.children || rawGraph.children.length === 0}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
+            !rawGraph || !rawGraph.children || rawGraph.children.length === 0
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-white text-gray-700 hover:bg-gray-50'
+          }`}
+          title={
+            !rawGraph || !rawGraph.children || rawGraph.children.length === 0
+              ? 'Create some content first to share'
+              : 'Share current architecture'
+          }
+        >
+          <Share className="w-4 h-4" />
+          <span className="text-sm font-medium">Share</span>
+        </button>
+
+        {/* Save Button (only show when signed in and not public mode) or Edit Button (when not signed in or public mode) */}
+        {user && !isPublicMode ? (
           <button
             onClick={handleManualSave}
             disabled={isSaving || selectedArchitectureId === 'new-architecture'}
@@ -2044,6 +2546,14 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         ) : (
           <button
             onClick={() => {
+              // Store current canvas state for handoff
+              const currentState = {
+                elkGraph: rawGraph,
+                timestamp: Date.now()
+              };
+              localStorage.setItem('publicCanvasState', JSON.stringify(currentState));
+              console.log('🔄 Storing canvas state and triggering sign-in');
+              
               // Trigger the same sign-in as SaveAuth component
               const saveAuthButton = document.querySelector('.save-auth-dropdown button');
               if (saveAuthButton) {
@@ -2051,13 +2561,15 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               }
             }}
             className="flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:shadow-md transition-all duration-200"
-            title="Sign in to edit and save architectures"
+            title="Sign in to continue editing"
           >
             <Edit className="w-4 h-4" />
             <span className="text-sm font-medium">Edit</span>
           </button>
         )}
         
+        {/* Settings button - Hidden in public mode */}
+        {!isPublicMode && (
         <button
           onClick={() => setShowDev(!showDev)}
           className={`flex items-center justify-center w-10 h-10 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
@@ -2067,6 +2579,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         >
           <Settings className="w-4 h-4" />
         </button>
+        )}
+
+        {/* Profile/Auth - Always visible, now rightmost */}
+        <SaveAuth onSave={handleSave} isCollapsed={true} user={user} />
       </div>
 
       {/* Connection status indicator - HIDDEN */}
@@ -2250,8 +2766,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           </div>
         )}
         
-        {/* Comprehensive Dev Panel - Contains all developer tools */}
-        {showDev && (
+        {/* Comprehensive Dev Panel - Contains all developer tools - Hidden in public mode */}
+        {showDev && !isPublicMode && (
           <div className="absolute top-16 right-4 z-50 w-80 max-h-[calc(100vh-80px)]">
             <div className="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden h-full flex flex-col">
               {/* Panel Header */}

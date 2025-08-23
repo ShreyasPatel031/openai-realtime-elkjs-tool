@@ -1,28 +1,23 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../../lib/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut, User, onAuthStateChanged, getIdToken } from 'firebase/auth';
-import { Save, LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut, User as UserIcon } from 'lucide-react';
 
 interface SaveAuthProps {
   onSave?: (user: User) => void;
   className?: string;
   isCollapsed?: boolean;
+  user?: User | null; // Accept user as prop instead of managing internally
 }
 
-const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed = false }) => {
-  const [user, setUser] = useState<User | null>(null);
+const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed = false, user: propUser }) => {
   const [isLoading, setIsLoading] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // Listen for auth state changes
-  useEffect(() => {
-    if (auth) {
-      const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-        setUser(currentUser);
-      });
-      return () => unsubscribe();
-    }
-  }, [onSave]);
+  // Use user from props instead of managing internal state
+  const user = propUser;
 
   const handleGoogleSignIn = async () => {
     if (!auth) {
@@ -39,11 +34,50 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
         prompt: 'select_account'
       });
       
-      console.log('🔄 Attempting sign-in with popup (same tab)...');
+      console.log('🔄 Attempting Google sign-in with popup...');
       const result = await signInWithPopup(auth, provider);
       console.log('✅ User signed in via popup:', result.user.email);
       
-      // Wait for fresh auth token before triggering save
+      // Transfer anonymous architectures if signing in from public route
+      if (location.pathname === '/') {
+        console.log('🔄 Transferring anonymous architectures and redirecting to /canvas...');
+        
+        // Import and transfer anonymous architectures
+        const { anonymousArchitectureService } = await import('../../services/anonymousArchitectureService');
+        try {
+          const transferResult = await anonymousArchitectureService.transferAnonymousArchitectures(
+            result.user.uid,
+            result.user.email || ''
+          );
+          console.log(`🎉 Transferred ${transferResult.count} anonymous architectures`);
+          console.log('🔗 Transferred architecture IDs:', transferResult.transferredIds);
+          console.log('🔗 DEBUG: Transfer result details:', transferResult);
+          
+          // Store the transferred architecture ID to prioritize it in the new canvas tab
+          if (transferResult.transferredIds.length > 0) {
+            const priorityArchId = transferResult.transferredIds[0]; // Use the first (most recent) transferred architecture
+            localStorage.setItem('priority_architecture_id', priorityArchId);
+            console.log('📌 Set priority architecture for canvas:', priorityArchId);
+          }
+        } catch (error) {
+          console.error('❌ Error transferring anonymous architectures:', error);
+        }
+        
+        // Open canvas in a new tab instead of replacing current tab
+        console.log('🔄 Opening /canvas in new tab...');
+        const newTab = window.open('/canvas', '_blank');
+        if (newTab) {
+          console.log('✅ New tab opened successfully');
+        } else {
+          console.log('❌ Failed to open new tab - popup blocked?');
+          // Fallback: show user a message or try alternative approach
+          alert('Please allow popups for this site. Opening canvas in current tab as fallback.');
+          navigate('/canvas');
+        }
+        return;
+      }
+      
+      // If on canvas route, proceed with save functionality
       if (onSave && result.user) {
         try {
           console.log('🔄 Getting fresh auth token...');
@@ -80,42 +114,38 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
     try {
       await signOut(auth);
       console.log('✅ User signed out');
-      setShowDropdown(false);
+
+      
+      // If on canvas route, redirect to public route
+      if (window.location.pathname === '/canvas') {
+        console.log('🔄 Redirecting to public route after sign-out');
+        window.location.href = '/';
+      }
     } catch (error) {
       console.error('❌ Error signing out:', error);
     }
   };
 
-  const handleSaveClick = () => {
-    if (user && onSave) {
-      onSave(user);
-    } else if (!user) {
-      handleGoogleSignIn();
-    }
-  };
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (!target.closest('.save-auth-dropdown')) {
-        setShowDropdown(false);
-      }
-    };
-
-    if (showDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showDropdown]);
 
   return (
     <div className={`relative save-auth-dropdown ${className}`}>
       <button
-        onClick={user ? () => setShowDropdown(!showDropdown) : handleSaveClick}
+        onClick={() => {
+          if (!user) {
+            // Not signed in - trigger sign-in popup
+            console.log('🔄 Not signed in - triggering Google sign-in');
+            handleGoogleSignIn();
+          } else if (window.location.pathname === '/') {
+            // Signed in on public route - trigger sign-in (will open canvas after)
+            console.log('🔄 Signed in on public route - triggering sign-in to open canvas');
+            handleGoogleSignIn();
+          } else {
+            // Signed in on canvas route - directly sign out (no dropdown)
+            console.log('🔄 Profile clicked - signing out user');
+            handleSignOut();
+          }
+        }}
         disabled={isLoading}
         className={`flex items-center gap-3 rounded-lg shadow-lg border border-gray-200 hover:bg-gray-50 hover:shadow-md transition-all duration-200 ${
           isCollapsed ? 'w-10 h-10 justify-center' : 'w-full px-4 py-3 justify-start'
@@ -123,7 +153,7 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
           ? 'bg-white text-gray-700' 
           : 'bg-white text-gray-700'
         } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-        title={user ? `Profile (${user.email})` : "Sign in"}
+        title={user ? (window.location.pathname === '/' ? "Sign in to continue editing" : "Sign out") : "Sign in to continue editing"}
       >
         {isLoading ? (
           <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin flex-shrink-0" />
@@ -158,61 +188,7 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
         )}
       </button>
 
-      {/* Dropdown menu for authenticated user */}
-      {user && showDropdown && (
-        <div className="absolute top-12 right-0 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
-          <div className="p-4 border-b border-gray-100">
-            <div className="flex items-center space-x-3">
-              <div className="relative w-8 h-8">
-                {user.photoURL ? (
-                  <>
-                    <img 
-                      src={user.photoURL} 
-                      alt="Profile" 
-                      className="w-8 h-8 rounded-full"
-                      onError={(e) => {
-                        console.warn('Failed to load dropdown profile image, falling back to icon');
-                        e.currentTarget.style.display = 'none';
-                        const fallback = e.currentTarget.parentElement?.querySelector('.fallback-icon');
-                        if (fallback) fallback.classList.remove('hidden');
-                      }}
-                    />
-                    <UserIcon className="fallback-icon w-8 h-8 text-gray-400 hidden" />
-                  </>
-                ) : (
-                  <UserIcon className="w-8 h-8 text-gray-400" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {user.displayName || 'User'}
-                </p>
-                <p className="text-xs text-gray-500 truncate">
-                  {user.email}
-                </p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="p-2">
-            <button
-              onClick={handleSaveClick}
-              className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-            >
-              <Save className="w-4 h-4" />
-              <span>Save Current Architecture</span>
-            </button>
-            
-            <button
-              onClick={handleSignOut}
-              className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Sign Out</span>
-            </button>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 };

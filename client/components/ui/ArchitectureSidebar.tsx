@@ -38,6 +38,7 @@ interface ArchitectureSidebarProps {
   onWidthChange?: (width: number) => void;
   isArchitectureOperationRunning?: (id: string) => boolean;
   user?: FirebaseUser | null;
+  isLoadingArchitectures?: boolean;
 }
 
 const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
@@ -51,7 +52,8 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
   selectedArchitectureId,
   architectures = [],
   isArchitectureOperationRunning = () => false,
-  user
+  user,
+  isLoadingArchitectures = false
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [hoveredArchitecture, setHoveredArchitecture] = useState<string | null>(null);
@@ -183,7 +185,14 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
               </button>
             </div>
 
-            {filteredArchitectures.length === 0 ? (
+            {isLoadingArchitectures ? (
+              <div className="p-4 text-center text-gray-500">
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin"></div>
+                  <span>Loading architectures...</span>
+                </div>
+              </div>
+            ) : filteredArchitectures.length === 0 ? (
               <div className="p-4 text-center text-gray-500">
                 {searchQuery ? 'No architectures found' : 'No architectures yet'}
               </div>
@@ -231,7 +240,7 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
                         hoverTimeoutRef.current = setTimeout(() => {
                           setHoveredArchitecture(null);
                           setActiveDropdown(null);
-                        }, 150);
+                        }, 200);
                       }}
                     >
                       <button
@@ -250,7 +259,7 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
                             if (activeDropdown !== architecture.id) {
                               setHoveredArchitecture(null);
                             }
-                          }, 100);
+                          }, 200);
                         }}
                       >
                         <MoreHorizontal className="w-4 h-4 text-gray-500" />
@@ -259,7 +268,7 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
                       {/* Dropdown menu - positioned to the right */}
                       {(activeDropdown === architecture.id || hoveredArchitecture === architecture.id) && (
                           <div 
-                            className="absolute right-0 top-8 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[1002]"
+                            className="absolute right-0 top-6 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[1002]"
                             onMouseEnter={() => {
                               // Clear any pending timeout
                               if (hoverTimeoutRef.current) {
@@ -271,7 +280,7 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
                               hoverTimeoutRef.current = setTimeout(() => {
                                 setHoveredArchitecture(null);
                                 setActiveDropdown(null);
-                              }, 100);
+                              }, 200);
                             }}
                           >
                             <button
@@ -312,6 +321,7 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
               console.log('Save triggered from sidebar for user:', user.email);
             }}
             isCollapsed={isCollapsed}
+            user={user}
           />
         </div>
       </div>

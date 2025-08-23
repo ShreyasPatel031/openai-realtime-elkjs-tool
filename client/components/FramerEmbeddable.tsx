@@ -55,6 +55,7 @@ function FramerEmbeddable({
         sendClientEvent={sendClientEvent}
         events={events}
         apiEndpoint={apiEndpoint}
+        isPublicMode={true}
       />
     </div>
     </ApiEndpointProvider>

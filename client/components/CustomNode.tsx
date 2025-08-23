@@ -3,6 +3,7 @@ import { Handle, Position } from 'reactflow';
 import { baseHandleStyle } from './graph/handles';
 import { iconLists } from '../generated/iconLists';
 import { iconFallbackService } from '../utils/iconFallbackService';
+import { iconCacheService } from '../utils/iconCacheService';
 import { useApiEndpoint, buildAssetUrl } from '../contexts/ApiEndpointContext';
 
 // Heuristic fallback mapping for common icon patterns
@@ -93,6 +94,14 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
   };
 
   const tryLoadIcon = async (iconName: string) => {
+    // Check cache first
+    const cachedUrl = iconCacheService.getCachedIcon(iconName);
+    if (cachedUrl) {
+      return cachedUrl;
+    }
+
+    console.log(`🔄 Loading icon: ${iconName}`);
+    
     const prefixMatch = iconName.match(/^(aws|gcp|azure)_(.+)$/);
     if (prefixMatch) {
       const [, provider, actualIconName] = prefixMatch;
@@ -106,6 +115,10 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
           img.onerror = reject;
           img.src = fullIconUrl;
         });
+        
+        // Cache the successfully loaded icon
+        iconCacheService.cacheIcon(iconName, fullIconUrl);
+        console.log(`✅ Cached icon: ${iconName}`);
         return fullIconUrl;
       }
     }
@@ -124,6 +137,10 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
           img.onerror = reject;
           img.src = fullUrl;
         });
+        
+        // Cache the successfully loaded icon
+        iconCacheService.cacheIcon(iconName, fullUrl);
+        console.log(`✅ Cached legacy icon: ${iconName}`);
         return fullUrl;
       } catch {}
     }

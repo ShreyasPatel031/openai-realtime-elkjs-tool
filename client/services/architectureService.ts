@@ -2,6 +2,7 @@ import {
   collection, 
   addDoc, 
   getDocs, 
+  getDoc,
   query, 
   where, 
   orderBy, 
@@ -193,6 +194,31 @@ export class ArchitectureService {
     } catch (error) {
       console.error('❌ Error loading user architectures:', error);
       return [];
+    }
+  }
+
+  static async getArchitectureById(architectureId: string): Promise<SavedArchitecture | null> {
+    try {
+      console.log('🔍 Fetching architecture by ID:', architectureId);
+      const docRef = doc(db, this.COLLECTION_NAME, architectureId);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const architecture = {
+          id: docSnap.id,
+          ...data,
+          timestamp: data.timestamp || Timestamp.now()
+        } as SavedArchitecture;
+        console.log('✅ Found architecture:', architecture.name);
+        return architecture;
+      } else {
+        console.log('❌ Architecture not found:', architectureId);
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ Error fetching architecture by ID:', error);
+      throw error;
     }
   }
 

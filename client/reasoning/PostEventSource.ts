@@ -136,6 +136,8 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         if (response.status === 500 && errorText.includes('Previous response with id') && errorText.includes('not found')) {
           // Extract the expired response ID for logging
           const match = errorText.match(/Previous response with id '([^']+)' not found/);
+          console.log('🔄 Expired response ID detected, will retry without previous response ID');
+          
           // Throw a specific error type that we can catch and handle
           const expiredError = new Error(`EXPIRED_RESPONSE_ID: ${errorText}`);
           expiredError.name = 'ExpiredResponseError';
@@ -323,6 +325,41 @@ export const createPostEventSource = (payload: string | FormData, prevId?: strin
         stack: error.stack,
         timestamp: new Date().toISOString()
       });
+      
+      // Handle ExpiredResponseError by retrying without previous response ID
+      if (error.name === 'ExpiredResponseError' && prevId) {
+        console.log('🔄 Retrying request without expired response ID...');
+        source.readyState = 2; // CLOSED
+        
+        // Retry without the previous response ID
+        setTimeout(() => {
+          try {
+            const retrySource = createPostEventSource(payload, undefined, apiEndpoint);
+            
+            // Forward all events from the retry source to the original source
+            retrySource.onopen = source.onopen;
+            retrySource.onmessage = source.onmessage;
+            retrySource.onerror = source.onerror;
+            
+            // Copy event listeners
+            ['open', 'message', 'error'].forEach(eventType => {
+              retrySource.addEventListener(eventType, (event) => {
+                source.dispatchEvent(event);
+              });
+            });
+            
+            console.log('✅ Retry request initiated without previous response ID');
+          } catch (retryError) {
+            console.error('❌ Retry failed:', retryError);
+            const errorEvent = new ErrorEvent('error', { error: retryError });
+            source.dispatchEvent(errorEvent);
+            if (source.onerror) source.onerror.call(source as any, errorEvent);
+          }
+        }, 100); // Small delay before retry
+        
+        return; // Don't dispatch error event for retry
+      }
+      
       source.readyState = 2; // CLOSED
       
       // Handle different error types

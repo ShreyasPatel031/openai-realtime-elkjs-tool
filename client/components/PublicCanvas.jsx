@@ -1,15 +1,12 @@
 /**
- * Main application component for the Architecture Generator.
- * Modern, streamlined interface focused on chat and visual architecture building.
+ * Public Canvas - Limited functionality for anonymous users
+ * Used for marketing site and Framer embeds
  */
 import { useEffect, useRef, useState } from "react";
 import ErrorBoundary from "./console/ErrorBoundary";
 import InteractiveCanvas from "./ui/InteractiveCanvas";
 import { elkGraphDescription, agentInstruction } from "../realtime/agentConfig";
 import { RtcClient } from "../realtime/RtcClient";
-// Import test functions to make them available in console
-import "../utils/testIconFallback";
-import "../utils/testArchitectureSearch";
 
 // Model configuration
 const MODEL_CONFIG = {
@@ -17,7 +14,7 @@ const MODEL_CONFIG = {
   apiEndpoint: "https://api.openai.com/v1/realtime"
 };
 
-export default function App() {
+export default function PublicCanvas() {
   // State management
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSessionActive, setIsSessionActive] = useState(false);
@@ -116,7 +113,7 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen overflow-hidden">
-      {/* Full-screen modern interface */}
+      {/* Public canvas with limited functionality */}
       <ErrorBoundary>
         <InteractiveCanvas
           isSessionActive={isSessionActive}
@@ -127,10 +124,9 @@ export default function App() {
           sendTextMessage={sendTextMessage}
           sendClientEvent={sendClientEvent}
           events={events}
-          isPublicMode={false}
+          isPublicMode={true} // Enable public mode
         />
       </ErrorBoundary>
     </div>
   );
 }
-

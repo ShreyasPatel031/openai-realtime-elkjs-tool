@@ -109,6 +109,7 @@ export const executeFunctionCall = async (
           
           // Dispatch typed event to update canvas in real-time
           const currentArchitectureId = (window as any).currentArchitectureId || 'new-architecture';
+          console.log('🎯 FunctionExecutor: Using architecture ID:', currentArchitectureId, 'from global window.currentArchitectureId');
           dispatchElkGraph({
             elkGraph: assertRawGraph(newGraph, 'FunctionExecutor.setElkGraph'),
             source: 'FunctionExecutor',

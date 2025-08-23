@@ -90,25 +90,18 @@ export class ArchitectureService {
         nodes: architectureData.nodes,
         edges: architectureData.edges,
         
-        // Metadata
+        // Metadata - preserve existing timestamps or use current time
         nodeCount: architectureData.nodes?.length || 0,
         edgeCount: architectureData.edges?.length || 0,
-        timestamp: Timestamp.now(),
-        createdAt: Timestamp.now(),
-        lastModified: Timestamp.now()
+        timestamp: architectureData.timestamp ? Timestamp.fromDate(new Date(architectureData.timestamp)) : Timestamp.now(),
+        createdAt: architectureData.createdAt ? Timestamp.fromDate(new Date(architectureData.createdAt)) : Timestamp.now(),
+        lastModified: Timestamp.now() // Always update lastModified
       };
       
       // Clean the data to remove undefined values and functions
       const cleanedData = this.cleanFirestoreData(completeData);
       
-      console.log('📊 Saving ELK architecture:', {
-        name: cleanedData.name,
-        userId: cleanedData.userId,
-        nodeCount: cleanedData.nodeCount,
-        edgeCount: cleanedData.edgeCount,
-        hasRawGraph: !!cleanedData.rawGraph,
-        dataSize: JSON.stringify(cleanedData).length + ' chars'
-      });
+      console.log('📊 Saving ELK architecture:', cleanedData.name);
       
       // Save to Firebase
       const docRef = await addDoc(collection(db, this.COLLECTION_NAME), cleanedData);

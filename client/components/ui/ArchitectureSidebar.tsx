@@ -137,20 +137,6 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
       <div className="flex flex-col h-full pt-[4.75rem]"> {/* pt-[4.75rem] for consistent spacing with Atelier */}
         {/* Icon Bar - Fixed Positions */}
         <div className="flex flex-col gap-3 px-4">
-          {/* New Architecture - Extended Button */}
-          <button
-            onClick={onNewArchitecture}
-            className={`flex items-center gap-3 h-10 rounded-lg shadow-lg border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:shadow-md transition-all duration-200 ${
-              isCollapsed ? 'w-10 justify-center' : 'w-full px-3 justify-start'
-            }`}
-            title="New Architecture"
-          >
-            <Plus className="w-4 h-4 flex-shrink-0" />
-            {!isCollapsed && (
-              <span className="font-medium text-gray-700 whitespace-nowrap">New Architecture</span>
-            )}
-          </button>
-
           {/* Search - Extended Button/Input */}
           {isCollapsed ? (
             <button
@@ -182,6 +168,18 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
         {/* Architecture List - Only when expanded */}
         {!isCollapsed && (
           <div className="flex-1 overflow-y-auto px-4">
+            {/* Add New Architecture Button */}
+            <div className="mb-3">
+              <button
+                onClick={onNewArchitecture}
+                className="flex items-center gap-2 w-full p-2 rounded-lg border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-600 transition-colors duration-200"
+                title="Add New Architecture"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="text-sm font-medium">Add New Architecture</span>
+              </button>
+            </div>
+
             {filteredArchitectures.length === 0 ? (
               <div className="p-4 text-center text-gray-500">
                 {searchQuery ? 'No architectures found' : 'No architectures yet'}
@@ -198,19 +196,6 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
                         : 'hover:bg-gray-50 border border-transparent'
                       }
                     `}
-                    onMouseEnter={() => {
-                      // Clear any pending timeout
-                      if (hoverTimeoutRef.current) {
-                        clearTimeout(hoverTimeoutRef.current);
-                      }
-                      setHoveredArchitecture(architecture.id);
-                    }}
-                    onMouseLeave={() => {
-                      // Use a small delay to allow cursor to move to dropdown
-                      hoverTimeoutRef.current = setTimeout(() => {
-                        setHoveredArchitecture(null);
-                      }, 100);
-                    }}
                   >
                     {/* Main clickable area */}
                     <button
@@ -226,12 +211,29 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
                       </div>
                     </button>
 
-                    {/* Ellipsis menu - shows on hover */}
-                    {(hoveredArchitecture === architecture.id || activeDropdown === architecture.id) && (
-                      <div 
-                        className="absolute right-2 top-1/2 transform -translate-y-1/2 z-[1000]" 
-                        ref={dropdownRef}
-                        data-dropdown
+                    {/* Ellipsis menu - shows only on ellipsis button hover */}
+                    <div 
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 z-[1000]" 
+                      ref={dropdownRef}
+                      data-dropdown
+                      onMouseEnter={() => {
+                        // Clear any pending timeout
+                        if (hoverTimeoutRef.current) {
+                          clearTimeout(hoverTimeoutRef.current);
+                        }
+                        setHoveredArchitecture(architecture.id);
+                      }}
+                      onMouseLeave={() => {
+                        // Keep menu visible when cursor is over the dropdown area
+                        hoverTimeoutRef.current = setTimeout(() => {
+                          setHoveredArchitecture(null);
+                          setActiveDropdown(null);
+                        }, 150);
+                      }}
+                    >
+                      <button
+                        onClick={(e) => handleDropdownToggle(architecture.id, e)}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 transition-all duration-200 relative z-[1001] opacity-0 group-hover:opacity-100"
                         onMouseEnter={() => {
                           // Clear any pending timeout
                           if (hoverTimeoutRef.current) {
@@ -240,23 +242,19 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
                           setHoveredArchitecture(architecture.id);
                         }}
                         onMouseLeave={() => {
-                          // Keep menu visible when cursor is over the dropdown area
+                          // Only hide if not clicking into dropdown
                           hoverTimeoutRef.current = setTimeout(() => {
-                            setHoveredArchitecture(null);
-                            setActiveDropdown(null);
-                          }, 150);
+                            if (activeDropdown !== architecture.id) {
+                              setHoveredArchitecture(null);
+                            }
+                          }, 100);
                         }}
                       >
-                        <button
-                          onClick={(e) => handleDropdownToggle(architecture.id, e)}
-                          className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 transition-colors relative z-[1001]"
-                          onMouseEnter={() => setHoveredArchitecture(architecture.id)}
-                        >
-                          <MoreHorizontal className="w-4 h-4 text-gray-500" />
-                        </button>
+                        <MoreHorizontal className="w-4 h-4 text-gray-500" />
+                      </button>
 
-                        {/* Dropdown menu - positioned to the right */}
-                        {activeDropdown === architecture.id && (
+                      {/* Dropdown menu - positioned to the right */}
+                      {(activeDropdown === architecture.id || hoveredArchitecture === architecture.id) && (
                           <div 
                             className="absolute right-0 top-8 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[1002]"
                             onMouseEnter={() => {
@@ -297,7 +295,6 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
                           </div>
                         )}
                       </div>
-                    )}
                   </div>
                 ))}
               </div>

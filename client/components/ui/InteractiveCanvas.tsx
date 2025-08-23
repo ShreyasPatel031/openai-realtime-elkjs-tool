@@ -148,16 +148,21 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       rawGraph: { id: "root", children: [], edges: [] },
       isNew: true
     };
-    const mockArchs = Object.values(SAVED_ARCHITECTURES).sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    const mockArchs = Object.values(SAVED_ARCHITECTURES).sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
     return [newArchTab, ...mockArchs];
   });
   const [selectedArchitectureId, setSelectedArchitectureId] = useState<string>('new-architecture');
   
+  // State to lock agent operations to specific architecture during sessions
+  const [agentLockedArchitectureId, setAgentLockedArchitectureId] = useState<string | null>(null);
+  
   // Initialize global architecture ID for agent targeting
   useEffect(() => {
-    (window as any).currentArchitectureId = selectedArchitectureId;
-    console.log('🎯 Initialized agent target architecture ID to:', selectedArchitectureId);
-  }, [selectedArchitectureId]);
+    // If agent is locked to an architecture, use that; otherwise use selected
+    const targetArchitectureId = agentLockedArchitectureId || selectedArchitectureId;
+    (window as any).currentArchitectureId = targetArchitectureId;
+    console.log('🎯 Agent targeting architecture:', targetArchitectureId, agentLockedArchitectureId ? '(LOCKED)' : '(following selection)');
+  }, [selectedArchitectureId, agentLockedArchitectureId]);
   
   // State for auth flow
   const [user, setUser] = useState<User | null>(null);
@@ -181,17 +186,95 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             console.warn('⚠️ Invalid architecture found, skipping:', arch);
           }
           return isValid;
-        }).map(arch => ({
-          id: arch.id,
-          firebaseId: arch.id, // Keep Firebase ID for updates
-          name: arch.name,
-          timestamp: arch.timestamp?.toDate ? arch.timestamp.toDate() : (arch.timestamp instanceof Date ? arch.timestamp : new Date()),
-          createdAt: arch.createdAt?.toDate ? arch.createdAt.toDate() : (arch.timestamp?.toDate ? arch.timestamp.toDate() : (arch.timestamp instanceof Date ? arch.timestamp : new Date())),
-          lastModified: arch.lastModified?.toDate ? arch.lastModified.toDate() : (arch.timestamp?.toDate ? arch.timestamp.toDate() : (arch.timestamp instanceof Date ? arch.timestamp : new Date())),
-          rawGraph: arch.rawGraph,
-          userPrompt: (arch as any).userPrompt || '',
-          isFromFirebase: true
-        }));
+        }).map(arch => {
+          // Safe timestamp conversion with error protection
+          const safeTimestamp = (() => {
+            try {
+              // Check if it's a Firebase Timestamp with seconds/nanoseconds
+              if (arch.timestamp?.seconds !== undefined) {
+                return new Date(arch.timestamp.seconds * 1000 + (arch.timestamp.nanoseconds || 0) / 1000000);
+              }
+              // Check if it has toDate method
+              if (arch.timestamp?.toDate) {
+                return arch.timestamp.toDate();
+              }
+              // Check if it's already a Date
+              if (arch.timestamp instanceof Date) {
+                return arch.timestamp;
+              }
+              // Try to parse as string/number
+              if (arch.timestamp) {
+                const converted = new Date(arch.timestamp);
+                if (!isNaN(converted.getTime())) {
+                  return converted;
+                }
+              }
+              // Fallback to current time
+              return new Date();
+            } catch (e) {
+              return new Date();
+            }
+          })();
+          
+          const safeCreatedAt = (() => {
+            try {
+              // Check if it's a Firebase Timestamp with seconds/nanoseconds
+              if (arch.createdAt?.seconds !== undefined) {
+                return new Date(arch.createdAt.seconds * 1000 + (arch.createdAt.nanoseconds || 0) / 1000000);
+              }
+              // Check if it has toDate method
+              if (arch.createdAt?.toDate) {
+                return arch.createdAt.toDate();
+              }
+              // Check if it's already a Date
+              if (arch.createdAt instanceof Date) {
+                return arch.createdAt;
+              }
+              // Try to parse as string/number
+              if (arch.createdAt) {
+                const converted = new Date(arch.createdAt);
+                if (!isNaN(converted.getTime())) {
+                  return converted;
+                }
+              }
+              // Fallback to timestamp
+              return safeTimestamp;
+            } catch (e) {
+              console.warn(`❌ CreatedAt conversion failed for ${arch.name}:`, e);
+              return safeTimestamp;
+            }
+          })();
+          
+          const safeLastModified = (() => {
+            try {
+              // Check if it's a Firebase Timestamp with seconds/nanoseconds
+              if (arch.lastModified?.seconds !== undefined) {
+                return new Date(arch.lastModified.seconds * 1000 + (arch.lastModified.nanoseconds || 0) / 1000000);
+              }
+              if (arch.lastModified?.toDate) return arch.lastModified.toDate();
+              if (arch.lastModified instanceof Date) return arch.lastModified;
+              if (arch.lastModified) {
+                const converted = new Date(arch.lastModified);
+                if (!isNaN(converted.getTime())) return converted;
+              }
+              return safeTimestamp; // Fallback to timestamp
+            } catch (e) {
+              return safeTimestamp;
+            }
+          })();
+          
+          return {
+            id: arch.id,
+            firebaseId: arch.id, // Keep Firebase ID for updates
+            name: arch.name,
+            timestamp: safeTimestamp,
+            createdAt: safeCreatedAt,
+            lastModified: safeLastModified,
+            rawGraph: arch.rawGraph,
+            userPrompt: (arch as any).userPrompt || '',
+            isFromFirebase: true
+          };
+        });
         
         // Keep "New Architecture" at top, add Firebase data after
         const newArchTab = {
@@ -217,8 +300,29 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         console.log(`✅ Loaded ${validArchs.length} valid architectures from Firebase`);
         console.log(`📊 Total architectures: ${allArchs.length} (${validArchs.length} Firebase + ${mockArchs.length} mock)`);
         
-        // DEBUG: Log current tab order
-        console.log('🔍 Current tab order:', allArchs.map((arch, index) => `${index + 1}. ${arch.name} (${arch.id})`));
+        // DEBUG: Log current tab order and timestamps (with error protection)
+        console.log('🔍 Current tab order:', allArchs.map((arch, index) => {
+          let createdAtStr = 'null';
+          let timestampStr = 'null';
+          
+          try {
+            if (arch.createdAt) {
+              createdAtStr = new Date(arch.createdAt).toISOString();
+            }
+          } catch (e) {
+            createdAtStr = `invalid(${arch.createdAt})`;
+          }
+          
+          try {
+            if (arch.timestamp) {
+              timestampStr = new Date(arch.timestamp).toISOString();
+            }
+          } catch (e) {
+            timestampStr = `invalid(${arch.timestamp})`;
+          }
+          
+          return `${index + 1}. ${arch.name} (${arch.id}) - createdAt: ${createdAtStr}, timestamp: ${timestampStr}`;
+        }));
         
         // If current selection is invalid, reset to "New Architecture"
         if (selectedArchitectureId && !allArchs.some(arch => arch.id === selectedArchitectureId)) {
@@ -252,7 +356,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         rawGraph: { id: "root", children: [], edges: [] },
         isNew: true
       };
-      const mockArchs = Object.values(SAVED_ARCHITECTURES).sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      const mockArchs = Object.values(SAVED_ARCHITECTURES).sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
       setSavedArchitectures([newArchTab, ...mockArchs]);
       setSelectedArchitectureId('new-architecture');
     }
@@ -738,9 +842,13 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     console.log('🔄 Selecting architecture:', architectureId);
     setSelectedArchitectureId(architectureId);
     
-    // CRITICAL: Update the global architecture ID for the agent
-    (window as any).currentArchitectureId = architectureId;
-    console.log('🎯 Updated agent target architecture ID to:', architectureId);
+    // Only update global architecture ID if agent is not locked to another architecture
+    if (!agentLockedArchitectureId) {
+      (window as any).currentArchitectureId = architectureId;
+      console.log('🎯 Updated agent target architecture ID to:', architectureId);
+    } else {
+      console.log('🔒 Agent is locked to architecture:', agentLockedArchitectureId, '- not retargeting');
+    }
     
     // Load the architecture data (prioritize dynamic savedArchitectures over static mock data)
     const architecture = savedArchitectures.find(arch => arch.id === architectureId) ||
@@ -758,7 +866,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     } else {
       console.warn('⚠️ Architecture not found:', architectureId);
     }
-  }, [savedArchitectures]);
+  }, [savedArchitectures, agentLockedArchitectureId]);
 
   // Handle canvas resize when sidebar state changes
   useEffect(() => {
@@ -1149,13 +1257,23 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       // Only update canvas if this operation is for the currently selected architecture
       const shouldUpdateCanvas = !targetArchitectureId || targetArchitectureId === selectedArchitectureId;
       
+      console.log('🔍 Canvas update decision:', {
+        shouldUpdateCanvas,
+        targetArchitectureId,
+        selectedArchitectureId,
+        agentLockedArchitectureId,
+        reason,
+        source
+      });
+      
       if (shouldUpdateCanvas) {
         console.log('✅ Updating canvas for selected architecture');
         setRawGraph(elkGraph);
       } else {
         console.log('⏸️ Skipping canvas update - operation for different architecture:', {
           target: targetArchitectureId,
-          current: selectedArchitectureId
+          current: selectedArchitectureId,
+          agentLocked: agentLockedArchitectureId
         });
       }
       
@@ -1213,6 +1331,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             // Save to Firebase if user is authenticated
             if (user) {
               try {
+                // Always use current timestamp for new architectures to ensure proper sorting
+                const now = new Date();
+                
                 const docId = await ArchitectureService.saveArchitecture({
                   name: newChatName,
                   userId: user.uid,
@@ -1220,7 +1341,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                   rawGraph: elkGraph,
                   nodes: [], // React Flow nodes will be generated
                   edges: [], // React Flow edges will be generated
-                  userPrompt: userPrompt
+                  userPrompt: userPrompt,
+                  timestamp: now,
+                  createdAt: now,
+                  lastModified: now
                 });
                 
                 // Update the tab with Firebase ID and move to top of list
@@ -1229,7 +1353,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                   
                   const updatedArchs = prev.map(arch => 
                     arch.id === 'new-architecture' 
-                      ? { ...arch, id: docId, firebaseId: docId, timestamp: new Date(), createdAt: new Date(), lastModified: new Date() }
+                      ? { ...arch, id: docId, firebaseId: docId, timestamp: now, createdAt: now, lastModified: now }
                       : arch
                   );
                   
@@ -1249,16 +1373,51 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 (window as any).currentArchitectureId = docId;
                 console.log('🎯 Updated agent target architecture ID to:', docId);
                 
+                // CRITICAL: Update agent lock to the new Firebase ID
+                // Check if we're transitioning from new-architecture (use immediate check)
+                if (selectedArchitectureId === 'new-architecture' || agentLockedArchitectureId === 'new-architecture') {
+                  console.log('🔒 Updating agent lock from new-architecture to:', docId);
+                  setAgentLockedArchitectureId(docId);
+                  
+                  // IMMEDIATE: Update global architecture ID right away
+                  (window as any).currentArchitectureId = docId;
+                  console.log('🎯 IMMEDIATE: Updated global currentArchitectureId to:', docId);
+                }
+                
                 // Transfer operation state from 'new-architecture' to new Firebase ID
                 const isOperationRunning = architectureOperations['new-architecture'];
-                if (isOperationRunning) {
-                  setArchitectureOperations(prev => {
-                    const updated = { ...prev };
+                console.log('🔍 Operation transfer check:', {
+                  isOperationRunning,
+                  currentOperations: architectureOperations,
+                  fromId: 'new-architecture',
+                  toId: docId
+                });
+                
+                // Force transfer the loading state regardless of current state
+                setArchitectureOperations(prev => {
+                  const updated = { ...prev };
+                  // Transfer any loading state from new-architecture to the new ID
+                  if (prev['new-architecture']) {
                     updated[docId] = true;
                     delete updated['new-architecture'];
-                    return updated;
-                  });
-                  console.log('🔄 Transferred operation state to new architecture ID:', docId);
+                    console.log('🔄 FORCED: Transferred loading state from new-architecture to:', docId);
+                  } else {
+                    // Even if there's no explicit loading state, ensure new tab shows loading if agent is working
+                    updated[docId] = true;
+                    console.log('🔄 FORCED: Set loading state on new tab:', docId);
+                  }
+                  
+                  // Always clear any loading state from 'new-architecture' tab
+                  delete updated['new-architecture'];
+                  
+                  console.log('🔄 Final operation state:', updated);
+                  return updated;
+                });
+                
+                if (isOperationRunning) {
+                  console.log('✅ Operation was running on new-architecture, transferred to:', docId);
+                } else {
+                  console.log('⚠️ No explicit operation on new-architecture, but forced transfer anyway');
                 }
                 
                 // Prevent Firebase sync from reordering for a few seconds
@@ -1274,15 +1433,35 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               }
             }
           } else if (selectedArchitectureId && selectedArchitectureId !== 'new-architecture' && !isEmptyGraph) {
-            // Just update local state - manual save will handle Firebase
-            console.log('🔄 Updating local architecture state:', selectedArchitectureId);
+            // Update existing architecture - save to both local state AND Firebase
+            console.log('🔄 Updating existing architecture:', selectedArchitectureId);
             
-            // Update local state only
+            // Update local state
             setSavedArchitectures(prev => prev.map(arch => 
               arch.id === selectedArchitectureId 
                 ? { ...arch, rawGraph: elkGraph, lastModified: new Date() }
                 : arch
             ));
+            
+            // CRITICAL: Also save to Firebase for persistence
+            if (user?.uid) {
+              try {
+                console.log('💾 Auto-saving graph changes to Firebase for:', selectedArchitectureId);
+                const currentArch = savedArchitectures.find(arch => arch.id === selectedArchitectureId);
+                if (currentArch) {
+                  ArchitectureService.updateArchitecture(selectedArchitectureId, {
+                    rawGraph: elkGraph,
+                    lastModified: new Date()
+                  }).then(() => {
+                    console.log('✅ Graph changes auto-saved to Firebase');
+                  }).catch(error => {
+                    console.error('❌ Failed to auto-save graph changes:', error);
+                  });
+                }
+              } catch (error) {
+                console.error('❌ Error auto-saving to Firebase:', error);
+              }
+            }
           }
           
         } catch (error) {
@@ -1297,11 +1476,28 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Listen for final processing completion (sync with ProcessingStatusIcon)
   useEffect(() => {
     const handleFinalComplete = () => {
-      console.log('🏁 Final processing complete - stopping all loading indicators');
-      // Add a small delay to match the ProcessingStatusIcon timing
-      setTimeout(() => {
+      console.log('🏁 Final processing complete event received');
+      console.log('🔍 Current agent lock state:', agentLockedArchitectureId);
+      console.log('🔍 Current operation states:', architectureOperations);
+      
+      // Only clear operations if the agent is truly done (not locked to any architecture)
+      // The agent lock gets cleared when operations are truly complete
+      if (!agentLockedArchitectureId) {
+        console.log('✅ Agent not locked - clearing all loading indicators');
         setArchitectureOperations({});
-      }, 100); // Small delay to ensure the check mark appears first
+      } else {
+        console.log('⏸️ Agent still locked to:', agentLockedArchitectureId, '- keeping loading indicators');
+      }
+      
+      // Always unlock the agent when this event fires (this indicates true completion)
+      console.log('🔓 UNLOCKING agent - operations complete');
+      setAgentLockedArchitectureId(null);
+      
+      // Clear loading indicators after unlocking (with small delay)
+      setTimeout(() => {
+        console.log('🧹 Final cleanup - clearing all loading indicators');
+        setArchitectureOperations({});
+      }, 100);
     };
 
     // ONLY listen for allProcessingComplete (same as ProcessingStatusIcon)
@@ -1310,7 +1506,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     return () => {
       window.removeEventListener('allProcessingComplete', handleFinalComplete);
     };
-  }, []);
+  }, [agentLockedArchitectureId, architectureOperations]);
   
   // Process events when they change
   useEffect(() => {
@@ -2165,7 +2361,13 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           onSubmit={handleChatSubmit}
           onProcessStart={() => {
             console.log('🔄 Starting operation for architecture:', selectedArchitectureId);
+            console.log('🔒 LOCKING agent to architecture:', selectedArchitectureId);
+            
+            // Lock agent to current architecture for the entire session
+            setAgentLockedArchitectureId(selectedArchitectureId);
             setArchitectureOperationState(selectedArchitectureId, true);
+            
+            // Set global architecture ID to locked architecture
             (window as any).currentArchitectureId = selectedArchitectureId;
           }}
           isDisabled={agentBusy}

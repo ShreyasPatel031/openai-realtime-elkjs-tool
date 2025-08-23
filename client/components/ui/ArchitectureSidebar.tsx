@@ -14,6 +14,7 @@ import {
   Edit3
 } from 'lucide-react';
 import SaveAuth from '../auth/SaveAuth';
+import { User as FirebaseUser } from 'firebase/auth';
 
 interface Architecture {
   id: string;
@@ -25,7 +26,7 @@ interface Architecture {
 
 interface ArchitectureSidebarProps {
   isCollapsed: boolean;
-  onToggleCollapse: () => void;
+  onToggleCollapse?: () => void;
   onNewArchitecture: () => void;
   onSelectArchitecture: (id: string) => void;
   onDeleteArchitecture?: (id: string) => void;
@@ -36,6 +37,7 @@ interface ArchitectureSidebarProps {
   width?: number;
   onWidthChange?: (width: number) => void;
   isArchitectureOperationRunning?: (id: string) => boolean;
+  user?: FirebaseUser | null;
 }
 
 const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
@@ -48,7 +50,8 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
   onEditArchitecture,
   selectedArchitectureId,
   architectures = [],
-  isArchitectureOperationRunning = () => false
+  isArchitectureOperationRunning = () => false,
+  user
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [hoveredArchitecture, setHoveredArchitecture] = useState<string | null>(null);
@@ -137,8 +140,8 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
       <div className="flex flex-col h-full pt-[4.75rem]"> {/* pt-[4.75rem] for consistent spacing with Atelier */}
         {/* Icon Bar - Fixed Positions */}
         <div className="flex flex-col gap-3 px-4">
-          {/* Search - Extended Button/Input */}
-          {isCollapsed ? (
+          {/* Search - Extended Button/Input (only show when user is signed in) */}
+          {user && (isCollapsed ? (
             <button
               onClick={onToggleCollapse}
               className="w-10 h-10 flex items-center justify-center rounded-lg shadow-lg border bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:shadow-md transition-all duration-200"
@@ -157,7 +160,7 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
                 className="w-full h-10 pl-10 pr-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-lg hover:shadow-md transition-all duration-200"
               />
             </div>
-          )}
+          ))}
         </div>
 
         {/* Divider */}

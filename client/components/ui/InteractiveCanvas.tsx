@@ -34,7 +34,7 @@ import { ApiEndpointProvider } from '../../contexts/ApiEndpointContext'
 import ProcessingStatusIcon from "../ProcessingStatusIcon"
 import { auth } from "../../lib/firebase"
 import { onAuthStateChanged, User } from "firebase/auth"
-import { Settings, PanelRightOpen, PanelRightClose, Save } from "lucide-react"
+import { Settings, PanelRightOpen, PanelRightClose, Save, Edit } from "lucide-react"
 import { DEFAULT_ARCHITECTURE as EXTERNAL_DEFAULT_ARCHITECTURE } from "../../data/defaultArchitecture"
 import { SAVED_ARCHITECTURES } from "../../data/savedArchitectures"
 import SaveAuth from "../auth/SaveAuth"
@@ -137,7 +137,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 }) => {
   // State for DevPanel visibility
   const [showDev, setShowDev] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   // Architecture data from saved architectures
   const [savedArchitectures, setSavedArchitectures] = useState<any[]>(() => {
     // Start with "New Architecture" as first tab
@@ -543,8 +543,17 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     // Only set up auth listener if Firebase is properly initialized
     if (auth) {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      console.log('🔐 Auth state changed:', currentUser ? currentUser.email : 'No user');
       setUser(currentUser);
-      // Just set the user, no need to show coming soon card
+      
+      // Auto-open sidebar when user signs in, close when they sign out
+      if (currentUser) {
+        console.log('👤 User signed in - opening sidebar');
+        setSidebarCollapsed(false);
+      } else {
+        console.log('👤 User signed out - closing sidebar');
+        setSidebarCollapsed(true);
+      }
     });
     return () => unsubscribe();
     } else {
@@ -1969,7 +1978,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       {/* Architecture Sidebar */}
       <ArchitectureSidebar
         isCollapsed={sidebarCollapsed}
-        onToggleCollapse={handleToggleSidebar}
+        onToggleCollapse={user ? handleToggleSidebar : undefined}
         onNewArchitecture={handleNewArchitecture}
         onSelectArchitecture={handleSelectArchitecture}
         onDeleteArchitecture={handleDeleteArchitecture}
@@ -1978,6 +1987,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         selectedArchitectureId={selectedArchitectureId}
         architectures={savedArchitectures}
         isArchitectureOperationRunning={isArchitectureOperationRunning}
+        user={user}
       />
 
       {/* Main Content Area */}
@@ -1986,9 +1996,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       <div className="absolute top-4 left-4 z-[101]">
           {/* Atelier icon with hover overlay */}
           <div className="relative group">
-            <ProcessingStatusIcon onClick={sidebarCollapsed ? handleToggleSidebar : undefined} />
-            {/* Hover overlay - show panel-right-close on hover when sidebar is CLOSED */}
-            {sidebarCollapsed && (
+            <ProcessingStatusIcon onClick={sidebarCollapsed && user ? handleToggleSidebar : undefined} />
+            {/* Hover overlay - show panel-right-close on hover when sidebar is CLOSED and user is signed in */}
+            {sidebarCollapsed && user && (
               <button 
                 onClick={handleToggleSidebar}
                 className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-200 shadow-lg"
@@ -2002,35 +2012,51 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
 
 
-      {/* Save, Manual Save and Settings buttons - top-right */}
+      {/* Save/Edit and Settings buttons - top-right */}
       <div className="absolute top-4 right-4 z-[100] flex gap-2">
         <SaveAuth onSave={handleSave} isCollapsed={true} />
         
-        {/* Manual Save Button */}
-        <button
-          onClick={handleManualSave}
-          disabled={isSaving || !user || selectedArchitectureId === 'new-architecture'}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
-            isSaving 
-              ? 'bg-blue-100 text-blue-600 cursor-not-allowed' 
-              : (!user || selectedArchitectureId === 'new-architecture')
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-white text-gray-700 hover:bg-gray-50'
-          }`}
-          title={
-            isSaving ? 'Saving...' 
-            : !user ? 'Sign in to save'
-            : selectedArchitectureId === 'new-architecture' ? 'Generate content first'
-            : 'Save current architecture'
-          }
-        >
-          {isSaving ? (
-            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <Save className="w-4 h-4" />
-          )}
-          <span className="text-sm font-medium">Save</span>
-        </button>
+        {/* Save Button (only show when signed in) or Edit Button (when not signed in) */}
+        {user ? (
+          <button
+            onClick={handleManualSave}
+            disabled={isSaving || selectedArchitectureId === 'new-architecture'}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
+              isSaving 
+                ? 'bg-blue-100 text-blue-600 cursor-not-allowed' 
+                : selectedArchitectureId === 'new-architecture'
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+            title={
+              isSaving ? 'Saving...' 
+              : selectedArchitectureId === 'new-architecture' ? 'Generate content first'
+              : 'Save current architecture'
+            }
+          >
+            {isSaving ? (
+              <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            <span className="text-sm font-medium">Save</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              // Trigger the same sign-in as SaveAuth component
+              const saveAuthButton = document.querySelector('.save-auth-dropdown button');
+              if (saveAuthButton) {
+                (saveAuthButton as HTMLButtonElement).click();
+              }
+            }}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:shadow-md transition-all duration-200"
+            title="Sign in to edit and save architectures"
+          >
+            <Edit className="w-4 h-4" />
+            <span className="text-sm font-medium">Edit</span>
+          </button>
+        )}
         
         <button
           onClick={() => setShowDev(!showDev)}

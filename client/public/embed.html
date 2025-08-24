@@ -75,108 +75,45 @@
         </div>
     </div>
 
-    <!-- Architecture Generator Embeddable Script -->
-    <script src="/embeddable/architecture-generator.umd.js"></script>
-    
     <script>
-        // Initialize the Architecture Generator with better error handling
+        // Embed the main application directly using iframe
         (function() {
-            console.log('🚀 Initializing Architecture Generator Embed');
+            console.log('🚀 Initializing Architecture Generator Embed via iframe');
             
-            // Wait for all dependencies
-            function waitForDependencies() {
-                return new Promise((resolve, reject) => {
-                    let attempts = 0;
-                    const maxAttempts = 50; // 5 seconds max
-                    
-                    function check() {
-                        attempts++;
-                        
-                        if (typeof React !== 'undefined' && 
-                            typeof ReactDOM !== 'undefined' && 
-                            typeof ArchitectureGenerator !== 'undefined') {
-                            resolve();
-                            return;
-                        }
-                        
-                        if (attempts >= maxAttempts) {
-                            reject(new Error('Dependencies failed to load'));
-                            return;
-                        }
-                        
-                        setTimeout(check, 100);
-                    }
-                    
-                    check();
-                });
+            try {
+                const container = document.getElementById('architecture-generator');
+                
+                // Create iframe to embed the main application
+                const iframe = document.createElement('iframe');
+                iframe.src = 'https://archgen-ecru.vercel.app/';
+                iframe.style.width = '100%';
+                iframe.style.height = '100vh';
+                iframe.style.border = 'none';
+                iframe.style.borderRadius = '8px';
+                iframe.allow = 'clipboard-write; clipboard-read';
+                iframe.sandbox = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox';
+                
+                // Add loading handler
+                iframe.onload = function() {
+                    console.log('✅ Architecture Generator iframe loaded successfully');
+                };
+                
+                iframe.onerror = function() {
+                    console.error('❌ Failed to load Architecture Generator iframe');
+                    container.innerHTML = '<div class="error">Failed to load Architecture Generator</div>';
+                };
+                
+                // Replace container content with iframe
+                container.innerHTML = '';
+                container.appendChild(iframe);
+                
+                console.log('✅ Architecture Generator iframe initialized');
+                
+            } catch (error) {
+                console.error('❌ Failed to initialize iframe:', error);
+                document.getElementById('architecture-generator').innerHTML = 
+                    '<div class="error">Failed to initialize: ' + error.message + '</div>';
             }
-            
-            waitForDependencies()
-                .then(() => {
-                    console.log('✅ All dependencies loaded');
-                    
-                    try {
-                        const container = document.getElementById('architecture-generator');
-                        
-                        // Debug the UMD bundle structure
-                        console.log('🔍 ArchitectureGenerator object:', ArchitectureGenerator);
-                        console.log('🔍 Available exports:', Object.keys(ArchitectureGenerator || {}));
-                        console.log('🔍 Default export:', ArchitectureGenerator.default);
-                        console.log('🔍 FramerEmbeddable export:', ArchitectureGenerator.FramerEmbeddable);
-                        
-                        // Try different possible export patterns
-                        let ComponentToRender = null;
-                        
-                        // Check for named export first
-                        if (ArchitectureGenerator.FramerEmbeddable) {
-                            ComponentToRender = ArchitectureGenerator.FramerEmbeddable;
-                            console.log('✅ Found FramerEmbeddable as named export');
-                        }
-                        // Check for default export
-                        else if (ArchitectureGenerator.default) {
-                            ComponentToRender = ArchitectureGenerator.default;
-                            console.log('✅ Found default export');
-                        }
-                        // Check if ArchitectureGenerator itself is the component
-                        else if (typeof ArchitectureGenerator === 'function') {
-                            ComponentToRender = ArchitectureGenerator;
-                            console.log('✅ ArchitectureGenerator is the component');
-                        }
-                        
-                        if (!ComponentToRender || typeof ComponentToRender !== 'function') {
-                            console.error('❌ No valid component found. Available:', {
-                                type: typeof ArchitectureGenerator,
-                                keys: Object.keys(ArchitectureGenerator || {}),
-                                hasDefault: !!ArchitectureGenerator?.default,
-                                hasFramerEmbeddable: !!ArchitectureGenerator?.FramerEmbeddable
-                            });
-                            throw new Error('FramerEmbeddable component not found in UMD bundle');
-                        }
-                        
-                        console.log('🎯 Using component:', ComponentToRender.name || 'Anonymous');
-                        
-                        // Create the actual Architecture Generator component
-                        const element = React.createElement(ComponentToRender, {
-                            width: '100%',
-                            height: '100vh',
-                            apiEndpoint: 'https://archgen-ecru.vercel.app'
-                        });
-                        
-                        // Use legacy render to avoid React 18 hydration issues
-                        ReactDOM.render(element, container);
-                        console.log('✅ Architecture Generator initialized successfully');
-                        
-                    } catch (error) {
-                        console.error('❌ Failed to initialize Architecture Generator:', error);
-                        document.getElementById('architecture-generator').innerHTML = 
-                            '<div class="error">Failed to initialize: ' + error.message + '</div>';
-                    }
-                })
-                .catch((error) => {
-                    console.error('❌ Dependencies failed to load:', error);
-                    document.getElementById('architecture-generator').innerHTML = 
-                        '<div class="error">Dependencies failed to load: ' + error.message + '</div>';
-                });
         })();
     </script>
 </body>

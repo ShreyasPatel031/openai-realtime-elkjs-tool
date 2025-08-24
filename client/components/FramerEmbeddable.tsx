@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import InteractiveCanvas from './ui/InteractiveCanvas';
 import { ApiEndpointProvider } from '../contexts/ApiEndpointContext';
 import ErrorBoundary from './ErrorBoundary';
@@ -18,6 +18,12 @@ function FramerEmbeddable({
 }: FramerEmbeddableProps) {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [events, setEvents] = useState<any[]>([]);
+  const [isClient, setIsClient] = useState(false);
+
+  // Ensure component only renders on client side to avoid hydration issues
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const startSession = () => {
     setIsSessionActive(true);
@@ -44,6 +50,26 @@ function FramerEmbeddable({
     backgroundColor: '#ffffff',
     ...style
   };
+
+  // Show loading state until client-side hydration is complete
+  if (!isClient) {
+    return (
+      <div style={containerStyle}>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          height: '100%',
+          flexDirection: 'column',
+          gap: '16px',
+          color: '#666'
+        }}>
+          <div style={{ fontSize: '24px' }}>🔄</div>
+          <div>Loading Architecture Generator...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary fallback={

@@ -26,6 +26,11 @@ class ErrorBoundary extends Component<Props, State> {
       if (typeof console !== 'undefined' && console.error) {
         console.error('🚨 ErrorBoundary caught an error:', error);
         console.error('📍 Error info:', errorInfo);
+        
+        // Check for specific React errors
+        if (error.message.includes('Minified React error')) {
+          console.error('🔍 This is a minified React error. Check https://reactjs.org/docs/error-decoder.html');
+        }
       }
     } catch (e) {
       // Silently fail if console is restricted

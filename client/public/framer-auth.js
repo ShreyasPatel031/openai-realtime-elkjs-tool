@@ -85,7 +85,7 @@
     // Silently fail if console is restricted
   }
   
-  // Global error handler for third-party scripts
+  // Global error handler for third-party scripts and React errors
   if (typeof window !== 'undefined') {
     // Handle CSP violations gracefully
     window.addEventListener('securitypolicyviolation', function(e) {
@@ -106,6 +106,34 @@
       )) {
         e.preventDefault();
         return false;
+      }
+      
+      // Handle React minified errors
+      if (e.message && e.message.includes('Minified React error')) {
+        try {
+          if (typeof console !== 'undefined' && console.error) {
+            console.error('🚨 React Error in Framer embed:', e.message);
+            console.error('🔗 Decode at: https://reactjs.org/docs/error-decoder.html');
+          }
+        } catch (consoleError) {
+          // Silently fail if console is restricted
+        }
+        e.preventDefault();
+        return false;
+      }
+    });
+    
+    // Handle unhandled promise rejections
+    window.addEventListener('unhandledrejection', function(e) {
+      if (e.reason && e.reason.message && e.reason.message.includes('Minified React error')) {
+        try {
+          if (typeof console !== 'undefined' && console.error) {
+            console.error('🚨 Unhandled React Promise Rejection:', e.reason.message);
+          }
+        } catch (consoleError) {
+          // Silently fail if console is restricted
+        }
+        e.preventDefault();
       }
     });
   }

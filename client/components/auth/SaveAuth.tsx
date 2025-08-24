@@ -27,30 +27,37 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
 
     setIsLoading(true);
     try {
-      const provider = new GoogleAuthProvider();
-      
-      // Configure provider for redirect flow
-      provider.setCustomParameters({
-        prompt: 'select_account'
-      });
-      
-      console.log('🔄 Attempting Google sign-in with redirect...');
-      
-      // Store current state before redirect
+      // Store current canvas state for handoff to the new tab
       const currentState = {
         elkGraph: localStorage.getItem('publicCanvasState'),
-        timestamp: Date.now(),
-        returnUrl: window.location.href
+        timestamp: Date.now()
       };
       localStorage.setItem('authRedirectState', JSON.stringify(currentState));
       
-      // Use redirect instead of popup - this works in embedded environments
-      await signInWithRedirect(auth, provider);
-      console.log('🔄 Redirect initiated...');
+      console.log('🔄 Opening authentication in new tab...');
       
-      // Note: After redirect, the page will reload and redirect result will be handled in useEffect
+      // Open authentication in a new tab
+      const authUrl = `https://app.atelier-inc.net/auth-redirect`;
+      const newTab = window.open(authUrl, '_blank', 'width=600,height=700,scrollbars=yes,resizable=yes');
+      
+      if (newTab) {
+        console.log('✅ Authentication tab opened successfully');
+        
+        // Listen for the new tab to complete authentication
+        const checkClosed = setInterval(() => {
+          if (newTab.closed) {
+            clearInterval(checkClosed);
+            console.log('🔄 Authentication tab closed, checking for successful login...');
+            setIsLoading(false);
+          }
+        }, 1000);
+      } else {
+        console.log('❌ Failed to open authentication tab - popup blocked?');
+        alert('Please allow popups for this site to sign in.');
+        setIsLoading(false);
+      }
     } catch (error: any) {
-      console.error('❌ Error initiating Google sign-in redirect:', error);
+      console.error('❌ Error opening authentication tab:', error);
       setIsLoading(false);
     }
   };
@@ -62,7 +69,11 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
       
       try {
         console.log('🔍 Checking for redirect result...');
+        console.log('🌐 Current location:', location.pathname);
+        console.log('🔗 Auth object:', auth);
+        
         const result = await getRedirectResult(auth);
+        console.log('📋 Redirect result:', result);
         
         if (result && result.user) {
           console.log('✅ User signed in via redirect:', result.user.email);

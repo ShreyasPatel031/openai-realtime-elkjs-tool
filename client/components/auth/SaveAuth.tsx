@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../../lib/firebase';
-import { GoogleAuthProvider, signInWithPopup, signOut, User, onAuthStateChanged, getIdToken } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, User, onAuthStateChanged, getIdToken } from 'firebase/auth';
 import { LogOut, User as UserIcon } from 'lucide-react';
 
 interface SaveAuthProps {
@@ -29,84 +29,103 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
     try {
       const provider = new GoogleAuthProvider();
       
-      // Configure provider to ensure popup behavior
+      // Configure provider for redirect flow
       provider.setCustomParameters({
         prompt: 'select_account'
       });
       
-      console.log('🔄 Attempting Google sign-in with popup...');
-      const result = await signInWithPopup(auth, provider);
-      console.log('✅ User signed in via popup:', result.user.email);
+      console.log('🔄 Attempting Google sign-in with redirect...');
       
-      // Transfer anonymous architectures if signing in from public route
-      if (location.pathname === '/') {
-        console.log('🔄 Transferring anonymous architectures and redirecting to /canvas...');
-        
-        // Import and transfer anonymous architectures
-        const { anonymousArchitectureService } = await import('../../services/anonymousArchitectureService');
-        try {
-          const transferResult = await anonymousArchitectureService.transferAnonymousArchitectures(
-            result.user.uid,
-            result.user.email || ''
-          );
-          console.log(`🎉 Transferred ${transferResult.count} anonymous architectures`);
-          console.log('🔗 Transferred architecture IDs:', transferResult.transferredIds);
-          console.log('🔗 DEBUG: Transfer result details:', transferResult);
-          
-          // Store the transferred architecture ID to prioritize it in the new canvas tab
-          if (transferResult.transferredIds.length > 0) {
-            const priorityArchId = transferResult.transferredIds[0]; // Use the first (most recent) transferred architecture
-            localStorage.setItem('priority_architecture_id', priorityArchId);
-            console.log('📌 Set priority architecture for canvas:', priorityArchId);
-          }
-        } catch (error) {
-          console.error('❌ Error transferring anonymous architectures:', error);
-        }
-        
-        // Open canvas in a new tab instead of replacing current tab
-        console.log('🔄 Opening /canvas in new tab...');
-        const newTab = window.open('/canvas', '_blank');
-        if (newTab) {
-          console.log('✅ New tab opened successfully');
-        } else {
-          console.log('❌ Failed to open new tab - popup blocked?');
-          // Fallback: show user a message or try alternative approach
-          alert('Please allow popups for this site. Opening canvas in current tab as fallback.');
-          navigate('/canvas');
-        }
-        return;
-      }
+      // Store current state before redirect
+      const currentState = {
+        elkGraph: localStorage.getItem('publicCanvasState'),
+        timestamp: Date.now(),
+        returnUrl: window.location.href
+      };
+      localStorage.setItem('authRedirectState', JSON.stringify(currentState));
       
-      // If on canvas route, proceed with save functionality
-      if (onSave && result.user) {
-        try {
-          console.log('🔄 Getting fresh auth token...');
-          await getIdToken(result.user, /* forceRefresh */ true);
-          console.log('✅ Fresh auth token obtained');
-          onSave(result.user);
-        } catch (tokenError) {
-          console.error('❌ Failed to get auth token:', tokenError);
-          // Still try to save in case token isn't the issue
-          onSave(result.user);
-        }
-      }
+      // Use redirect instead of popup - this works in embedded environments
+      await signInWithRedirect(auth, provider);
+      console.log('🔄 Redirect initiated...');
+      
+      // Note: After redirect, the page will reload and redirect result will be handled in useEffect
     } catch (error: any) {
-      console.error('❌ Error signing in with Google:', error);
-      if (error.code === 'auth/popup-closed-by-user') {
-        console.log('🚫 Sign-in was cancelled by user');
-      } else if (error.code === 'auth/popup-blocked') {
-        console.log('🚫 Sign-in popup was blocked by browser');
-        console.log('💡 Please allow popups for this site and try again');
-        alert('Please allow popups for this site and try signing in again. The sign-in popup was blocked by your browser.');
-      } else if (error.code === 'auth/cancelled-popup-request') {
-        console.log('🚫 Another popup request was cancelled');
-      } else {
-        console.log('❌ Unexpected error during popup sign-in:', error.message);
-      }
-    } finally {
+      console.error('❌ Error initiating Google sign-in redirect:', error);
       setIsLoading(false);
     }
   };
+
+  // Handle redirect result on component mount
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      if (!auth) return;
+      
+      try {
+        console.log('🔍 Checking for redirect result...');
+        const result = await getRedirectResult(auth);
+        
+        if (result && result.user) {
+          console.log('✅ User signed in via redirect:', result.user.email);
+          
+          // Restore state from before redirect
+          const savedState = localStorage.getItem('authRedirectState');
+          if (savedState) {
+            const state = JSON.parse(savedState);
+            console.log('🔄 Restoring state from before redirect');
+            localStorage.removeItem('authRedirectState');
+          }
+          
+          // Transfer anonymous architectures if signing in from public route
+          if (location.pathname === '/') {
+            console.log('🔄 Transferring anonymous architectures and redirecting to /canvas...');
+            
+            // Import and transfer anonymous architectures
+            const { anonymousArchitectureService } = await import('../../services/anonymousArchitectureService');
+            try {
+              const transferResult = await anonymousArchitectureService.transferAnonymousArchitectures(
+                result.user.uid,
+                result.user.email || ''
+              );
+              console.log(`🎉 Transferred ${transferResult.count} anonymous architectures`);
+              console.log('🔗 Transferred architecture IDs:', transferResult.transferredIds);
+              
+              // Store the transferred architecture ID to prioritize it in the new canvas tab
+              if (transferResult.transferredIds.length > 0) {
+                const priorityArchId = transferResult.transferredIds[0];
+                localStorage.setItem('priority_architecture_id', priorityArchId);
+                console.log('📌 Set priority architecture for canvas:', priorityArchId);
+              }
+            } catch (error) {
+              console.error('❌ Error transferring anonymous architectures:', error);
+            }
+            
+            // Redirect to custom domain canvas
+            console.log('🔄 Redirecting to https://app.atelier-inc.net/canvas...');
+            window.location.href = 'https://app.atelier-inc.net/canvas';
+            return;
+          }
+          
+          // If on canvas route, proceed with save functionality
+          if (onSave && result.user) {
+            try {
+              console.log('🔄 Getting fresh auth token...');
+              await getIdToken(result.user, /* forceRefresh */ true);
+              console.log('✅ Fresh auth token obtained');
+              onSave(result.user);
+            } catch (tokenError) {
+              console.error('❌ Failed to get auth token:', tokenError);
+              // Still try to save in case token isn't the issue
+              onSave(result.user);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error handling redirect result:', error);
+      }
+    };
+
+    handleRedirectResult();
+  }, [location.pathname, navigate, onSave]);
 
   const handleSignOut = async () => {
     if (!auth) return;

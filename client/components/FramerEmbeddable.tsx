@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import InteractiveCanvas from './ui/InteractiveCanvas';
 import { ApiEndpointProvider } from '../contexts/ApiEndpointContext';
+import ErrorBoundary from './ErrorBoundary';
 
 interface FramerEmbeddableProps {
   apiEndpoint?: string;
@@ -45,20 +46,40 @@ function FramerEmbeddable({
   };
 
   return (
-    <ApiEndpointProvider apiEndpoint={apiEndpoint}>
-    <div style={containerStyle}>
-      <InteractiveCanvas
-        isSessionActive={isSessionActive}
-        startSession={startSession}
-        stopSession={stopSession}
-        sendTextMessage={sendTextMessage}
-        sendClientEvent={sendClientEvent}
-        events={events}
-        apiEndpoint={apiEndpoint}
-        isPublicMode={true}
-      />
-    </div>
-    </ApiEndpointProvider>
+    <ErrorBoundary fallback={
+      <div style={containerStyle}>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          height: '100%',
+          flexDirection: 'column',
+          gap: '16px',
+          color: '#666'
+        }}>
+          <div style={{ fontSize: '24px' }}>⚠️</div>
+          <div>Architecture Generator is loading...</div>
+          <div style={{ fontSize: '12px', opacity: 0.7 }}>
+            Some security restrictions may limit functionality
+          </div>
+        </div>
+      </div>
+    }>
+      <ApiEndpointProvider apiEndpoint={apiEndpoint}>
+        <div style={containerStyle}>
+          <InteractiveCanvas
+            isSessionActive={isSessionActive}
+            startSession={startSession}
+            stopSession={stopSession}
+            sendTextMessage={sendTextMessage}
+            sendClientEvent={sendClientEvent}
+            events={events}
+            apiEndpoint={apiEndpoint}
+            isPublicMode={true}
+          />
+        </div>
+      </ApiEndpointProvider>
+    </ErrorBoundary>
   );
 }
 

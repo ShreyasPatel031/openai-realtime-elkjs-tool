@@ -18,6 +18,48 @@
   <body>
     <!-- Framer Auth compatibility script (must be loaded first) -->
     <script src="/framer-auth.js"></script>
+    
+    <!-- Additional debugging for blocked resources -->
+    <script>
+      // Early debugging setup
+      window.debugBlockedResources = true;
+      
+      // Monitor Firebase initialization attempts
+      if (typeof window !== 'undefined') {
+        const originalConsoleError = console.error;
+        console.error = function(...args) {
+          // Check for Firebase-related errors
+          const message = args.join(' ');
+          if (message.includes('Firebase') || message.includes('firebase') || message.includes('googleapis')) {
+            console.log('🔥 [FIREBASE-DEBUG]', 'Firebase error detected:', ...args);
+          }
+          return originalConsoleError.apply(this, args);
+        };
+        
+        // Monitor script loading
+        const observer = new MutationObserver((mutations) => {
+          mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+              if (node.tagName === 'SCRIPT') {
+                console.log('📜 [SCRIPT-DEBUG]', 'Script added:', node.src || 'inline script');
+                
+                node.addEventListener('error', (e) => {
+                  console.log('❌ [SCRIPT-ERROR]', 'Script failed to load:', node.src, e);
+                });
+                
+                node.addEventListener('load', (e) => {
+                  console.log('✅ [SCRIPT-SUCCESS]', 'Script loaded successfully:', node.src);
+                });
+              }
+            });
+          });
+        });
+        
+        observer.observe(document.head, { childList: true, subtree: true });
+        observer.observe(document.body, { childList: true, subtree: true });
+      }
+    </script>
+    
     <div id="root"><!--ssr-outlet--></div>
     <!-- hydration -->
     <script type="module" src="/entry-client.jsx"></script>

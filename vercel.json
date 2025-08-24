@@ -6,11 +6,32 @@
   },
   "rewrites": [
     {
+      "source": "/embed",
+      "destination": "/embed.html"
+    },
+    {
       "source": "/embeddable/(.*)",
       "destination": "/dist/embeddable/$1"
     }
   ],
   "headers": [
+    {
+      "source": "/embed",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "ALLOWALL"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://www.gstatic.com https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-ancestors *;"
+        }
+      ]
+    },
     {
       "source": "/embeddable/(.*)",
       "headers": [

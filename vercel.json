@@ -4,9 +4,15 @@
       "NODE_VERSION": "20"
     }
   },
+  "rewrites": [
+    {
+      "source": "/embeddable/(.*)",
+      "destination": "/dist/embeddable/$1"
+    }
+  ],
   "headers": [
     {
-      "source": "/dist/embeddable/(.*)",
+      "source": "/embeddable/(.*)",
       "headers": [
         {
           "key": "Content-Security-Policy",

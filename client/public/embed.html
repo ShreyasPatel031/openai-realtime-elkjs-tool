@@ -118,37 +118,49 @@
                     try {
                         const container = document.getElementById('architecture-generator');
                         
-                        // Use the simpler render method to avoid React 18 issues
-                        const element = React.createElement('div', {
-                            style: { 
-                                width: '100%', 
-                                height: '100vh',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                flexDirection: 'column',
-                                gap: '20px',
-                                fontFamily: 'system-ui, sans-serif'
-                            }
-                        }, [
-                            React.createElement('div', { 
-                                key: 'title',
-                                style: { fontSize: '24px', fontWeight: 'bold' } 
-                            }, 'Architecture Generator'),
-                            React.createElement('div', { 
-                                key: 'subtitle',
-                                style: { color: '#666' } 
-                            }, 'Loading in Framer embed...'),
-                            React.createElement('div', { 
-                                key: 'status',
-                                style: { 
-                                    padding: '10px 20px', 
-                                    backgroundColor: '#f0f0f0', 
-                                    borderRadius: '8px',
-                                    fontSize: '14px'
-                                } 
-                            }, 'Component initialized successfully')
-                        ]);
+                        // Debug the UMD bundle structure
+                        console.log('🔍 ArchitectureGenerator object:', ArchitectureGenerator);
+                        console.log('🔍 Available exports:', Object.keys(ArchitectureGenerator || {}));
+                        console.log('🔍 Default export:', ArchitectureGenerator.default);
+                        console.log('🔍 FramerEmbeddable export:', ArchitectureGenerator.FramerEmbeddable);
+                        
+                        // Try different possible export patterns
+                        let ComponentToRender = null;
+                        
+                        // Check for named export first
+                        if (ArchitectureGenerator.FramerEmbeddable) {
+                            ComponentToRender = ArchitectureGenerator.FramerEmbeddable;
+                            console.log('✅ Found FramerEmbeddable as named export');
+                        }
+                        // Check for default export
+                        else if (ArchitectureGenerator.default) {
+                            ComponentToRender = ArchitectureGenerator.default;
+                            console.log('✅ Found default export');
+                        }
+                        // Check if ArchitectureGenerator itself is the component
+                        else if (typeof ArchitectureGenerator === 'function') {
+                            ComponentToRender = ArchitectureGenerator;
+                            console.log('✅ ArchitectureGenerator is the component');
+                        }
+                        
+                        if (!ComponentToRender || typeof ComponentToRender !== 'function') {
+                            console.error('❌ No valid component found. Available:', {
+                                type: typeof ArchitectureGenerator,
+                                keys: Object.keys(ArchitectureGenerator || {}),
+                                hasDefault: !!ArchitectureGenerator?.default,
+                                hasFramerEmbeddable: !!ArchitectureGenerator?.FramerEmbeddable
+                            });
+                            throw new Error('FramerEmbeddable component not found in UMD bundle');
+                        }
+                        
+                        console.log('🎯 Using component:', ComponentToRender.name || 'Anonymous');
+                        
+                        // Create the actual Architecture Generator component
+                        const element = React.createElement(ComponentToRender, {
+                            width: '100%',
+                            height: '100vh',
+                            apiEndpoint: 'https://archgen-ecru.vercel.app'
+                        });
                         
                         // Use legacy render to avoid React 18 hydration issues
                         ReactDOM.render(element, container);

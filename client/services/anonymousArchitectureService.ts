@@ -278,8 +278,13 @@ class AnonymousArchitectureService {
       await Promise.all(deletePromises);
       
       console.log(`🧹 Cleaned up ${querySnapshot.size} old anonymous architectures`);
-    } catch (error) {
-      console.error('❌ Error cleaning up anonymous architectures:', error);
+    } catch (error: any) {
+      // Handle specific Firestore index errors gracefully
+      if (error?.code === 'failed-precondition' && error?.message?.includes('index')) {
+        console.log('ℹ️ Firestore index not ready for cleanup query - this is expected during initial setup');
+      } else {
+        console.error('❌ Error cleaning up anonymous architectures:', error);
+      }
     }
   }
 

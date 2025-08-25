@@ -13,6 +13,7 @@ import {
   groupNodes, 
   removeGroup
 } from './graph/mutations';
+import { splitTextIntoLines } from '../utils/textMeasurement';
 
 interface DevPanelProps {
   elkGraph: ElkGraph;
@@ -837,6 +838,8 @@ const DevPanel: React.FC<DevPanelProps> = ({
       const elk = new ELK();
       const layoutedGraph = await elk.layout(graphWithOptions);
       
+      console.log('🟪 [AUTO-TEST] Triggering SVG generation to test GKE Gateway Controller...');
+      
       // Generate SVG
       const svgContent = generateSVG(layoutedGraph);
       
@@ -858,7 +861,45 @@ const DevPanel: React.FC<DevPanelProps> = ({
     }
   };
   
+  // Auto-trigger SVG generation for testing (remove this after debugging)
+  React.useEffect(() => {
+    if (elkGraph && elkGraph.children && elkGraph.children.length > 0) {
+      const hasGKENode = JSON.stringify(elkGraph).includes("GKE Gateway Controller");
+      if (hasGKENode) {
+        console.log('🔄 Auto-triggering SVG test for GKE Gateway Controller...');
+        setTimeout(() => {
+          handleGenerateSVG();
+        }, 1000); // Reduced to 1 second
+      }
+    }
+  }, [elkGraph]);
+  
   // Function to generate SVG string from layouted graph
+  // Helper function to render multi-line text in SVG using the same logic as ELK
+  const renderMultiLineText = (text: string, x: number, y: number, fontSize: number = 12): string => {
+    const lines = splitTextIntoLines(text, 76); // Use same width as ELK calculation
+    const lineHeight = 14;
+    
+    if (text === "GKE Gateway Controller") {
+      console.log(`🟪 [DEV PANEL SVG] Rendering "${text}" at (${x}, ${y})`);
+      console.log(`🟪 [DEV PANEL SVG] Got lines: [${lines.join('", "')}] (${lines.length} lines)`);
+      console.log(`🟪 [DEV PANEL SVG] FontSize: ${fontSize}px, LineHeight: ${lineHeight}px`);
+    }
+    
+    // Generate SVG text elements for each line
+    let svgText = '';
+    for (let i = 0; i < lines.length; i++) {
+      const lineY = y + (i * lineHeight) - ((lines.length - 1) * lineHeight / 2);
+      svgText += `
+        <text x="${x}" y="${lineY}" 
+          text-anchor="middle" dominant-baseline="middle" 
+          font-size="${fontSize}" font-weight="bold" fill="#2d6bc4"
+          font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">${lines[i]}</text>
+      `;
+    }
+    return svgText;
+  };
+
   const generateSVG = (layoutedGraph: any): string => {
     // Collect all nodes and edges with absolute coordinates
     const collected = { nodes: [] as any[], edges: [] as any[] };
@@ -918,26 +959,22 @@ const DevPanel: React.FC<DevPanelProps> = ({
       if (label) {
         if (isContainer) {
           // Group node - label at center top
-          svg += `
-            <text x="${x + width/2}" y="${y + 20}" 
-              text-anchor="middle" dominant-baseline="middle" 
-              font-size="14" font-weight="bold" fill="#2d6bc4">${label}</text>
-          `;
+          svg += renderMultiLineText(label, x + width/2, y + 20, 14);
         } else {
-          // Regular node - label at bottom center
-          svg += `
-            <text x="${x + width/2}" y="${y + height - 10}" 
-              text-anchor="middle" dominant-baseline="middle" 
-              font-size="14" font-weight="bold" fill="#2d6bc4">${label}</text>
-          `;
+          // Regular node - text positioned below icon with proper gap
+          // Icon is at y + 10 to y + 58 (48px tall)
+          // Text starts at icon bottom + 12px gap = y + 58 + 12 = y + 70
+          const textY = y + 70;
+          svg += renderMultiLineText(label, x + width/2, textY, 12);
           
-          // Add icon to regular nodes - circle with first letter
+          // Add icon to regular nodes - FIXED: 48x48 square with first letter
           const iconLetter = label.charAt(0).toUpperCase();
           svg += `
-            <circle cx="${x + width/2}" cy="${y + height/2 - 10}" r="15" fill="#2d6bc4" />
-            <text x="${x + width/2}" y="${y + height/2 - 6}" 
+            <rect x="${x + width/2 - 24}" y="${y + 10}" width="48" height="48" 
+              fill="#2d6bc4" rx="8" ry="8" />
+            <text x="${x + width/2}" y="${y + 34}" 
               text-anchor="middle" dominant-baseline="middle" 
-              font-size="14" font-weight="bold" fill="white">${iconLetter}</text>
+              font-size="16" font-weight="bold" fill="white">${iconLetter}</text>
           `;
         }
       }

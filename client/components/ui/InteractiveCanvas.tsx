@@ -43,6 +43,7 @@ import ArchitectureSidebar from "./ArchitectureSidebar"
 import { onElkGraph, dispatchElkGraph } from "../../events/graphEvents"
 import { assertRawGraph } from "../../events/graphSchema"
 import { generateChatName } from "../../utils/chatUtils"
+import { splitTextIntoLines } from "../../utils/textMeasurement"
 // import toast, { Toaster } from 'react-hot-toast' // Removed toaster
 
 // Relaxed typing to avoid prop mismatch across layers
@@ -140,7 +141,14 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   // Architecture data from saved architectures
   const [savedArchitectures, setSavedArchitectures] = useState<any[]>(() => {
-    // Start with "New Architecture" as first tab
+    // Start with default architecture as the first tab, then "New Architecture"
+    const defaultArchTab = {
+      id: 'default',
+      name: 'Default GCP Architecture',
+      timestamp: new Date(),
+      rawGraph: DEFAULT_ARCHITECTURE,
+      isDefault: true
+    };
     const newArchTab = {
       id: 'new-architecture',
       name: 'New Architecture',
@@ -148,10 +156,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       rawGraph: { id: "root", children: [], edges: [] },
       isNew: true
     };
-    const mockArchs = Object.values(SAVED_ARCHITECTURES).sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
-    return [newArchTab, ...mockArchs];
+    const mockArchs = Object.values(SAVED_ARCHITECTURES).filter(arch => arch.id !== 'default').sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
+    return [defaultArchTab, newArchTab, ...mockArchs];
   });
-  const [selectedArchitectureId, setSelectedArchitectureId] = useState<string>('new-architecture');
+  const [selectedArchitectureId, setSelectedArchitectureId] = useState<string>('default');
   
   // State to lock agent operations to specific architecture during sessions
   const [agentLockedArchitectureId, setAgentLockedArchitectureId] = useState<string | null>(null);
@@ -276,7 +284,14 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           };
         });
         
-        // Keep "New Architecture" at top, add Firebase data after
+        // Keep "Default Architecture" first, then "New Architecture", then Firebase data
+        const defaultArchTab = {
+          id: 'default',
+          name: 'Default GCP Architecture',
+          timestamp: new Date(),
+          rawGraph: DEFAULT_ARCHITECTURE,
+          isDefault: true
+        };
         const newArchTab = {
           id: 'new-architecture',
           name: 'New Architecture',
@@ -287,14 +302,14 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         
         // Only keep mock architectures that aren't duplicated in Firebase
         const mockArchs = Object.values(SAVED_ARCHITECTURES).filter(mockArch => 
-          !validArchs.some(fbArch => fbArch.name === mockArch.name)
+          !validArchs.some(fbArch => fbArch.name === mockArch.name) && mockArch.id !== 'default'
         );
         
         // Sort Firebase and mock architectures by createdAt (newest first)
         const sortedValidArchs = validArchs.sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
         const sortedMockArchs = mockArchs.sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
         
-        const allArchs = [newArchTab, ...sortedValidArchs, ...sortedMockArchs];
+        const allArchs = [defaultArchTab, newArchTab, ...sortedValidArchs, ...sortedMockArchs];
         setSavedArchitectures(allArchs);
         
         console.log(`✅ Loaded ${validArchs.length} valid architectures from Firebase`);
@@ -324,10 +339,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           return `${index + 1}. ${arch.name} (${arch.id}) - createdAt: ${createdAtStr}, timestamp: ${timestampStr}`;
         }));
         
-        // If current selection is invalid, reset to "New Architecture"
+        // If current selection is invalid, reset to "Default Architecture"
         if (selectedArchitectureId && !allArchs.some(arch => arch.id === selectedArchitectureId)) {
-          console.warn(`⚠️ Selected architecture ${selectedArchitectureId} not found, resetting to New Architecture`);
-          setSelectedArchitectureId('new-architecture');
+          console.warn(`⚠️ Selected architecture ${selectedArchitectureId} not found, resetting to Default Architecture`);
+          setSelectedArchitectureId('default');
         }
       }
     } catch (error) {
@@ -348,7 +363,14 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         console.log('🚫 Skipping Firebase sync - just created architecture:', justCreatedArchId);
       }
     } else {
-      // User signed out - reset to clean state
+      // User signed out - reset to clean state with default architecture first
+      const defaultArchTab = {
+        id: 'default',
+        name: 'Default GCP Architecture',
+        timestamp: new Date(),
+        rawGraph: DEFAULT_ARCHITECTURE,
+        isDefault: true
+      };
       const newArchTab = {
         id: 'new-architecture',
         name: 'New Architecture',
@@ -356,9 +378,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         rawGraph: { id: "root", children: [], edges: [] },
         isNew: true
       };
-      const mockArchs = Object.values(SAVED_ARCHITECTURES).sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
-      setSavedArchitectures([newArchTab, ...mockArchs]);
-      setSelectedArchitectureId('new-architecture');
+      const mockArchs = Object.values(SAVED_ARCHITECTURES).filter(arch => arch.id !== 'default').sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
+      setSavedArchitectures([defaultArchTab, newArchTab, ...mockArchs]);
+      setSelectedArchitectureId('default'); // Select default architecture instead of new-architecture
     }
   }, [user, syncWithFirebase, justCreatedArchId]);
   
@@ -675,11 +697,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     onConnect,
     handleLabelChange,
     
-  } = useElkToReactflowGraphConverter({
-    id: "root",
-    children: [],
-    edges: []
-  });
+  } = useElkToReactflowGraphConverter(DEFAULT_ARCHITECTURE);
 
   // Handler for manual save functionality
   const handleManualSave = useCallback(async () => {
@@ -837,6 +855,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       edges: []
     };
     setRawGraph(emptyGraph);
+    setShouldAutoFit(true); // Enable auto-fit when creating new architecture
     
     // Reset the "New Architecture" tab name in case it was changed
     setSavedArchitectures(prev => prev.map(arch => 
@@ -872,6 +891,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         source: 'ArchitectureSelector',
         reason: 'architecture-load'
       });
+      
+      // Enable auto-fit when loading a different architecture
+      setShouldAutoFit(true);
     } else {
       console.warn('⚠️ Architecture not found:', architectureId);
     }
@@ -1024,20 +1046,24 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     }
   }, []);
 
-  // Unified auto-fit view: triggers on ANY graph state change
+  // Auto-fit view: only triggers on agent-initiated changes, not user interactions
+  const [shouldAutoFit, setShouldAutoFit] = useState(true); // Start with true for initial load
+  
   useEffect(() => {
-    // Only trigger if we have content and ReactFlow is ready
-    if (nodes.length > 0 && reactFlowRef.current && layoutVersion > 0) {
+    // Only trigger if we have content, ReactFlow is ready, and auto-fit is enabled
+    if (nodes.length > 0 && reactFlowRef.current && layoutVersion > 0 && shouldAutoFit) {
       const timeoutId = setTimeout(() => {
         manualFitView();
+        setShouldAutoFit(false); // Reset the flag after fitting
       }, 200); // Unified delay to ensure layout is complete
       return () => clearTimeout(timeoutId);
     }
   }, [
-    // Trigger on ANY significant graph change:
+    // Trigger only when auto-fit is explicitly requested:
     nodes.length,           // When nodes are added/removed
     edges.length,           // When edges are added/removed  
     layoutVersion,          // When ELK layout completes (includes groups, moves, etc.)
+    shouldAutoFit,          // Only when auto-fit is requested
     manualFitView
   ]);
 
@@ -1278,6 +1304,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       if (shouldUpdateCanvas) {
         console.log('✅ Updating canvas for selected architecture');
         setRawGraph(elkGraph);
+        
+        // Enable auto-fit only for agent-initiated changes
+        if (source === 'FunctionExecutor' && reason === 'agent-update') {
+          console.log('🎯 Agent update detected - enabling auto-fit');
+          setShouldAutoFit(true);
+        }
       } else {
         console.log('⏸️ Skipping canvas update - operation for different architecture:', {
           target: targetArchitectureId,
@@ -1655,6 +1687,30 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   }, [isSessionActive, safeSendClientEvent]);
 
   // Function to generate SVG directly from layoutGraph
+  // Helper function to render multi-line text in SVG using the same logic as ELK
+  const renderMultiLineText = (text: string, x: number, y: number, fontSize: number = 12): string => {
+    const lines = splitTextIntoLines(text, 76); // Use same width as ELK calculation
+    const lineHeight = 14;
+    
+    if (text === "GKE Gateway Controller") {
+      console.log(`🟩 [SVG] Rendering "${text}" at (${x}, ${y})`);
+      console.log(`🟩 [SVG] Got lines: [${lines.join('", "')}] (${lines.length} lines)`);
+    }
+    
+    // Generate SVG text elements for each line
+    let svgText = '';
+    for (let i = 0; i < lines.length; i++) {
+      const lineY = y + (i * lineHeight) - ((lines.length - 1) * lineHeight / 2);
+      svgText += `
+        <text x="${x}" y="${lineY}" 
+          text-anchor="middle" dominant-baseline="middle" 
+          font-size="${fontSize}" font-weight="bold" fill="#2d6bc4"
+          font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">${lines[i]}</text>
+      `;
+    }
+    return svgText;
+  };
+
   const generateSVG = useCallback((layoutedGraph: any): string => {
     if (!layoutedGraph) return '';
     
@@ -1800,43 +1856,39 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       if (label) {
         if (isContainer) {
           // Group node - label at center
-          svg += `
-            <text x="${x + width/2}" y="${y + height/2}" 
-              text-anchor="middle" dominant-baseline="middle" 
-              font-size="14" font-weight="bold" fill="#2d6bc4">${label}</text>
-          `;
+          svg += renderMultiLineText(label, x + width/2, y + height/2, 14);
           
-          // Add icon for container nodes too at the top
+          // Add icon for container nodes too at the top - FIXED: 48x48 square
           if (icon) {
             // Direct image embedding approach
             svg += `
-              <image x="${x + width/2 - 15}" y="${y + 10}" width="30" height="30" 
+              <image x="${x + width/2 - 24}" y="${y + 10}" width="48" height="48" 
                  href="/assets/canvas/${icon}.svg" />
             `;
           }
         } else {
-          // Regular node - label at bottom
-          svg += `
-            <text x="${x + width/2}" y="${y + height - 10}" 
-              text-anchor="middle" dominant-baseline="middle" 
-              font-size="12" font-weight="bold" fill="#2d6bc4">${label}</text>
-          `;
+          // Regular node - text positioned below icon with proper gap
+          // Icon is at y + 10 to y + 58 (48px tall)
+          // Text starts at icon bottom + 12px gap = y + 58 + 12 = y + 70
+          const textY = y + 70;
+          svg += renderMultiLineText(label, x + width/2, textY, 12);
           
-          // Add icon if specified, otherwise use first letter
+          // Add icon if specified, otherwise use first letter - FIXED: 48x48 square
           if (icon) {
             // Direct image embedding approach
             svg += `
-              <image x="${x + width/2 - 20}" y="${y + 10}" width="40" height="40"
+              <image x="${x + width/2 - 24}" y="${y + 10}" width="48" height="48"
                 href="/assets/canvas/${icon}.svg" />
             `;
           } else {
-            // Fallback to first letter in a circle
+            // Fallback to first letter in a square - FIXED: 48x48 square
             const iconLetter = label.charAt(0).toUpperCase();
             svg += `
-              <circle cx="${x + width/2}" cy="${y + height/2 - 10}" r="15" fill="#2d6bc4" />
-              <text x="${x + width/2}" y="${y + height/2 - 6}" 
+              <rect x="${x + width/2 - 24}" y="${y + 10}" width="48" height="48" 
+                fill="#2d6bc4" rx="8" ry="8" />
+              <text x="${x + width/2}" y="${y + 34}" 
                 text-anchor="middle" dominant-baseline="middle" 
-                font-size="14" font-weight="bold" fill="white">${iconLetter}</text>
+                font-size="16" font-weight="bold" fill="white">${iconLetter}</text>
             `;
           }
         }
@@ -2275,6 +2327,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                   onClick={() => {
                     console.log('Loading default architecture...');
                     setRawGraph(DEFAULT_ARCHITECTURE);
+                    setShouldAutoFit(true); // Enable auto-fit when loading default architecture
                   }}
                   className="w-full px-3 py-2 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700 transition-colors"
                 >

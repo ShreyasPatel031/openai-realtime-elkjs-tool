@@ -41,6 +41,7 @@ import { SAVED_ARCHITECTURES } from "../../data/savedArchitectures"
 import SaveAuth from "../auth/SaveAuth"
 import ArchitectureService from "../../services/architectureService"
 import { anonymousArchitectureService } from "../../services/anonymousArchitectureService"
+import { SharingService } from "../../services/sharingService"
 import ArchitectureSidebar from "./ArchitectureSidebar"
 import { onElkGraph, dispatchElkGraph } from "../../events/graphEvents"
 import { assertRawGraph } from "../../events/graphSchema"
@@ -546,6 +547,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // State for manual save
   const [isSaving, setIsSaving] = useState(false);
   
+  // State for share overlay (for embedded version when clipboard fails)
+  const [shareOverlay, setShareOverlay] = useState<{ show: boolean; url: string; error?: string }>({ show: false, url: '' });
+  
   // State for tracking operations per architecture
   const [architectureOperations, setArchitectureOperations] = useState<Record<string, boolean>>({});
   
@@ -1008,27 +1012,25 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     }
   }, [selectedArchitectureId]);
 
-  // Handle shared architecture URLs in canvas mode (for both anonymous and signed-in user architectures)
+  // Handle shared architecture URLs (works in both public and canvas mode)
   useEffect(() => {
-    if (!isPublicMode) {
-      // Check if URL contains a shared architecture ID
-      const sharedArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
-      if (sharedArchId) {
-        console.log('🔗 Canvas mode: Loading shared architecture from URL:', sharedArchId);
-        
-        // Load the shared architecture directly using the service
-        (async () => {
-          try {
-            const sharedArch = await anonymousArchitectureService.loadAnonymousArchitectureById(sharedArchId);
-            if (sharedArch) {
-              console.log('✅ Loaded shared architecture from URL:', sharedArch.name);
-              setRawGraph(sharedArch.rawGraph);
-            }
-          } catch (error) {
-            console.error('❌ Failed to load shared architecture from URL:', error);
+    // Check if URL contains a shared architecture ID
+    const sharedArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
+    if (sharedArchId) {
+      console.log('🔗 Loading shared architecture from URL:', sharedArchId, isPublicMode ? '(public mode)' : '(canvas mode)');
+      
+      // Load the shared architecture directly using the service
+      (async () => {
+        try {
+          const sharedArch = await anonymousArchitectureService.loadAnonymousArchitectureById(sharedArchId);
+          if (sharedArch) {
+            console.log('✅ Loaded shared architecture from URL:', sharedArch.name);
+            setRawGraph(sharedArch.rawGraph);
           }
-        })();
-      }
+        } catch (error) {
+          console.error('❌ Failed to load shared architecture from URL:', error);
+        }
+      })();
     }
   }, [isPublicMode, setRawGraph]);
 
@@ -1101,10 +1103,23 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Handler for sharing current architecture (works for both signed-in and anonymous users)
   const handleShareCurrent = useCallback(async () => {
     try {
+      // Skip execution during SSR
+      if (typeof window === 'undefined') return;
+      
+      // Detect if we're in embedded version
+      const isEmbedded = window.location.hostname === 'archgen-ecru.vercel.app' || 
+                        window.location.pathname === '/embed' ||
+                        window.parent !== window;
+      
       // For anonymous users or when no architecture is selected, create a shareable anonymous architecture
       if (!user || selectedArchitectureId === 'new-architecture') {
         if (!rawGraph || !rawGraph.children || rawGraph.children.length === 0) {
-          alert('Please create some content first before sharing');
+          const message = 'Please create some content first before sharing';
+          if (isEmbedded) {
+            setShareOverlay({ show: true, url: '', error: message });
+          } else {
+            alert(message);
+          }
           return;
         }
 
@@ -1124,26 +1139,57 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         currentUrl.searchParams.set('arch', anonymousId);
         const shareUrl = currentUrl.toString();
         
-        // Copy to clipboard
-        await navigator.clipboard.writeText(shareUrl);
-        console.log('✅ Anonymous architecture share link copied to clipboard:', shareUrl);
-        alert('🔗 Share link copied to clipboard! Anyone with this link can view your architecture.');
+        if (isEmbedded) {
+          // Show overlay with URL for embedded version
+          console.log('🔗 Showing share overlay for embedded version:', shareUrl);
+          setShareOverlay({ show: true, url: shareUrl });
+        } else {
+          // Use clipboard + alert for non-embedded version
+          await navigator.clipboard.writeText(shareUrl);
+          console.log('✅ Anonymous architecture share link copied to clipboard:', shareUrl);
+          alert('🔗 Share link copied to clipboard! Anyone with this link can view your architecture.');
+        }
         
         return;
       }
 
       // For signed-in users with saved architectures
       if (selectedArchitectureId && selectedArchitectureId !== 'new-architecture') {
-        await handleShareArchitecture(selectedArchitectureId);
-        alert('🔗 Share link copied to clipboard!');
+        if (isEmbedded) {
+          // For embedded version, just get the URL and show in overlay
+          const shareUrl = await SharingService.createShareableLink(selectedArchitectureId);
+          console.log('🔗 Showing share overlay for embedded version:', shareUrl);
+          setShareOverlay({ show: true, url: shareUrl });
+        } else {
+          await handleShareArchitecture(selectedArchitectureId);
+          alert('🔗 Share link copied to clipboard!');
+        }
         return;
       }
 
       // Fallback
-      alert('Please create some content first before sharing');
+      const message = 'Please create some content first before sharing';
+      if (isEmbedded) {
+        setShareOverlay({ show: true, url: '', error: message });
+      } else {
+        alert(message);
+      }
     } catch (error) {
       console.error('❌ Error sharing current architecture:', error);
-      alert(`❌ Failed to share: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const errorMessage = `❌ Failed to share: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      
+      // Skip execution during SSR
+      if (typeof window === 'undefined') return;
+      
+      const isEmbedded = window.location.hostname === 'archgen-ecru.vercel.app' || 
+                        window.location.pathname === '/embed' ||
+                        window.parent !== window;
+      
+      if (isEmbedded) {
+        setShareOverlay({ show: true, url: '', error: errorMessage });
+      } else {
+        alert(errorMessage);
+      }
     }
   }, [selectedArchitectureId, handleShareArchitecture, user, rawGraph, anonymousArchitectureService]);
 
@@ -1424,8 +1470,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         if (error instanceof Error && error.message?.includes('No document to update')) {
           console.log('ℹ️ Anonymous architecture was already transferred/deleted - this is expected after sign-in');
         } else {
-          console.error('❌ Error saving/updating anonymous architecture:', error);
-        }
+        console.error('❌ Error saving/updating anonymous architecture:', error);
+      }
       }
     } else if (isPublicMode && user) {
       console.log('🚫 DEBUG: Skipping anonymous architecture update in handleGraphChange - user is signed in, architecture may have been transferred');
@@ -1751,7 +1797,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               const newArchId = await anonymousArchitectureService.saveAnonymousArchitecture(architectureName, elkGraph);
               console.log('✅ New anonymous architecture saved after AI update with ID:', newArchId);
             }
-                  } catch (error) {
+          } catch (error) {
           // Check if this is the expected "No document to update" error after architecture transfer
           if (error instanceof Error && error.message?.includes('No document to update')) {
             console.log('ℹ️ Anonymous architecture was already transferred/deleted - this is expected after sign-in');
@@ -2517,7 +2563,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           <Share className="w-4 h-4" />
           <span className="text-sm font-medium">Share</span>
         </button>
-
+        
         {/* Save Button (only show when signed in and not public mode) or Edit Button (when not signed in or public mode) */}
         {user && !isPublicMode ? (
           <button
@@ -2544,45 +2590,122 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             <span className="text-sm font-medium">Save</span>
           </button>
         ) : (
+          (() => {
+            // Early return with default config during SSR
+            if (typeof window === 'undefined') {
+              return (
+                <button
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:shadow-md transition-all duration-200"
+                  title="Edit in full app"
+                >
+                  <Edit className="w-4 h-4" />
+                  <span className="text-sm font-medium">Edit</span>
+                </button>
+              );
+            }
+
+            // Detect if we're in embedded version vs main site
+            const isEmbedded = window.location.hostname === 'archgen-ecru.vercel.app' || 
+                              window.location.pathname === '/embed' ||
+                              window.parent !== window; // Detect if inside iframe
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            const hasArchitectureId = urlParams.has('arch');
+            const isMainSite = window.location.hostname === 'app.atelier-inc.net' || window.location.hostname === 'localhost';
+            
+            // Debug logging
+            console.log('🔍 [BUTTON DEBUG] Detection results:', {
+              hostname: window.location.hostname,
+              pathname: window.location.pathname,
+              isEmbedded,
+              isMainSite,
+              hasArchitectureId,
+              architectureId: urlParams.get('arch'),
+              isInIframe: window.parent !== window
+            });
+            
+            // Button configuration based on context
+            // Show "Save" on main site, "Edit" in embedded version
+            const buttonConfig = isMainSite ? {
+              text: 'Save',
+              icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>,
+              action: 'sign-in', // Trigger profile sign-in
+              title: 'Sign in to save'
+            } : {
+              text: 'Edit',
+              icon: <Edit className="w-4 h-4" />,
+              action: 'new-tab', // Open new tab to main site
+              title: 'Edit in full app'
+            };
+            
+            console.log('🔍 [BUTTON DEBUG] Button config:', buttonConfig);
+            
+            return (
           <button
             onClick={() => {
-              // Store current canvas state for handoff
+                  console.log('🔄 [BUTTON DEBUG] Button clicked, action:', buttonConfig.action);
+                  
+                  if (buttonConfig.action === 'new-tab') {
+                    // Embedded version: open main site in new tab
               const currentState = {
                 elkGraph: rawGraph,
                 timestamp: Date.now()
               };
               localStorage.setItem('publicCanvasState', JSON.stringify(currentState));
-              console.log('🔄 Storing canvas state and triggering sign-in');
-              
-              // Trigger the same sign-in as SaveAuth component
+                    console.log('🔄 [EMBEDDED] Opening main site in new tab...');
+                    
+                    // Build target URL with architecture if available
+                    let targetUrl = 'https://app.atelier-inc.net/';
+                    if (hasArchitectureId) {
+                      targetUrl += `?arch=${urlParams.get('arch')}`;
+                    }
+                    console.log('🔗 [EMBEDDED] Target URL:', targetUrl);
+                    
+                    window.open(targetUrl, '_blank');
+                  } else {
+                    // Main site: trigger sign-in via profile button
+                    console.log('🔄 [MAIN SITE] Triggering sign-in for save...');
               const saveAuthButton = document.querySelector('.save-auth-dropdown button');
               if (saveAuthButton) {
+                      console.log('✅ [MAIN SITE] Found profile button, clicking...');
                 (saveAuthButton as HTMLButtonElement).click();
+                    } else {
+                      console.error('❌ [MAIN SITE] Profile button not found!');
+                    }
               }
             }}
             className="flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:shadow-md transition-all duration-200"
-            title="Sign in to continue editing"
+                title={buttonConfig.title}
           >
-            <Edit className="w-4 h-4" />
-            <span className="text-sm font-medium">Edit</span>
+                {buttonConfig.icon}
+                <span className="text-sm font-medium">{buttonConfig.text}</span>
           </button>
+            );
+          })()
         )}
         
-        {/* Settings button - Hidden in public mode */}
-        {!isPublicMode && (
-        <button
-          onClick={() => setShowDev(!showDev)}
-          className={`flex items-center justify-center w-10 h-10 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
-            showDev ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
-          }`}
-          title="Developer Panel"
-        >
-          <Settings className="w-4 h-4" />
-        </button>
-        )}
 
-        {/* Profile/Auth - Always visible, now rightmost */}
-        <SaveAuth onSave={handleSave} isCollapsed={true} user={user} />
+
+        {/* Profile/Auth - Hidden in embedded version, visible on main site */}
+        {(() => {
+          // Show SaveAuth during SSR, will be corrected on client-side
+          if (typeof window === 'undefined') {
+            return <SaveAuth onSave={handleSave} isCollapsed={true} user={user} />;
+          }
+
+          const isEmbedded = window.location.hostname === 'archgen-ecru.vercel.app' || 
+                            window.location.pathname === '/embed' ||
+                            window.parent !== window; // Detect if inside iframe
+          
+          // Don't show profile button in embedded version
+          if (isEmbedded) {
+            return null;
+          }
+          
+          return <SaveAuth onSave={handleSave} isCollapsed={true} user={user} />;
+        })()}
       </div>
 
       {/* Connection status indicator - HIDDEN */}
@@ -2923,6 +3046,108 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           }}
         />
       </div>
+      
+      {/* Share Overlay for Embedded Version */}
+      {shareOverlay.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" onClick={() => setShareOverlay({ show: false, url: '' })}>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {shareOverlay.error ? 'Share Failed' : 'Share Architecture'}
+              </h3>
+              <button
+                onClick={() => setShareOverlay({ show: false, url: '' })}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {shareOverlay.error ? (
+              <div className="text-red-600 text-center py-4">
+                {shareOverlay.error}
+              </div>
+            ) : (
+              <div>
+                <p className="text-gray-600 mb-4">
+                  Copy this link to share your architecture:
+                </p>
+                <div className="relative mb-4">
+                  <div className="bg-gray-50 border rounded-lg p-3 pr-12">
+                    <code className="text-sm text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis block">
+                      {shareOverlay.url}
+                    </code>
+                  </div>
+                  <button
+                    onClick={() => {
+                      // Manual copy fallback for embedded version
+                      const textArea = document.createElement('textarea');
+                      textArea.value = shareOverlay.url;
+                      document.body.appendChild(textArea);
+                      textArea.select();
+                      try {
+                        document.execCommand('copy');
+                        // Show brief success feedback
+                        const btn = document.activeElement as HTMLButtonElement;
+                        const originalInner = btn.innerHTML;
+                        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
+                        setTimeout(() => {
+                          btn.innerHTML = originalInner;
+                        }, 1000);
+                      } catch (err) {
+                        console.error('Manual copy failed:', err);
+                      }
+                      document.body.removeChild(textArea);
+                    }}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-500 hover:text-gray-700 transition-colors"
+                    title="Copy to clipboard"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      // Manual copy fallback for embedded version
+                      const textArea = document.createElement('textarea');
+                      textArea.value = shareOverlay.url;
+                      document.body.appendChild(textArea);
+                      textArea.select();
+                      try {
+                        document.execCommand('copy');
+                        // Show brief success feedback
+                        const btn = document.activeElement as HTMLButtonElement;
+                        const originalText = btn.textContent;
+                        btn.textContent = 'Copied!';
+                        setTimeout(() => {
+                          btn.textContent = originalText;
+                        }, 1000);
+                      } catch (err) {
+                        console.error('Manual copy failed:', err);
+                      }
+                      document.body.removeChild(textArea);
+                    }}
+                    className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-full hover:bg-blue-700 transition-colors font-medium"
+                  >
+                    Copy Link
+                  </button>
+                  <button
+                    onClick={() => setShareOverlay({ show: false, url: '' })}
+                    className="px-4 py-2 border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
       </div>
     </div>
     </ApiEndpointProvider>

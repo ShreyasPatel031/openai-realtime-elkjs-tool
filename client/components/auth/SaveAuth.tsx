@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { auth } from '../../lib/firebase';
-import { GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, User, onAuthStateChanged, getIdToken } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signOut, User, onAuthStateChanged, getIdToken } from 'firebase/auth';
 import { LogOut, User as UserIcon } from 'lucide-react';
 
 interface SaveAuthProps {
@@ -27,116 +27,78 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
 
     setIsLoading(true);
     try {
-      // Store current canvas state for handoff to the new tab
-      const currentState = {
-        elkGraph: localStorage.getItem('publicCanvasState'),
-        timestamp: Date.now()
-      };
-      localStorage.setItem('authRedirectState', JSON.stringify(currentState));
+      const provider = new GoogleAuthProvider();
       
-      console.log('🔄 Opening authentication in new tab...');
+      // Configure provider to ensure popup behavior
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
       
-      // Open authentication in a new tab
-      const authUrl = `https://app.atelier-inc.net/auth-redirect`;
-      const newTab = window.open(authUrl, '_blank', 'width=600,height=700,scrollbars=yes,resizable=yes');
+      console.log('🔄 Attempting Google sign-in with popup...');
+      const result = await signInWithPopup(auth, provider);
+      console.log('✅ User signed in via popup:', result.user.email);
       
-      if (newTab) {
-        console.log('✅ Authentication tab opened successfully');
+      // Transfer anonymous architectures if signing in from public route
+      if (location.pathname === '/') {
+        console.log('🔄 Transferring anonymous architectures and redirecting to /canvas...');
         
-        // Listen for the new tab to complete authentication
-        const checkClosed = setInterval(() => {
-          if (newTab.closed) {
-            clearInterval(checkClosed);
-            console.log('🔄 Authentication tab closed, checking for successful login...');
-            setIsLoading(false);
+        // Import and transfer anonymous architectures
+        const { anonymousArchitectureService } = await import('../../services/anonymousArchitectureService');
+        try {
+          const transferResult = await anonymousArchitectureService.transferAnonymousArchitectures(
+            result.user.uid,
+            result.user.email || ''
+          );
+          console.log(`🎉 Transferred ${transferResult.count} anonymous architectures`);
+          console.log('🔗 Transferred architecture IDs:', transferResult.transferredIds);
+          console.log('🔗 DEBUG: Transfer result details:', transferResult);
+          
+          // Store the transferred architecture ID to prioritize it in the new canvas tab
+          if (transferResult.transferredIds.length > 0) {
+            const priorityArchId = transferResult.transferredIds[0]; // Use the first (most recent) transferred architecture
+            localStorage.setItem('priority_architecture_id', priorityArchId);
+            console.log('📌 Set priority architecture for canvas:', priorityArchId);
           }
-        }, 1000);
-      } else {
-        console.log('❌ Failed to open authentication tab - popup blocked?');
-        alert('Please allow popups for this site to sign in.');
-        setIsLoading(false);
+        } catch (error) {
+          console.error('❌ Error transferring anonymous architectures:', error);
+        }
+        
+        // Navigate to canvas in the same tab
+        console.log('🔄 Navigating to /canvas...');
+        navigate('/canvas');
+        return;
+      }
+      
+      // If on canvas route, proceed with save functionality
+      if (onSave && result.user) {
+        try {
+          console.log('🔄 Getting fresh auth token...');
+          await getIdToken(result.user, /* forceRefresh */ true);
+          console.log('✅ Fresh auth token obtained');
+          onSave(result.user);
+        } catch (tokenError) {
+          console.error('❌ Failed to get auth token:', tokenError);
+          // Still try to save in case token isn't the issue
+          onSave(result.user);
+        }
       }
     } catch (error: any) {
-      console.error('❌ Error opening authentication tab:', error);
+      console.error('❌ Error signing in with Google:', error);
+      if (error.code === 'auth/popup-closed-by-user') {
+        console.log('🚫 Sign-in was cancelled by user');
+      } else if (error.code === 'auth/popup-blocked') {
+        console.log('🚫 Sign-in popup was blocked by browser');
+        console.log('💡 Please allow popups for this site and try again');
+        alert('Please allow popups for this site and try signing in again. The sign-in popup was blocked by your browser.');
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        console.log('🚫 Another popup request was cancelled');
+      } else {
+        console.log('❌ Unexpected error during popup sign-in:', error.message);
+      }
+    } finally {
       setIsLoading(false);
     }
   };
-
-  // Handle redirect result on component mount
-  useEffect(() => {
-    const handleRedirectResult = async () => {
-      if (!auth) return;
-      
-      try {
-        console.log('🔍 Checking for redirect result...');
-        console.log('🌐 Current location:', location.pathname);
-        console.log('🔗 Auth object:', auth);
-        
-        const result = await getRedirectResult(auth);
-        console.log('📋 Redirect result:', result);
-        
-        if (result && result.user) {
-          console.log('✅ User signed in via redirect:', result.user.email);
-          
-          // Restore state from before redirect
-          const savedState = localStorage.getItem('authRedirectState');
-          if (savedState) {
-            const state = JSON.parse(savedState);
-            console.log('🔄 Restoring state from before redirect');
-            localStorage.removeItem('authRedirectState');
-          }
-          
-          // Transfer anonymous architectures if signing in from public route
-          if (location.pathname === '/') {
-            console.log('🔄 Transferring anonymous architectures and redirecting to /canvas...');
-            
-            // Import and transfer anonymous architectures
-            const { anonymousArchitectureService } = await import('../../services/anonymousArchitectureService');
-            try {
-              const transferResult = await anonymousArchitectureService.transferAnonymousArchitectures(
-                result.user.uid,
-                result.user.email || ''
-              );
-              console.log(`🎉 Transferred ${transferResult.count} anonymous architectures`);
-              console.log('🔗 Transferred architecture IDs:', transferResult.transferredIds);
-              
-              // Store the transferred architecture ID to prioritize it in the new canvas tab
-              if (transferResult.transferredIds.length > 0) {
-                const priorityArchId = transferResult.transferredIds[0];
-                localStorage.setItem('priority_architecture_id', priorityArchId);
-                console.log('📌 Set priority architecture for canvas:', priorityArchId);
-              }
-            } catch (error) {
-              console.error('❌ Error transferring anonymous architectures:', error);
-            }
-            
-            // Redirect to custom domain canvas
-            console.log('🔄 Redirecting to https://app.atelier-inc.net/canvas...');
-            window.location.href = 'https://app.atelier-inc.net/canvas';
-            return;
-          }
-          
-          // If on canvas route, proceed with save functionality
-          if (onSave && result.user) {
-            try {
-              console.log('🔄 Getting fresh auth token...');
-              await getIdToken(result.user, /* forceRefresh */ true);
-              console.log('✅ Fresh auth token obtained');
-              onSave(result.user);
-            } catch (tokenError) {
-              console.error('❌ Failed to get auth token:', tokenError);
-              // Still try to save in case token isn't the issue
-              onSave(result.user);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('❌ Error handling redirect result:', error);
-      }
-    };
-
-    handleRedirectResult();
-  }, [location.pathname, navigate, onSave]);
 
   const handleSignOut = async () => {
     if (!auth) return;

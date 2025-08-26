@@ -347,7 +347,7 @@ export { availableIconsComprehensive as availableIcons };
 export const modelConfigs = {
   // Main architecture generation model
   reasoning: {
-    model: "gpt-5" as const,
+    model: "gpt-4.1" as const,
 
     // Temperature and top_p
     temperature: 0.1,

@@ -12,6 +12,14 @@
     {
       "source": "/embeddable/(.*)",
       "destination": "/dist/embeddable/$1"
+    },
+    {
+      "source": "/auth-redirect",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/canvas",
+      "destination": "/index.html"
     }
   ],
   "headers": [

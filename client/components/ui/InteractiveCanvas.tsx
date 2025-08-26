@@ -504,22 +504,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         console.log('🎯 Executing pending architecture selection:', pendingArchitectureSelection, targetArch.name);
         console.log('🎯 Target architecture data:', {id: targetArch.id, name: targetArch.name, hasRawGraph: !!targetArch.rawGraph});
         
-        // Set the selected architecture ID directly
-        setSelectedArchitectureId(pendingArchitectureSelection);
-        
-        // Manually load the architecture content to ensure it's displayed
-        if (targetArch.rawGraph) {
-          console.log('📂 Manually loading transferred architecture content:', targetArch.name);
-          
-          // Use typed event system for architecture loading
-          dispatchElkGraph({
-            elkGraph: assertRawGraph(targetArch.rawGraph, 'PendingSelection'),
-            source: 'PendingSelection',
-            reason: 'transferred-architecture-load'
-          });
-        } else {
-          console.warn('⚠️ Target architecture has no rawGraph data');
-        }
+        // Use handleSelectArchitecture to properly load the architecture with full functionality
+        handleSelectArchitecture(pendingArchitectureSelection);
         
         setPendingArchitectureSelection(null); // Clear the pending selection
       } else {
@@ -527,7 +513,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         console.warn('⚠️ Available architectures:', savedArchitectures.map(arch => ({id: arch.id, name: arch.name})));
       }
     }
-  }, [savedArchitectures, pendingArchitectureSelection]);
+  }, [savedArchitectures, pendingArchitectureSelection, handleSelectArchitecture]);
 
   // Function to manually refresh architectures (only when actually needed)
   const refreshArchitectures = useCallback(() => {

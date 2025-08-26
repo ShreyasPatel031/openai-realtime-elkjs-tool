@@ -217,12 +217,18 @@ class AnonymousArchitectureService {
 
       for (const arch of anonymousArchs) {
         try {
-          // Save as regular user architecture
+          // Save as regular user architecture with complete data
+          // Extract nodes and edges from rawGraph for compatibility
+          const nodes = arch.rawGraph?.children || [];
+          const edges = arch.rawGraph?.edges || [];
+          
           const newArchId = await ArchitectureService.saveArchitecture({
             name: arch.name,
             userId,
             userEmail,
             rawGraph: arch.rawGraph,
+            nodes: nodes,
+            edges: edges,
             userPrompt: `Transferred from anonymous session on ${arch.timestamp.toDate().toLocaleDateString()}`
           });
 

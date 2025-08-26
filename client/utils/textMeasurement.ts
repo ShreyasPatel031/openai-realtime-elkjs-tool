@@ -6,6 +6,10 @@
 let measurementSvg: SVGSVGElement | null = null;
 let measurementText: SVGTextElement | null = null;
 
+// Memoization cache to prevent excessive calculations
+const measurementCache = new Map<string, string[]>();
+const nodeLabelCache = new Map<string, { width: number; height: number; lines: number }>();
+
 /**
  * Initialize the measurement elements (called once)
  */
@@ -42,6 +46,12 @@ function initMeasurement() {
  * This is the SINGLE SOURCE OF TRUTH for text wrapping logic
  */
 export function splitTextIntoLines(text: string, maxLineWidth: number = 76): string[] {
+  // Check cache first
+  const cacheKey = `${text}_${maxLineWidth}`;
+  if (measurementCache.has(cacheKey)) {
+    return measurementCache.get(cacheKey)!;
+  }
+  
   // For browser environment, use proper text measurement
   if (typeof window !== 'undefined') {
     initMeasurement();
@@ -51,8 +61,9 @@ export function splitTextIntoLines(text: string, maxLineWidth: number = 76): str
         const lines: string[] = [];
         let currentLine = '';
         
-        // Special logging for GKE Gateway Controller
-        if (text === "GKE Gateway Controller") {
+        // Remove excessive logging to prevent console spam
+        const isDebugText = text === "GKE Gateway Controller" && measurementCache.size < 10; // Only log first few times
+        if (isDebugText) {
           console.log(`🔍 [MEASUREMENT] Splitting "${text}" with maxWidth: ${maxLineWidth}px`);
         }
         
@@ -61,7 +72,7 @@ export function splitTextIntoLines(text: string, maxLineWidth: number = 76): str
           measurementText.textContent = testLine;
           const testWidth = measurementText.getBBox().width;
           
-          if (text === "GKE Gateway Controller") {
+          if (isDebugText) {
             console.log(`  [MEASUREMENT] Testing: "${testLine}" -> ${testWidth}px (limit: ${maxLineWidth}px)`);
           }
           
@@ -70,14 +81,14 @@ export function splitTextIntoLines(text: string, maxLineWidth: number = 76): str
           } else {
             if (currentLine) {
               lines.push(currentLine);
-              if (text === "GKE Gateway Controller") {
+              if (isDebugText) {
                 console.log(`  [MEASUREMENT] ✅ Added line: "${currentLine}"`);
               }
               currentLine = word;
             } else {
               // Single word is too long, but DON'T break it - keep as one line
               lines.push(word);
-              if (text === "GKE Gateway Controller") {
+              if (isDebugText) {
                 console.log(`  [MEASUREMENT] ⚠️ Long word: "${word}"`);
               }
               currentLine = '';
@@ -87,14 +98,17 @@ export function splitTextIntoLines(text: string, maxLineWidth: number = 76): str
         
         if (currentLine) {
           lines.push(currentLine);
-          if (text === "GKE Gateway Controller") {
+          if (isDebugText) {
             console.log(`  [MEASUREMENT] ✅ Final line: "${currentLine}"`);
           }
         }
         
-        if (text === "GKE Gateway Controller") {
+        if (isDebugText) {
           console.log(`🎯 [MEASUREMENT] Result: [${lines.join('", "')}] (${lines.length} lines)`);
         }
+        
+        // Cache the result
+        measurementCache.set(cacheKey, lines);
         return lines;
       } catch (error) {
         console.warn('❌ Failed to measure text, using fallback:', error);
@@ -127,10 +141,18 @@ export function splitTextIntoLines(text: string, maxLineWidth: number = 76): str
   if (currentLine) {
     lines.push(currentLine);
   }
+
+  // Cache the fallback result too
+  measurementCache.set(cacheKey, lines);
   return lines;
 }
 
 export function measureNodeLabel(text: string): { width: number; height: number; lines: number } {
+  // Check cache first
+  if (nodeLabelCache.has(text)) {
+    return nodeLabelCache.get(text)!;
+  }
+
   const maxLineWidth = 76; // Reduced width to add horizontal padding (100px - 24px padding)
   const lines = splitTextIntoLines(text, maxLineWidth);
   
@@ -157,11 +179,15 @@ export function measureNodeLabel(text: string): { width: number; height: number;
     maxWidth = text.length * 7; // SSR fallback
   }
   
-  return {
+  const result = {
     width: Math.ceil(maxWidth),
     height: totalHeight,
     lines: lines.length
   };
+
+  // Cache the result
+  nodeLabelCache.set(text, result);
+  return result;
 }
 
 /**

@@ -42,6 +42,11 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
       if (location.pathname === '/') {
         console.log('🔄 Transferring anonymous architectures and redirecting to /canvas...');
         
+        // Get architecture ID from URL before transferring
+        const urlParams = new URLSearchParams(location.search);
+        const architectureIdFromUrl = urlParams.get('arch');
+        console.log('🔗 Architecture ID from URL:', architectureIdFromUrl);
+        
         // Import and transfer anonymous architectures
         const { anonymousArchitectureService } = await import('../../services/anonymousArchitectureService');
         try {
@@ -53,9 +58,21 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
           console.log('🔗 Transferred architecture IDs:', transferResult.transferredIds);
           console.log('🔗 DEBUG: Transfer result details:', transferResult);
           
-          // Store the transferred architecture ID to prioritize it in the new canvas tab
-          if (transferResult.transferredIds.length > 0) {
-            const priorityArchId = transferResult.transferredIds[0]; // Use the first (most recent) transferred architecture
+          // Determine which architecture to prioritize
+          let priorityArchId = null;
+          
+          // If there's an architecture ID in the URL, that takes priority
+          if (architectureIdFromUrl) {
+            priorityArchId = architectureIdFromUrl;
+            console.log('📌 Using architecture ID from URL:', priorityArchId);
+          } else if (transferResult.transferredIds.length > 0) {
+            // Otherwise, use the first transferred architecture
+            priorityArchId = transferResult.transferredIds[0];
+            console.log('📌 Using first transferred architecture:', priorityArchId);
+          }
+          
+          // Store the priority architecture ID
+          if (priorityArchId) {
             localStorage.setItem('priority_architecture_id', priorityArchId);
             console.log('📌 Set priority architecture for canvas:', priorityArchId);
           }
@@ -63,9 +80,10 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
           console.error('❌ Error transferring anonymous architectures:', error);
         }
         
-        // Navigate to canvas in the same tab
-        console.log('🔄 Navigating to /canvas...');
-        navigate('/canvas');
+        // Navigate to canvas in the same tab, preserving architecture ID if present
+        const canvasUrl = architectureIdFromUrl ? `/canvas?arch=${architectureIdFromUrl}` : '/canvas';
+        console.log('🔄 Navigating to:', canvasUrl);
+        navigate(canvasUrl);
         return;
       }
       

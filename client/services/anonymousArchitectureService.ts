@@ -18,7 +18,9 @@ export interface AnonymousArchitecture {
 }
 
 class AnonymousArchitectureService {
-  private sessionId: string | null = null;
+  private sessionId: string | null = null
+  private lastSaveTime: number = 0
+  private saveThrottleMs: number = 1000 // Minimum 1 second between saves (reasonable spam protection);
 
   /**
    * Get or create a session ID for anonymous user
@@ -55,6 +57,14 @@ class AnonymousArchitectureService {
       if (!db) {
         throw new Error('Firebase db is not initialized');
       }
+
+      const now = Date.now();
+
+      // Light throttle to prevent spam clicking (1 second)
+      if (now - this.lastSaveTime < this.saveThrottleMs) {
+        console.log('⏳ Save throttled - too soon after last save');
+        throw new Error('Save throttled - please wait before saving again');
+      }
       
       const sessionId = this.getSessionId();
       
@@ -72,6 +82,9 @@ class AnonymousArchitectureService {
       const docRef = await addDoc(collection(db, 'anonymous_architectures'), anonymousArch);
       
       console.log('✅ Anonymous architecture saved with ID:', docRef.id);
+      
+      // Update throttling state
+      this.lastSaveTime = now;
       
       // Update URL with architecture ID for sharing
       this.updateUrlWithArchitectureId(docRef.id);

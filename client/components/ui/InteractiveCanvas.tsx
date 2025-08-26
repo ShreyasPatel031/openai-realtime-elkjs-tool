@@ -504,7 +504,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         console.log('🎯 Executing pending architecture selection:', pendingArchitectureSelection, targetArch.name);
         console.log('🎯 Target architecture data:', {id: targetArch.id, name: targetArch.name, hasRawGraph: !!targetArch.rawGraph});
         
-        // Set the selected architecture ID
+        // Set the selected architecture ID directly
         setSelectedArchitectureId(pendingArchitectureSelection);
         
         // Manually load the architecture content to ensure it's displayed
@@ -548,10 +548,79 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   
   // State for share overlay (for embedded version when clipboard fails)
-  const [shareOverlay, setShareOverlay] = useState<{ show: boolean; url: string; error?: string }>({ show: false, url: '' });
+  const [shareOverlay, setShareOverlay] = useState<{ show: boolean; url: string; error?: string; copied?: boolean }>({ show: false, url: '' });
+  const [copyButtonState, setCopyButtonState] = useState<'idle' | 'copying' | 'success'>('idle');
+  const [inputOverlay, setInputOverlay] = useState<{ 
+    show: boolean; 
+    title: string; 
+    placeholder: string; 
+    defaultValue: string; 
+    onConfirm: (value: string) => void; 
+    onCancel: () => void; 
+  }>({ 
+    show: false, 
+    title: '', 
+    placeholder: '', 
+    defaultValue: '', 
+    onConfirm: () => {}, 
+    onCancel: () => {} 
+  });
+  const [deleteOverlay, setDeleteOverlay] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+  }>({
+    show: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    onCancel: () => {}
+  });
+  
+  // Universal notification system (replaces all alert/confirm popups)
+  const [notification, setNotification] = useState<{
+    show: boolean;
+    type: 'success' | 'error' | 'info' | 'confirm';
+    title: string;
+    message: string;
+    onConfirm?: () => void;
+    onCancel?: () => void;
+    confirmText?: string;
+    cancelText?: string;
+  }>({ show: false, type: 'info', title: '', message: '' });
   
   // State for tracking operations per architecture
   const [architectureOperations, setArchitectureOperations] = useState<Record<string, boolean>>({});
+  
+  // Helper function to show notifications (replaces alerts)
+  const showNotification = useCallback((
+    type: 'success' | 'error' | 'info' | 'confirm',
+    title: string,
+    message: string,
+    options?: {
+      onConfirm?: () => void;
+      onCancel?: () => void;
+      confirmText?: string;
+      cancelText?: string;
+    }
+  ) => {
+    setNotification({
+      show: true,
+      type,
+      title,
+      message,
+      onConfirm: options?.onConfirm,
+      onCancel: options?.onCancel,
+      confirmText: options?.confirmText || 'OK',
+      cancelText: options?.cancelText || 'Cancel'
+    });
+  }, []);
+
+  const hideNotification = useCallback(() => {
+    setNotification({ show: false, type: 'info', title: '', message: '' });
+  }, []);
   
   // Helper functions for operation tracking
   const setArchitectureOperationState = useCallback((architectureId: string, isRunning: boolean) => {
@@ -583,17 +652,25 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Sidebar handlers for ellipsis menu
   const handleDeleteArchitecture = async (architectureId: string) => {
     if (architectureId === 'new-architecture') {
-      alert('Cannot delete the "New Architecture" tab');
+      showNotification('error', 'Cannot Delete', 'Cannot delete the "New Architecture" tab');
       return;
     }
 
     const architecture = savedArchitectures.find(arch => arch.id === architectureId);
     if (!architecture) {
       console.warn('⚠️ Architecture not found for deletion:', architectureId);
+      showNotification('error', 'Architecture Not Found', 'The selected architecture could not be found.');
       return;
     }
 
-    if (confirm(`Are you sure you want to delete "${architecture.name}"? This action cannot be undone.`)) {
+    // Show delete confirmation overlay
+    setDeleteOverlay({
+      show: true,
+      title: 'Delete Architecture',
+      message: `Are you sure you want to delete "${architecture.name}"? This action cannot be undone.`,
+      onConfirm: async () => {
+        setDeleteOverlay(prev => ({ ...prev, show: false }));
+        
       try {
         // Always attempt to delete from Firebase if user is signed in
         if (user?.uid) {
@@ -624,37 +701,70 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         }
 
         console.log('✅ Architecture deleted locally and from Firebase');
+          showNotification('success', 'Deleted', `Architecture "${architecture.name}" has been deleted`);
         
       } catch (error) {
         console.error('❌ Error deleting architecture:', error);
-        alert(`Failed to delete architecture: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          showNotification('error', 'Delete Failed', `Failed to delete architecture: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
+      },
+      onCancel: () => {
+        setDeleteOverlay(prev => ({ ...prev, show: false }));
     }
+    });
   };
 
   const handleShareArchitecture = async (architectureId: string) => {
     const architecture = savedArchitectures.find(arch => arch.id === architectureId);
     if (!architecture) {
       console.warn('⚠️ Architecture not found for sharing:', architectureId);
+      showNotification('error', 'Architecture Not Found', 'The selected architecture could not be found.');
       return;
     }
 
     try {
-      // Import the sharing service
-      const { SharingService } = await import('../../services/sharingService');
+      console.log('📤 Sharing architecture from sidebar:', architectureId, architecture.name);
       
-      // Create and copy shareable link
-      await SharingService.shareArchitecture(architectureId);
+      // Create a shareable anonymous copy so anonymous users can access it
+      console.log('📤 Creating shareable anonymous copy of architecture:', architecture.name);
       
-      // Simple success feedback
-      console.log(`✅ Share link for "${architecture.name}" copied to clipboard!`);
+      let anonymousId;
+      try {
+        anonymousId = await anonymousArchitectureService.saveAnonymousArchitecture(
+          `${architecture.name} (Shared)`,
+          architecture.rawGraph
+        );
+      } catch (error) {
+        console.warn('⚠️ Share creation throttled:', error.message);
+        showNotification('error', 'Share Throttled', 'Please wait a moment before sharing again.');
+        return;
+      }
+      
+      // Create shareable URL using the anonymous copy ID
+      if (typeof window === 'undefined') return;
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set('arch', anonymousId);
+      const shareUrl = currentUrl.toString();
+      
+      // Always show overlay, try clipboard as enhancement
+      let clipboardSuccess = false;
+      if (navigator.clipboard) {
+        try {
+          await navigator.clipboard.writeText(shareUrl);
+          clipboardSuccess = true;
+          console.log('✅ Sidebar share link copied to clipboard:', shareUrl);
+        } catch (clipboardError) {
+          console.warn('⚠️ Clipboard failed in sidebar share:', clipboardError.message);
+        }
+      }
+      
+      // Always show overlay regardless of clipboard success
+      setShareOverlay({ show: true, url: shareUrl, copied: clipboardSuccess });
+      
+      console.log('✅ Architecture share link created:', shareUrl);
     } catch (error) {
       console.error('❌ Failed to share architecture:', error);
-      // Fallback to basic sharing
-      const shareUrl = `https://atelier.inc.net/architecture/${architectureId}`;
-      navigator.clipboard.writeText(shareUrl)
-        .then(() => console.log('✅ Fallback share link copied to clipboard'))
-        .catch(() => console.error('❌ Failed to copy to clipboard'));
+      showNotification('error', 'Share Failed', 'Failed to create share link. Please try again.');
     }
   };
 
@@ -662,34 +772,71 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     const architecture = savedArchitectures.find(arch => arch.id === architectureId);
     if (!architecture) {
       console.warn('⚠️ Architecture not found for editing:', architectureId);
+      showNotification('error', 'Architecture Not Found', 'The selected architecture could not be found.');
       return;
     }
 
-    const newName = prompt('Enter new name for the architecture:', architecture.name);
+    // Show input overlay for renaming
+    setInputOverlay({
+      show: true,
+      title: 'Rename Architecture',
+      placeholder: 'Enter architecture name',
+      defaultValue: architecture.name,
+      onConfirm: (newName: string) => {
+        setInputOverlay(prev => ({ ...prev, show: false }));
+        
     if (newName && newName.trim() && newName !== architecture.name) {
       // Ensure the new name is unique
       const otherArchitectures = savedArchitectures.filter(arch => arch.id !== architectureId);
       const uniqueName = ensureUniqueName(newName.trim(), otherArchitectures);
       
       if (uniqueName !== newName.trim()) {
-        const proceed = confirm(`The name "${newName.trim()}" already exists. Use "${uniqueName}" instead?`);
-        if (!proceed) return;
+            showNotification('confirm', 'Name Already Exists', `The name "${newName.trim()}" already exists. Use "${uniqueName}" instead?`, {
+              onConfirm: () => {
+                hideNotification();
+                performRename(architectureId, uniqueName);
+              },
+              onCancel: hideNotification,
+              confirmText: 'Use New Name',
+              cancelText: 'Cancel'
+            });
+            return;
+          }
+          
+          performRename(architectureId, uniqueName);
+        }
+      },
+      onCancel: () => {
+        setInputOverlay(prev => ({ ...prev, show: false }));
       }
+    });
+  };
+
+  const performRename = (architectureId: string, newName: string) => {
+    const architecture = savedArchitectures.find(arch => arch.id === architectureId);
+    if (!architecture) return;
       
       // Update locally
       setSavedArchitectures(prev => prev.map(arch => 
         arch.id === architectureId 
-          ? { ...arch, name: uniqueName }
+        ? { ...arch, name: newName }
           : arch
       ));
 
       // Update in Firebase if it exists there
       if (architecture.isFromFirebase && user?.uid) {
         const firebaseId = architecture.firebaseId || architecture.id;
-        ArchitectureService.updateArchitecture(firebaseId, { name: uniqueName })
-          .then(() => console.log('✅ Architecture name updated in Firebase'))
-          .catch(error => console.error('❌ Error updating name in Firebase:', error));
-      }
+      ArchitectureService.updateArchitecture(firebaseId, { name: newName })
+        .then(() => {
+          console.log('✅ Architecture name updated in Firebase');
+          showNotification('success', 'Renamed Successfully', `Architecture renamed to "${newName}"`);
+        })
+        .catch(error => {
+          console.error('❌ Error updating name in Firebase:', error);
+          showNotification('error', 'Update Failed', 'Failed to update name in the cloud. Changes saved locally.');
+        });
+    } else {
+      showNotification('success', 'Renamed Successfully', `Architecture renamed to "${newName}"`);
     }
   };
 
@@ -912,97 +1059,13 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const [realtimeSyncId, setRealtimeSyncId] = useState<string | null>(null);
   const [isRealtimeSyncing, setIsRealtimeSyncing] = useState(false);
 
+  // EMERGENCY: COMPLETELY DISABLED real-time sync to stop infinite Firebase loop
+  // This was causing thousands of writes per second: 
+  // Graph update → Firebase save → triggers graph change → Firebase save → LOOP!
   useEffect(() => {
-    // Only sync if:
-    // 1. User is signed in
-    // 2. We're on "New Architecture" tab (creating new content)
-    // 3. There's actual content to sync
-    // 4. Not currently saving manually
-    // 5. Not already syncing in real-time
-    // 6. Not in the middle of a chat operation (which will handle its own saving)
-    if (
-      user && 
-      selectedArchitectureId === 'new-architecture' && 
-      rawGraph && 
-      rawGraph.children && 
-      rawGraph.children.length > 0 &&
-      !isSaving &&
-      !isRealtimeSyncing &&
-      !agentLockedArchitectureId // Don't sync if agent is actively working
-    ) {
-      console.log('🔄 Real-time sync: Graph changed, auto-saving to Firebase...');
-      
-      const syncToFirebase = async () => {
-        setIsRealtimeSyncing(true);
-        try {
-          // Generate a name for the architecture if we don't have a sync ID yet
-          const architectureName = realtimeSyncId ? 
-            `Live Architecture - ${new Date().toLocaleDateString()}` : 
-            ArchitectureService.generateArchitectureName(rawGraph.children || [], rawGraph.edges || []);
-          
-          let syncId = realtimeSyncId;
-          
-          if (!syncId) {
-            // Create new architecture for real-time sync
-            console.log('📝 Creating new live architecture:', architectureName);
-            syncId = await ArchitectureService.saveArchitecture({
-              name: architectureName,
-              userId: user.uid,
-              userEmail: user.email || '',
-              rawGraph: rawGraph,
-              userPrompt: ''
-            });
-            setRealtimeSyncId(syncId);
-            console.log('✅ Created live architecture with ID:', syncId);
-            
-            // Add the new architecture to local state without triggering Firebase sync
-            const newArchitecture = {
-              id: syncId,
-              firebaseId: syncId,
-              name: architectureName,
-              timestamp: new Date(),
-              createdAt: new Date(),
-              lastModified: new Date(),
-              rawGraph: rawGraph,
-              userPrompt: '',
-              isFromFirebase: true
-            };
-            
-            setSavedArchitectures(prev => {
-              // Check if it already exists to avoid duplicates
-              if (prev.some(arch => arch.id === syncId)) {
-                return prev;
-              }
-              // Add to the beginning (after "New Architecture")
-              const newArchIndex = prev.findIndex(arch => arch.id === 'new-architecture');
-              if (newArchIndex >= 0) {
-                const newList = [...prev];
-                newList.splice(newArchIndex + 1, 0, newArchitecture);
-                return newList;
-              }
-              return [newArchitecture, ...prev];
-            });
-            
-            console.log('✅ Added new live architecture to local state without Firebase sync');
-          } else {
-            // Update existing live architecture
-            console.log('🔄 Updating live architecture:', syncId);
-            await ArchitectureService.updateArchitecture(syncId, {
-              rawGraph: rawGraph,
-              lastModified: new Date()
-            });
-            console.log('✅ Updated live architecture');
-          }
-        } catch (error) {
-          console.error('❌ Real-time sync failed:', error);
-        } finally {
-          setIsRealtimeSyncing(false);
-        }
-      };
-      
-      syncToFirebase();
-    }
-  }, [user, selectedArchitectureId, rawGraph, isSaving, realtimeSyncId, isRealtimeSyncing, agentLockedArchitectureId]);
+    console.log('⚠️ Real-time Firebase sync DISABLED to prevent infinite loops');
+    // TODO: Implement proper auto-save with loop prevention later
+  }, []);
 
   // Reset real-time sync when switching away from "New Architecture"
   useEffect(() => {
@@ -1059,12 +1122,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Handler for manual save functionality
   const handleManualSave = useCallback(async () => {
     if (!user) {
-      alert('Please sign in to save your architecture');
+      showNotification('error', 'Sign In Required', 'Please sign in to save your architecture');
       return;
     }
 
     if (!selectedArchitectureId || selectedArchitectureId === 'new-architecture') {
-      alert('No architecture selected to save');
+      showNotification('error', 'No Architecture Selected', 'No architecture selected to save');
       return;
     }
 
@@ -1094,7 +1157,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       console.log('✅ Architecture manually saved to Firebase');
     } catch (error) {
       console.error('❌ Error manually saving architecture:', error);
-      alert(`❌ Failed to save: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      showNotification('error', 'Save Failed', `Failed to save: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSaving(false);
     }
@@ -1118,36 +1181,58 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           if (isEmbedded) {
             setShareOverlay({ show: true, url: '', error: message });
           } else {
-            alert(message);
+            showNotification('error', 'Cannot Share', message);
           }
           return;
         }
 
         console.log('📤 Creating shareable anonymous architecture...');
         
-        // Generate a name for the architecture
-        const architectureName = `Shared Architecture ${new Date().toLocaleDateString()}`;
-        
-        // Save as anonymous architecture and get shareable ID
-        const anonymousId = await anonymousArchitectureService.saveAnonymousArchitecture(
-          architectureName,
-          rawGraph
-        );
-        
-        // Create shareable URL for anonymous architecture
-        const currentUrl = new URL(window.location.href);
-        currentUrl.searchParams.set('arch', anonymousId);
-        const shareUrl = currentUrl.toString();
-        
-        if (isEmbedded) {
-          // Show overlay with URL for embedded version
-          console.log('🔗 Showing share overlay for embedded version:', shareUrl);
-          setShareOverlay({ show: true, url: shareUrl });
-        } else {
-          // Use clipboard + alert for non-embedded version
-          await navigator.clipboard.writeText(shareUrl);
-          console.log('✅ Anonymous architecture share link copied to clipboard:', shareUrl);
-          alert('🔗 Share link copied to clipboard! Anyone with this link can view your architecture.');
+        try {
+          // Generate a name for the architecture
+          const architectureName = `Shared Architecture ${new Date().toLocaleDateString()}`;
+          
+          // Save as anonymous architecture and get shareable ID
+          const anonymousId = await anonymousArchitectureService.saveAnonymousArchitecture(
+            architectureName,
+            rawGraph
+          );
+          console.log('✅ Anonymous architecture saved with ID:', anonymousId);
+          
+          // Create shareable URL for anonymous architecture
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.set('arch', anonymousId);
+          const shareUrl = currentUrl.toString();
+          console.log('🔗 Generated share URL:', shareUrl);
+          
+          // Always show the overlay first, then try clipboard as enhancement
+          console.log('🔗 Showing share overlay:', shareUrl);
+          
+          if (isEmbedded) {
+            // For embedded version, just show the overlay (no clipboard in iframes)
+            setShareOverlay({ show: true, url: shareUrl, copied: false });
+          } else {
+            // For non-embedded, try clipboard but don't let it break the overlay
+            let clipboardSuccess = false;
+            try {
+              await navigator.clipboard.writeText(shareUrl);
+              clipboardSuccess = true;
+              console.log('✅ Share link copied to clipboard:', shareUrl);
+            } catch (clipboardError) {
+              console.warn('⚠️ Clipboard failed (document not focused):', clipboardError.message);
+            }
+            
+            // Always show overlay regardless of clipboard success
+            setShareOverlay({ show: true, url: shareUrl, copied: clipboardSuccess });
+          }
+        } catch (shareError) {
+          console.error('❌ Failed to create shareable architecture:', shareError);
+          const message = 'Failed to create share link. Please try again.';
+          if (isEmbedded) {
+            setShareOverlay({ show: true, url: '', error: message });
+          } else {
+            showNotification('error', 'Share Failed', message);
+          }
         }
         
         return;
@@ -1155,15 +1240,70 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
       // For signed-in users with saved architectures
       if (selectedArchitectureId && selectedArchitectureId !== 'new-architecture') {
-        if (isEmbedded) {
-          // For embedded version, just get the URL and show in overlay
-          const shareUrl = await SharingService.createShareableLink(selectedArchitectureId);
-          console.log('🔗 Showing share overlay for embedded version:', shareUrl);
-          setShareOverlay({ show: true, url: shareUrl });
-        } else {
-          await handleShareArchitecture(selectedArchitectureId);
-          alert('🔗 Share link copied to clipboard!');
+        console.log('📤 Sharing signed-in user architecture:', selectedArchitectureId);
+        
+        // Find the architecture to share
+        const architecture = savedArchitectures.find(arch => arch.id === selectedArchitectureId);
+        if (!architecture || !architecture.rawGraph) {
+          const message = 'Architecture not found or has no content to share';
+          if (isEmbedded) {
+            setShareOverlay({ show: true, url: '', error: message });
+          } else {
+            showNotification('error', 'Cannot Share', message);
+          }
+          return;
         }
+        
+        // Create a shareable anonymous copy so anonymous users can access it
+        console.log('📤 Creating shareable anonymous copy of user architecture:', architecture.name);
+        
+        try {
+          // Create anonymous copy for sharing
+          const anonymousId = await anonymousArchitectureService.saveAnonymousArchitecture(
+            `${architecture.name} (Shared)`,
+            architecture.rawGraph
+          );
+          console.log('✅ Shareable anonymous copy created:', anonymousId);
+          
+          // Create shareable URL using the anonymous copy ID
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.set('arch', anonymousId);
+          const shareUrl = currentUrl.toString();
+          console.log('🔗 Generated share URL:', shareUrl);
+          
+          // Always show the overlay first, then try clipboard as enhancement
+          console.log('🔗 Showing share overlay:', shareUrl);
+          
+          if (isEmbedded) {
+            // For embedded version, just show the overlay (no clipboard in iframes)
+            setShareOverlay({ show: true, url: shareUrl, copied: false });
+          } else {
+            // For non-embedded, try clipboard but don't let it break the overlay
+            let clipboardSuccess = false;
+            try {
+              await navigator.clipboard.writeText(shareUrl);
+              clipboardSuccess = true;
+              console.log('✅ User architecture share link copied to clipboard:', shareUrl);
+            } catch (clipboardError) {
+              console.warn('⚠️ Clipboard failed (document not focused):', clipboardError.message);
+            }
+            
+            // Always show overlay regardless of clipboard success
+            setShareOverlay({ show: true, url: shareUrl, copied: clipboardSuccess });
+          }
+        } catch (shareError) {
+          console.warn('⚠️ Share creation throttled or failed:', shareError.message);
+          const message = shareError.message.includes('throttled') ? 
+            'Share throttled - try again in a moment' : 
+            'Failed to create share link. Please try again.';
+          
+          if (isEmbedded) {
+            setShareOverlay({ show: true, url: '', error: message });
+          } else {
+            showNotification('error', 'Share Failed', message);
+          }
+        }
+        
         return;
       }
 
@@ -1172,7 +1312,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       if (isEmbedded) {
         setShareOverlay({ show: true, url: '', error: message });
       } else {
-        alert(message);
+        showNotification('error', 'Cannot Share', message);
       }
     } catch (error) {
       console.error('❌ Error sharing current architecture:', error);
@@ -1188,7 +1328,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       if (isEmbedded) {
         setShareOverlay({ show: true, url: '', error: errorMessage });
       } else {
-        alert(errorMessage);
+        showNotification('error', 'Share Failed', errorMessage);
       }
     }
   }, [selectedArchitectureId, handleShareArchitecture, user, rawGraph, anonymousArchitectureService]);
@@ -1271,7 +1411,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       const savedId = await ArchitectureService.saveArchitecture(architectureData);
       
       // Show success feedback
-      alert(`✅ Architecture saved successfully!\n\nName: ${architectureData.name}\nID: ${savedId}\nNodes: ${architectureData.nodes.length}\nEdges: ${architectureData.edges.length}`);
+      showNotification('success', 'Architecture Saved', `Architecture saved successfully!\n\nName: ${architectureData.name}\nID: ${savedId}\nNodes: ${architectureData.nodes.length}\nEdges: ${architectureData.edges.length}`);
       
     } catch (error) {
       console.error('❌ Error saving architecture:', error);
@@ -1285,7 +1425,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         }
       }
       
-      alert(`❌ ${errorMessage}`);
+      showNotification('error', 'Save Failed', errorMessage);
     }
   }, [rawGraph, nodes, edges]);
 
@@ -1982,25 +2122,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 : arch
             ));
             
-            // CRITICAL: Also save to Firebase for persistence
-            if (user?.uid) {
-              try {
-                console.log('💾 Auto-saving graph changes to Firebase for:', selectedArchitectureId);
-                const currentArch = savedArchitectures.find(arch => arch.id === selectedArchitectureId);
-                if (currentArch) {
-                  ArchitectureService.updateArchitecture(selectedArchitectureId, {
-                    rawGraph: elkGraph,
-                    lastModified: new Date()
-                  }).then(() => {
-                    console.log('✅ Graph changes auto-saved to Firebase');
-                  }).catch(error => {
-                    console.error('❌ Failed to auto-save graph changes:', error);
-                  });
-                }
-              } catch (error) {
-                console.error('❌ Error auto-saving to Firebase:', error);
-              }
-            }
+            // EMERGENCY: DISABLED auto-save to prevent Firebase quota exhaustion
+            // This was causing 20k+ writes by saving on every single graph update
+            // TODO: Implement proper debounced auto-save with 5+ second delays
+            console.log('⚠️ Firebase auto-save DISABLED to prevent quota exhaustion');
+            console.log('📝 Graph updated locally for:', selectedArchitectureId, '- manual save required');
           }
           
         } catch (error) {
@@ -2594,7 +2720,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             // Early return with default config during SSR
             if (typeof window === 'undefined') {
               return (
-                <button
+          <button
                   className="flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:shadow-md transition-all duration-200"
                   title="Edit in full app"
                 >
@@ -2644,7 +2770,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             
             return (
           <button
-            onClick={() => {
+            onClick={async () => {
                   console.log('🔄 [BUTTON DEBUG] Button clicked, action:', buttonConfig.action);
                   
                   if (buttonConfig.action === 'new-tab') {
@@ -2656,13 +2782,40 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               localStorage.setItem('publicCanvasState', JSON.stringify(currentState));
                     console.log('🔄 [EMBEDDED] Opening main site in new tab...');
                     
-                    // Build target URL with architecture if available
+                    // Build target URL with architecture ID
                     let targetUrl = 'https://app.atelier-inc.net/';
-                    if (hasArchitectureId) {
-                      targetUrl += `?arch=${urlParams.get('arch')}`;
-                    }
-                    console.log('🔗 [EMBEDDED] Target URL:', targetUrl);
+                    let architectureId = null;
                     
+                    // Check if we already have an architecture ID in the URL
+                    if (hasArchitectureId) {
+                      architectureId = urlParams.get('arch');
+                      console.log('🔗 [EMBEDDED] Using existing architecture ID:', architectureId);
+                    } else {
+                      // No existing ID - we need to save the current architecture to get an ID
+                      console.log('💾 [EMBEDDED] Saving current architecture to get shareable ID...');
+                      
+                      try {
+                        // Import the anonymous architecture service
+                        const { anonymousArchitectureService } = await import('../../services/anonymousArchitectureService');
+                        
+                        // Save the current rawGraph as an anonymous architecture
+                        architectureId = await anonymousArchitectureService.saveAnonymousArchitecture(
+                          'Architecture from Embed',
+                          rawGraph
+                        );
+                        console.log('✅ [EMBEDDED] Saved architecture with ID:', architectureId);
+                      } catch (error) {
+                        console.error('❌ [EMBEDDED] Failed to save architecture:', error);
+                        // Continue without ID if save fails
+                      }
+                    }
+                    
+                    // Add architecture ID to URL if we have one
+                    if (architectureId) {
+                      targetUrl += `?arch=${architectureId}`;
+                    }
+                    
+                    console.log('🔗 [EMBEDDED] Target URL:', targetUrl);
                     window.open(targetUrl, '_blank');
                   } else {
                     // Main site: trigger sign-in via profile button
@@ -3072,7 +3225,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             ) : (
               <div>
                 <p className="text-gray-600 mb-4">
-                  Copy this link to share your architecture:
+                  {shareOverlay.copied ? 
+                    'Link copied to clipboard! Share this link with others:' : 
+                    'Copy this link to share your architecture:'
+                  }
                 </p>
                 <div className="relative mb-4">
                   <div className="bg-gray-50 border rounded-lg p-3 pr-12">
@@ -3111,29 +3267,96 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => {
-                      // Manual copy fallback for embedded version
-                      const textArea = document.createElement('textarea');
-                      textArea.value = shareOverlay.url;
-                      document.body.appendChild(textArea);
-                      textArea.select();
+                    onClick={async () => {
+                      setCopyButtonState('copying');
+                      
                       try {
-                        document.execCommand('copy');
-                        // Show brief success feedback
-                        const btn = document.activeElement as HTMLButtonElement;
-                        const originalText = btn.textContent;
-                        btn.textContent = 'Copied!';
-                        setTimeout(() => {
-                          btn.textContent = originalText;
-                        }, 1000);
+                        let copySuccess = false;
+                        
+                        // Try modern clipboard API first (will fail in embedded contexts)
+                        try {
+                          if (navigator.clipboard && window.isSecureContext) {
+                            await navigator.clipboard.writeText(shareOverlay.url);
+                            copySuccess = true;
+                          }
+                        } catch (clipboardError) {
+                          console.log('Modern clipboard API failed, trying fallback:', clipboardError);
+                        }
+                        
+                        // Fallback for embedded contexts where clipboard API is blocked
+                        if (!copySuccess) {
+                          const textArea = document.createElement('textarea');
+                          textArea.value = shareOverlay.url;
+                          textArea.style.position = 'fixed';
+                          textArea.style.top = '0';
+                          textArea.style.left = '0';
+                          textArea.style.width = '2em';
+                          textArea.style.height = '2em';
+                          textArea.style.padding = '0';
+                          textArea.style.border = 'none';
+                          textArea.style.outline = 'none';
+                          textArea.style.boxShadow = 'none';
+                          textArea.style.background = 'transparent';
+                          document.body.appendChild(textArea);
+                          textArea.focus();
+                          textArea.select();
+                          
+                          const success = document.execCommand('copy');
+                          document.body.removeChild(textArea);
+                          
+                          if (!success) {
+                            throw new Error('execCommand copy failed');
+                          }
+                          copySuccess = true;
+                        }
+                        
+                        if (copySuccess) {
+                          // Show success animation
+                          setCopyButtonState('success');
+                          setTimeout(() => {
+                            setCopyButtonState('idle');
+                          }, 1500);
+                        } else {
+                          throw new Error('All copy methods failed');
+                        }
                       } catch (err) {
-                        console.error('Manual copy failed:', err);
+                        console.error('Copy failed:', err);
+                        setCopyButtonState('idle');
+                        // Show error feedback to user
+                        alert('Copy failed. Please manually select and copy the URL above.');
                       }
-                      document.body.removeChild(textArea);
                     }}
-                    className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-full hover:bg-blue-700 transition-colors font-medium"
+                    className={`flex-1 px-4 py-2 rounded-full font-medium transition-all duration-200 flex items-center justify-center gap-2
+                      ${copyButtonState === 'idle' ? 'bg-black text-white hover:bg-gray-800' : ''}
+                      ${copyButtonState === 'copying' ? 'bg-gray-600 text-white scale-95' : ''}
+                      ${copyButtonState === 'success' ? 'bg-white text-green-700 border-2 border-green-500 border-opacity-60 scale-105' : ''}
+                    `}
+                    disabled={copyButtonState !== 'idle'}
                   >
-                    Copy Link
+                    {copyButtonState === 'idle' && (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        Copy Link
+                      </>
+                    )}
+                    {copyButtonState === 'copying' && (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Copying...
+                      </>
+                    )}
+                    {copyButtonState === 'success' && (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Copied!
+                      </>
+                    )}
                   </button>
                   <button
                     onClick={() => setShareOverlay({ show: false, url: '' })}
@@ -3144,6 +3367,164 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Input Overlay for Rename */}
+      {inputOverlay.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" onClick={inputOverlay.onCancel}>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {inputOverlay.title}
+              </h3>
+              <button
+                onClick={inputOverlay.onCancel}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              const value = formData.get('inputValue') as string;
+              if (value?.trim()) {
+                inputOverlay.onConfirm(value.trim());
+              }
+            }}>
+              <div className="mb-4">
+                <input
+                  type="text"
+                  name="inputValue"
+                  defaultValue={inputOverlay.defaultValue}
+                  placeholder={inputOverlay.placeholder}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 bg-black text-white px-4 py-2 rounded-full hover:bg-gray-800 transition-colors font-medium"
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  onClick={inputOverlay.onCancel}
+                  className="px-4 py-2 border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Overlay */}
+      {deleteOverlay.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" onClick={deleteOverlay.onCancel}>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {deleteOverlay.title}
+              </h3>
+              <button
+                onClick={deleteOverlay.onCancel}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-gray-600">
+                {deleteOverlay.message}
+              </p>
+            </div>
+            
+            <div className="flex gap-2">
+              <button
+                onClick={deleteOverlay.onConfirm}
+                className="flex-1 bg-black text-white px-4 py-2 rounded-full hover:bg-gray-800 transition-colors font-medium"
+              >
+                Delete
+              </button>
+              <button
+                onClick={deleteOverlay.onCancel}
+                className="px-4 py-2 border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Universal Notification Overlay (replaces all alert/confirm popups) */}
+      {notification.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" onClick={() => notification.type !== 'confirm' && hideNotification()}>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-lg font-semibold ${
+                notification.type === 'success' ? 'text-green-600' :
+                notification.type === 'error' ? 'text-red-600' :
+                notification.type === 'confirm' ? 'text-orange-600' :
+                'text-gray-900'
+              }`}>
+                {notification.title}
+              </h3>
+              {notification.type !== 'confirm' && (
+                <button
+                  onClick={hideNotification}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-gray-600 whitespace-pre-line">
+                {notification.message}
+              </p>
+            </div>
+            
+            <div className="flex gap-2 justify-end">
+              {notification.type === 'confirm' ? (
+                <>
+                  <button
+                    onClick={notification.onCancel}
+                    className="px-4 py-2 border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                  >
+                    {notification.cancelText}
+                  </button>
+                  <button
+                    onClick={notification.onConfirm}
+                    className="px-4 py-2 bg-black text-white rounded-full hover:bg-gray-800 transition-colors font-medium"
+                  >
+                    {notification.confirmText}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={hideNotification}
+                  className="px-4 py-2 bg-black text-white rounded-full hover:bg-gray-800 transition-colors font-medium"
+                >
+                  {notification.confirmText}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

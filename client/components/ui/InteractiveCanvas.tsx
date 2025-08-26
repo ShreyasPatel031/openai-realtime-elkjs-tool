@@ -3273,18 +3273,16 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                       try {
                         let copySuccess = false;
                         
-                        // Try modern clipboard API first (will fail in embedded contexts)
-                        try {
-                          if (navigator.clipboard && window.isSecureContext) {
-                            await navigator.clipboard.writeText(shareOverlay.url);
-                            copySuccess = true;
-                          }
-                        } catch (clipboardError) {
-                          console.log('Modern clipboard API failed, trying fallback:', clipboardError);
-                        }
+                        // Detect if we're in embedded context
+                        const isEmbedded = window.location.hostname === 'archgen-ecru.vercel.app' || 
+                                          window.location.pathname === '/embed' ||
+                                          window.parent !== window;
                         
-                        // Fallback for embedded contexts where clipboard API is blocked
-                        if (!copySuccess) {
+                        // For embedded contexts, ONLY use execCommand to avoid clipboard API errors
+                        if (isEmbedded) {
+                          console.log('🔒 Embedded context detected, using execCommand only');
+                          
+                          // Create invisible textarea for copy operation
                           const textArea = document.createElement('textarea');
                           textArea.value = shareOverlay.url;
                           textArea.style.position = 'fixed';
@@ -3297,17 +3295,51 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                           textArea.style.outline = 'none';
                           textArea.style.boxShadow = 'none';
                           textArea.style.background = 'transparent';
+                          textArea.style.opacity = '0';
+                          textArea.style.pointerEvents = 'none';
                           document.body.appendChild(textArea);
                           textArea.focus();
                           textArea.select();
                           
-                          const success = document.execCommand('copy');
+                          copySuccess = document.execCommand('copy');
                           document.body.removeChild(textArea);
                           
-                          if (!success) {
-                            throw new Error('execCommand copy failed');
+                          console.log(copySuccess ? '✅ execCommand copy succeeded' : '❌ execCommand copy failed');
+                        } else {
+                          // For non-embedded contexts, try modern clipboard API first
+                          try {
+                            if (navigator.clipboard && window.isSecureContext) {
+                              await navigator.clipboard.writeText(shareOverlay.url);
+                              copySuccess = true;
+                              console.log('✅ Modern clipboard API succeeded');
+                            }
+                          } catch (clipboardError) {
+                            console.log('Modern clipboard API failed, trying execCommand fallback:', clipboardError);
+                            
+                            // Fallback to execCommand
+                            const textArea = document.createElement('textarea');
+                            textArea.value = shareOverlay.url;
+                            textArea.style.position = 'fixed';
+                            textArea.style.top = '0';
+                            textArea.style.left = '0';
+                            textArea.style.width = '2em';
+                            textArea.style.height = '2em';
+                            textArea.style.padding = '0';
+                            textArea.style.border = 'none';
+                            textArea.style.outline = 'none';
+                            textArea.style.boxShadow = 'none';
+                            textArea.style.background = 'transparent';
+                            textArea.style.opacity = '0';
+                            textArea.style.pointerEvents = 'none';
+                            document.body.appendChild(textArea);
+                            textArea.focus();
+                            textArea.select();
+                            
+                            copySuccess = document.execCommand('copy');
+                            document.body.removeChild(textArea);
+                            
+                            console.log(copySuccess ? '✅ execCommand fallback succeeded' : '❌ execCommand fallback failed');
                           }
-                          copySuccess = true;
                         }
                         
                         if (copySuccess) {
@@ -3322,8 +3354,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                       } catch (err) {
                         console.error('Copy failed:', err);
                         setCopyButtonState('idle');
-                        // Show error feedback to user
-                        alert('Copy failed. Please manually select and copy the URL above.');
+                        // Show user-friendly error message
+                        showNotification('error', 'Copy Failed', 'Unable to copy link. Please manually select and copy the URL above.');
                       }
                     }}
                     className={`flex-1 px-4 py-2 rounded-full font-medium transition-all duration-200 flex items-center justify-center gap-2

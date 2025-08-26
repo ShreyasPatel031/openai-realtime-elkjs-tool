@@ -513,7 +513,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         console.warn('⚠️ Available architectures:', savedArchitectures.map(arch => ({id: arch.id, name: arch.name})));
       }
     }
-  }, [savedArchitectures, pendingArchitectureSelection, handleSelectArchitecture]);
+  }, [savedArchitectures, pendingArchitectureSelection]);
 
   // Function to manually refresh architectures (only when actually needed)
   const refreshArchitectures = useCallback(() => {

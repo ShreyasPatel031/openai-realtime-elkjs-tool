@@ -7,7 +7,7 @@ export const DEFAULT_ARCHITECTURE = {
       "children": [
         {
           "id": "external_client",
-          "labels": [{ "text": "External Client" }],
+          "labels": [{ "text": "Supercalifragilisticexpialidocious" }],
           "children": [],
           "edges": [],
           "data": { "icon": "browser_client" }
@@ -25,28 +25,28 @@ export const DEFAULT_ARCHITECTURE = {
           "children": [
             {
               "id": "cloud_lb",
-              "labels": [{ "text": "Cloud Load Balancing" }],
+              "labels": [{ "text": "This is a very long sentence that should wrap across multiple lines to test our text wrapping capabilities" }],
               "children": [],
               "edges": [],
               "data": { "icon": "gcp_cloud_load_balancing" }
             },
             {
               "id": "cloud_armor",
-              "labels": [{ "text": "Cloud Armor" }],
+              "labels": [{ "text": "A" }],
               "children": [],
               "edges": [],
               "data": { "icon": "gcp_cloud_armor" }
             },
             {
               "id": "certificate_manager",
-              "labels": [{ "text": "Certificate Manager" }],
+              "labels": [{ "text": "API-Gateway-v2.1-Enterprise-Edition" }],
               "children": [],
               "edges": [],
               "data": { "icon": "gcp_certificate_manager" }
             },
             {
               "id": "cloud_cdn",
-              "labels": [{ "text": "Cloud CDN" }],
+              "labels": [{ "text": "123456789012345678901234567890" }],
               "children": [],
               "edges": [],
               "data": { "icon": "gcp_cloud_cdn" }
@@ -86,14 +86,14 @@ export const DEFAULT_ARCHITECTURE = {
             },
             {
               "id": "gke_gateway_controller",
-              "labels": [{ "text": "GKE Gateway Controller" }],
+              "labels": [{ "text": "Antidisestablishmentarianism Service Controller" }],
               "children": [],
               "edges": [],
               "data": {}
             },
             {
               "id": "k8s_gateway_api",
-              "labels": [{ "text": "Kubernetes Gateway API" }],
+              "labels": [{ "text": "Special-Characters@#$%^&*()_+{}|:<>?[]\\;'\",./" }],
               "children": [],
               "edges": [],
               "data": {}
@@ -291,14 +291,14 @@ export const DEFAULT_ARCHITECTURE = {
       "children": [
         {
           "id": "web_client",
-          "labels": [{ "text": "Web Client" }],
+          "labels": [{ "text": "Multi Word Test Case With Many Words" }],
           "children": [],
           "edges": [],
           "data": {}
         },
         {
           "id": "mobile_client",
-          "labels": [{ "text": "Mobile Client" }],
+          "labels": [{ "text": "" }],
           "children": [],
           "edges": [],
           "data": {}

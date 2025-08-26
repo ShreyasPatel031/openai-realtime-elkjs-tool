@@ -5,6 +5,7 @@ import { iconLists } from '../generated/iconLists';
 import { iconFallbackService } from '../utils/iconFallbackService';
 import { iconCacheService } from '../utils/iconCacheService';
 import { useApiEndpoint, buildAssetUrl } from '../contexts/ApiEndpointContext';
+import { splitTextIntoLines } from '../utils/textMeasurement';
 
 // Heuristic fallback mapping for common icon patterns
 const getHeuristicFallback = (iconName: string): string | null => {
@@ -267,7 +268,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
     background: selected ? '#f8f9fa' : 'white',
     border: selected ? '2px solid #6c757d' : '1px solid #ccc',
     borderRadius: '4px',
-    padding: '10px',
+    padding: '0px', // Remove padding to center content properly
     width: data.width || 80,
     height: data.height || 40,
     display: 'flex',
@@ -394,11 +395,11 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
         height: '100%',
         position: 'relative'
       }}>
-        {/* Icon container */}
+        {/* Icon container - FIXED: 48x48 square for all icons */}
         <div style={{
-          width: '60px',
-          height: '60px',
-          borderRadius: data.icon ? '8px' : '50%', 
+          width: '48px',
+          height: '48px',
+          borderRadius: data.icon ? '8px' : '8px', // Square for all icons
           backgroundColor: finalIconSrc && !iconError ? 'transparent' : '#f0f0f0',
           border: finalIconSrc && !iconError ? 'none' : '2px solid #ddd',
           display: 'flex',
@@ -407,7 +408,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
           color: '#333',
           fontWeight: 'bold',
           fontSize: '16px',
-          marginTop: '2px',
+          marginTop: '12px', // Adjust for removed container padding
           overflow: 'hidden'
         }}>
           {finalIconSrc && !iconError && (
@@ -446,12 +447,44 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
           <div
             onDoubleClick={handleDoubleClick}
             style={{
-              padding: '4px',
               textAlign: 'center',
               cursor: 'pointer',
+              fontSize: '12px',
+              lineHeight: '14px',
+              fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+              fontWeight: 'normal',
+              width: '100px', // Match the full node width for better centering
+              paddingLeft: '12px', // Add horizontal padding for breathing room
+              paddingRight: '12px',
+              margin: '0 auto',
+              marginTop: '12px', // Direct 12px gap between icon and text
+              wordBreak: 'normal',
+              overflowWrap: 'normal',
+              boxSizing: 'border-box' // Include padding in width calculation
             }}
           >
-            {label}
+            {/* Render each line manually to match ELK calculation */}
+            {(() => {
+              if (label === "GKE Gateway Controller") {
+                console.log(`🟦 [REACT FLOW] Rendering "${label}"`);
+              }
+              const lines = splitTextIntoLines(label, 76);
+              if (label === "GKE Gateway Controller") {
+                console.log(`🟦 [REACT FLOW] Got lines: [${lines.join('", "')}] (${lines.length} lines)`);
+              }
+              return lines.map((line, index) => (
+                <div key={index} style={{ 
+                  lineHeight: '14px',
+                  width: '100%',
+                  textAlign: 'center',
+                  overflow: 'hidden',
+                  whiteSpace: 'nowrap',
+                  textOverflow: 'ellipsis'
+                }}>
+                  {line}
+                </div>
+              ));
+            })()}
           </div>
         )}
       </div>

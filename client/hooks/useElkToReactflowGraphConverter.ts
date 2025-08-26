@@ -140,8 +140,6 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
         
         // 2) run ELK
         const layout = await elk.layout(prepared);
-
-
         
         /* stale result? – ignore */
         if (hashAtStart !== hashRef.current) return;

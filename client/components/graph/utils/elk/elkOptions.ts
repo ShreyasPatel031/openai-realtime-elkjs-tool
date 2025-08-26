@@ -19,8 +19,8 @@ export const ROOT_DEFAULT_OPTIONS = {
 };
 
 export const NON_ROOT_DEFAULT_OPTIONS = {
-  width: 100,
-  height: 100,
+  width: 100,  // Keep original width - DO NOT CHANGE
+  // height removed - will be dynamic based on content
   layoutOptions: {
     "nodeLabels.placement": "INSIDE V_TOP H_LEFT",
     "algorithm": "layered",

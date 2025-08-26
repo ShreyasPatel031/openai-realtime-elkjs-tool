@@ -18,7 +18,7 @@ export function computeAbsolutePositions(root: any): AbsMap {
       x: absX, 
       y: absY, 
       width: node.width ?? NON_ROOT_DEFAULT_OPTIONS.width, 
-      height: node.height ?? NON_ROOT_DEFAULT_OPTIONS.height 
+      height: node.height ?? 100  // Fallback height if not set
     };
     
     // Debug deeply nested positioning

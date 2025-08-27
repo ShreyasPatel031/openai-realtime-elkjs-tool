@@ -14,11 +14,22 @@ interface ChatNameRequest {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  console.log('🔥 AI NAMING API CALLED - generateChatName endpoint hit');
+  console.log('📦 Request method:', req.method);
+  console.log('📦 Request body keys:', Object.keys(req.body || {}));
+  
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method Not Allowed' });
   }
 
   const { architecture, userPrompt, nodeCount, edgeCount, services }: ChatNameRequest = req.body;
+  console.log('🏗️ AI naming request details:', {
+    hasArchitecture: !!architecture,
+    userPrompt,
+    nodeCount,
+    edgeCount,
+    architectureType: architecture?.id || 'unknown'
+  });
 
   try {
     // Extract key information for naming
@@ -39,20 +50,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       messages: [
         { 
           role: "system", 
-          content: "You are a technical architect who creates concise, professional names for chat sessions about cloud architectures. Generate 2-4 word names that capture the essence and purpose of the architecture. Avoid generic terms like 'Chat' or 'Session'. Focus on the technical pattern, platform, or use case."
+          content: "You are a technical architect who creates concise, professional names for cloud architectures. Generate a SINGLE LINE name of 2-4 words that captures the essence and purpose of the architecture. DO NOT use numbered lists, bullet points, or line breaks. DO NOT include quotes. Focus on the technical pattern, platform, or use case. Examples: 'GCP Microservices Platform', 'AWS Serverless API', 'Kubernetes Data Pipeline'."
         },
         { 
           role: "user", 
           content: `Generate a chat name for this architecture discussion:\n\n${context}`
         }
       ],
-      max_tokens: 15,
+      max_tokens: 30,
       temperature: 0.7,
     });
 
-    const generatedName = completion.choices[0].message.content?.trim();
+    let generatedName = completion.choices[0].message.content?.trim();
 
     if (generatedName) {
+      // Clean up the generated name to ensure it's a single line
+      generatedName = generatedName
+        .split('\n')[0] // Take only the first line
+        .replace(/^\d+\.\s*/, '') // Remove leading numbers (1. 2. etc.)
+        .replace(/^-\s*/, '') // Remove leading dashes
+        .replace(/^["']|["']$/g, '') // Remove surrounding quotes
+        .trim();
+      
+      console.log('✅ Generated and cleaned AI name:', generatedName);
+      
       res.status(200).json({ 
         name: generatedName,
         context: context // For debugging

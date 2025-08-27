@@ -37,7 +37,7 @@ import { onAuthStateChanged, User } from "firebase/auth"
 import { Timestamp } from "firebase/firestore"
 import { Settings, PanelRightOpen, PanelRightClose, Save, Edit, Share } from "lucide-react"
 import { DEFAULT_ARCHITECTURE as EXTERNAL_DEFAULT_ARCHITECTURE } from "../../data/defaultArchitecture"
-import { SAVED_ARCHITECTURES } from "../../data/savedArchitectures"
+// Removed mock architectures import - only using real user architectures now
 import SaveAuth from "../auth/SaveAuth"
 import ArchitectureService from "../../services/architectureService"
 import { anonymousArchitectureService } from "../../services/anonymousArchitectureService"
@@ -152,8 +152,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       rawGraph: { id: "root", children: [], edges: [] },
       isNew: true
     };
-    const mockArchs = Object.values(SAVED_ARCHITECTURES).sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
-    return [newArchTab, ...mockArchs];
+    // Only show the "New Architecture" tab initially - no mock architectures
+    return [newArchTab];
   });
   const [selectedArchitectureId, setSelectedArchitectureId] = useState<string>('new-architecture');
   
@@ -309,14 +309,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           isNew: true
         };
         
-        // Only keep mock architectures that aren't duplicated in Firebase
-        const mockArchs = Object.values(SAVED_ARCHITECTURES).filter(mockArch => 
-          !validArchs.some(fbArch => fbArch.name === mockArch.name)
-        );
-        
-        // Sort Firebase and mock architectures by createdAt (newest first)
+        // No mock architectures - only real user architectures from Firebase
         const sortedValidArchs = validArchs.sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
-        const sortedMockArchs = mockArchs.sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
         
         // Check for priority architecture (transferred from anonymous session)
         const priorityArchId = localStorage.getItem('priority_architecture_id');
@@ -375,11 +369,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           }
         }
         
-        const allArchs = [newArchTab, ...finalValidArchs, ...sortedMockArchs];
+        const allArchs = [newArchTab, ...finalValidArchs];
         setSavedArchitectures(allArchs);
         
         console.log(`✅ Loaded ${validArchs.length} valid architectures from Firebase`);
-        console.log(`📊 Total architectures: ${allArchs.length} (${validArchs.length} Firebase + ${mockArchs.length} mock)`);
+        console.log(`📊 Total architectures: ${allArchs.length} (${validArchs.length} Firebase + 0 mock)`);
         
         // DEBUG: Log current tab order and timestamps (with error protection)
         console.log('🔍 Current tab order:', allArchs.map((arch, index) => {
@@ -481,9 +475,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         console.log('🔄 User signed out but still loading - showing only New Architecture');
         setSavedArchitectures([newArchTab]);
       } else {
-        // Only show mock architectures when not in public mode and not loading
-        const mockArchs = Object.values(SAVED_ARCHITECTURES).sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
-        setSavedArchitectures([newArchTab, ...mockArchs]);
+        // Only show New Architecture when signed out (no mock architectures)
+        setSavedArchitectures([newArchTab]);
       }
       setSelectedArchitectureId('new-architecture');
     }
@@ -1065,6 +1058,14 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   useEffect(() => {
     // Check if URL contains a shared architecture ID
     const sharedArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
+    console.log('🔍 URL ARCH CHECK:', {
+      currentUrl: window.location.href,
+      searchParams: window.location.search,
+      detectedArchId: sharedArchId,
+      isPublicMode,
+      willTriggerNaming: !!sharedArchId
+    });
+    
     if (sharedArchId) {
       console.log('🔗 Loading shared architecture from URL:', sharedArchId, isPublicMode ? '(public mode)' : '(canvas mode)');
       
@@ -1074,6 +1075,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           const sharedArch = await anonymousArchitectureService.loadAnonymousArchitectureById(sharedArchId);
           if (sharedArch) {
             console.log('✅ Loaded shared architecture from URL:', sharedArch.name);
+            
+            // Anonymous architectures should not have names - users can't see tabs anyway
+            // AI naming happens during sign-in when the architecture becomes a user architecture
+            
             setRawGraph(sharedArch.rawGraph);
           }
         } catch (error) {
@@ -2111,8 +2116,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             // EMERGENCY: DISABLED auto-save to prevent Firebase quota exhaustion
             // This was causing 20k+ writes by saving on every single graph update
             // TODO: Implement proper debounced auto-save with 5+ second delays
-            console.log('⚠️ Firebase auto-save DISABLED to prevent quota exhaustion');
-            console.log('📝 Graph updated locally for:', selectedArchitectureId, '- manual save required');
+                    // Firebase auto-save disabled to prevent quota exhaustion
           }
           
         } catch (error) {

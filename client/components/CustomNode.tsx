@@ -465,13 +465,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
           >
             {/* Render each line manually to match ELK calculation */}
             {(() => {
-              if (label === "GKE Gateway Controller") {
-                console.log(`🟦 [REACT FLOW] Rendering "${label}"`);
-              }
               const lines = splitTextIntoLines(label, 76);
-              if (label === "GKE Gateway Controller") {
-                console.log(`🟦 [REACT FLOW] Got lines: [${lines.join('", "')}] (${lines.length} lines)`);
-              }
               return lines.map((line, index) => (
                 <div key={index} style={{ 
                   lineHeight: '14px',

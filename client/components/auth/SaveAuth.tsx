@@ -20,12 +20,15 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
   const user = propUser;
 
   const handleGoogleSignIn = async () => {
+    console.log('🔥 SIGN-IN TRIGGERED - Starting Google sign-in process');
+    
     if (!auth) {
       console.log('🚫 Firebase authentication not available');
       return;
     }
 
     setIsLoading(true);
+    console.log('⏳ Sign-in loading state set to true');
     try {
       const provider = new GoogleAuthProvider();
       
@@ -40,6 +43,7 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
       
       // Transfer anonymous architectures if signing in from public route
       if (location.pathname === '/') {
+        console.log('🔥 NAMING LOGIC START - Signing in from public route, will transfer architectures and apply AI naming');
         console.log('🔄 Transferring anonymous architectures and redirecting to /canvas...');
         
         // Get architecture ID from URL before transferring
@@ -47,37 +51,108 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
         const architectureIdFromUrl = urlParams.get('arch');
         console.log('🔗 Architecture ID from URL:', architectureIdFromUrl);
         
-        // Import and transfer anonymous architectures
+        // Import services for handling architectures
         const { anonymousArchitectureService } = await import('../../services/anonymousArchitectureService');
-        try {
-          const transferResult = await anonymousArchitectureService.transferAnonymousArchitectures(
-            result.user.uid,
-            result.user.email || ''
-          );
-          console.log(`🎉 Transferred ${transferResult.count} anonymous architectures`);
-          console.log('🔗 Transferred architecture IDs:', transferResult.transferredIds);
-          console.log('🔗 DEBUG: Transfer result details:', transferResult);
-          
-          // Determine which architecture to prioritize
-          let priorityArchId = null;
-          
-          // If there's an architecture ID in the URL, that takes priority
-          if (architectureIdFromUrl) {
-            priorityArchId = architectureIdFromUrl;
-            console.log('📌 Using architecture ID from URL:', priorityArchId);
-          } else if (transferResult.transferredIds.length > 0) {
-            // Otherwise, use the first transferred architecture
-            priorityArchId = transferResult.transferredIds[0];
-            console.log('📌 Using first transferred architecture:', priorityArchId);
+        const { default: ArchitectureService } = await import('../../services/architectureService');
+        
+        let priorityArchId = null;
+        
+        // If there's an architecture ID in the URL, load that shared architecture and save it as user architecture
+        if (architectureIdFromUrl) {
+          console.log('🔗 Loading shared architecture from URL for signed-in user:', architectureIdFromUrl);
+          try {
+            const sharedArch = await anonymousArchitectureService.loadAnonymousArchitectureById(architectureIdFromUrl);
+            if (sharedArch) {
+              console.log('✅ Found shared architecture:', sharedArch.name);
+              
+              // 🔥 ALWAYS generate AI names when converting anonymous → user architecture
+              // This is the ONLY place naming should happen (when user signs in)
+              let architectureName = sharedArch.name;
+              console.log('🔥 SIGN-IN NAMING - Converting anonymous architecture to user architecture');
+              console.log('📝 Anonymous arch name (should be generic or empty):', architectureName);
+              
+              try {
+                console.log('🌐 Making API request to /api/generateChatName...');
+                const response = await fetch('/api/generateChatName', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    architecture: sharedArch.rawGraph,
+                    nodeCount: sharedArch.rawGraph?.children?.length || 0,
+                    edgeCount: sharedArch.rawGraph?.edges?.length || 0,
+                    userPrompt: `Architecture with ${sharedArch.rawGraph?.children?.length || 0} components converted from anonymous to user account`
+                  }),
+                });
+                
+                console.log('📡 API response status:', response.status);
+                if (response.ok) {
+                  const data = await response.json();
+                  console.log('📦 API response data:', data);
+                  if (data.name && data.name.trim()) {
+                    architectureName = data.name.trim();
+                    console.log('✅ Generated AI name for user architecture:', architectureName);
+                  } else {
+                    throw new Error('Empty name returned from API');
+                  }
+                } else {
+                  const errorText = await response.text();
+                  console.error('❌ API request failed:', response.status, errorText);
+                  throw new Error(`API request failed with status: ${response.status}`);
+                }
+              } catch (error) {
+                console.warn('⚠️ AI naming failed, using fallback:', error);
+                // Generate fallback name based on architecture content
+                architectureName = ArchitectureService.generateArchitectureName(
+                  sharedArch.rawGraph?.children || [], 
+                  sharedArch.rawGraph?.edges || []
+                );
+                console.log('📝 Using improved fallback name:', architectureName);
+              }
+              
+              const newArchId = await ArchitectureService.saveArchitecture({
+                name: architectureName,
+                userId: result.user.uid,
+                userEmail: result.user.email || '',
+                rawGraph: sharedArch.rawGraph,
+                nodes: sharedArch.rawGraph?.children || [],
+                edges: sharedArch.rawGraph?.edges || [],
+                userPrompt: `Imported from shared link on ${new Date().toLocaleDateString()}`
+              });
+              
+              priorityArchId = newArchId;
+              console.log('✅ Saved shared architecture as user architecture:', newArchId);
+            } else {
+              console.warn('⚠️ Shared architecture not found, falling back to session transfer');
+            }
+          } catch (error) {
+            console.error('❌ Error loading shared architecture, falling back to session transfer:', error);
           }
-          
-          // Store the priority architecture ID
-          if (priorityArchId) {
-            localStorage.setItem('priority_architecture_id', priorityArchId);
-            console.log('📌 Set priority architecture for canvas:', priorityArchId);
+        }
+        
+        // If no shared architecture was loaded, transfer any anonymous architectures from session
+        if (!priorityArchId) {
+          try {
+            const transferResult = await anonymousArchitectureService.transferAnonymousArchitectures(
+              result.user.uid,
+              result.user.email || ''
+            );
+            console.log(`🎉 Transferred ${transferResult.count} session architectures`);
+            
+            if (transferResult.transferredIds.length > 0) {
+              priorityArchId = transferResult.transferredIds[0];
+              console.log('📌 Using first transferred session architecture:', priorityArchId);
+            }
+          } catch (error) {
+            console.error('❌ Error transferring session architectures:', error);
           }
-        } catch (error) {
-          console.error('❌ Error transferring anonymous architectures:', error);
+        }
+        
+        // Store the priority architecture ID for the canvas
+        if (priorityArchId) {
+          localStorage.setItem('priority_architecture_id', priorityArchId);
+          console.log('📌 Set priority architecture for canvas:', priorityArchId);
         }
         
         // Navigate to canvas in the same tab, preserving architecture ID if present
@@ -144,15 +219,15 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
         onClick={() => {
           if (!user) {
             // Not signed in - trigger sign-in popup
-            console.log('🔄 Not signed in - triggering Google sign-in');
+            console.log('🔥 BUTTON CLICK - Not signed in, triggering Google sign-in');
             handleGoogleSignIn();
           } else if (window.location.pathname === '/') {
             // Signed in on public route - trigger sign-in (will open canvas after)
-            console.log('🔄 Signed in on public route - triggering sign-in to open canvas');
+            console.log('🔥 BUTTON CLICK - Signed in on public route, triggering canvas redirect with naming');
             handleGoogleSignIn();
           } else {
             // Signed in on canvas route - directly sign out (no dropdown)
-            console.log('🔄 Profile clicked - signing out user');
+            console.log('🔥 BUTTON CLICK - Profile clicked, signing out user');
             handleSignOut();
           }
         }}

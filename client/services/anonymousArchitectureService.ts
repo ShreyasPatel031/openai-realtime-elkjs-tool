@@ -217,13 +217,46 @@ class AnonymousArchitectureService {
 
       for (const arch of anonymousArchs) {
         try {
+          // 🔥 Generate AI name when transferring anonymous → user architecture
+          console.log('🔥 TRANSFER NAMING - Converting anonymous session architecture to user architecture');
+          console.log('📝 Anonymous arch name (should be generic):', arch.name);
+          
+          let architectureName = arch.name;
+          try {
+            console.log('🌐 Making API request to /api/generateChatName...');
+            const response = await fetch('/api/generateChatName', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                architecture: arch.rawGraph,
+                nodeCount: arch.rawGraph?.children?.length || 0,
+                edgeCount: arch.rawGraph?.edges?.length || 0,
+                userPrompt: `Architecture with ${arch.rawGraph?.children?.length || 0} components from user session`
+              }),
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              if (data.name && data.name.trim()) {
+                architectureName = data.name.trim();
+                console.log('✅ Generated AI name for transferred architecture:', architectureName);
+              }
+            } else {
+              console.warn('⚠️ AI naming API failed, using original name');
+            }
+          } catch (error) {
+            console.warn('⚠️ AI naming failed for transfer, using original name:', error);
+          }
+          
           // Save as regular user architecture with complete data
           // Extract nodes and edges from rawGraph for compatibility
           const nodes = arch.rawGraph?.children || [];
           const edges = arch.rawGraph?.edges || [];
           
           const newArchId = await ArchitectureService.saveArchitecture({
-            name: arch.name,
+            name: architectureName,
             userId,
             userEmail,
             rawGraph: arch.rawGraph,
@@ -232,7 +265,7 @@ class AnonymousArchitectureService {
             userPrompt: `Transferred from anonymous session on ${arch.timestamp.toDate().toLocaleDateString()}`
           });
 
-          console.log(`✅ Transferred anonymous architecture "${arch.name}" to user architecture:`, newArchId);
+          console.log(`✅ Transferred anonymous architecture "${arch.name}" → "${architectureName}" to user architecture:`, newArchId);
           transferredIds.push(newArchId);
 
           // Delete the anonymous version

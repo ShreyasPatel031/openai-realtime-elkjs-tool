@@ -15,7 +15,7 @@ import { cn } from "../../lib/utils"
 // Import types from separate type definition files
 import { InteractiveCanvasProps } from "../../types/chat"
 import { RawGraph } from "../graph/types/index"
-import { deleteNode, deleteEdge } from "../graph/mutations"
+import { deleteNode, deleteEdge, addEdge } from "../graph/mutations"
 import { batchUpdate } from "../graph/mutations"
 import { CANVAS_STYLES, getEdgeStyle, getEdgeZIndex } from "../graph/styles/canvasStyles"
 import { useElkToReactflowGraphConverter } from "../../hooks/useElkToReactflowGraphConverter"
@@ -25,6 +25,8 @@ import { elkGraphDescription, agentInstruction } from '../../realtime/agentConfi
 // Import extracted components
 import CustomNodeComponent from "../CustomNode"
 import GroupNode from "../GroupNode"
+import EnhancedCustomNode from "./EnhancedCustomNode"
+import EnhancedGroupNode from "./EnhancedGroupNode"
 import StepEdge from "../StepEdge"
 import DevPanel from "../DevPanel"
 import StreamViewer from "../StreamViewer"
@@ -144,12 +146,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   // Architecture data from saved architectures
   const [savedArchitectures, setSavedArchitectures] = useState<any[]>(() => {
-    // Start with "New Architecture" as first tab
+    // Start with "New Architecture" as first tab with default architecture loaded
     const newArchTab = {
       id: 'new-architecture',
       name: 'New Architecture',
       timestamp: new Date(),
-      rawGraph: { id: "root", children: [], edges: [] },
+      rawGraph: DEFAULT_ARCHITECTURE, // Load default architecture instead of empty
       isNew: true
     };
     // Only show the "New Architecture" tab initially - no mock architectures
@@ -1324,18 +1326,27 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     }
   }, [selectedArchitectureId, handleShareArchitecture, user, rawGraph, anonymousArchitectureService]);
 
-  // Initialize with empty canvas for "New Architecture" tab
+  // Initialize with default architecture on first load
+  useEffect(() => {
+    // Set default architecture on initial mount if no content exists
+    if (!rawGraph || !rawGraph.children || rawGraph.children.length === 0) {
+      console.log('🚀 Initializing with default architecture');
+      setRawGraph(DEFAULT_ARCHITECTURE);
+    }
+  }, []); // Empty dependency array - only run once on mount
+
+  // Initialize with default architecture for "New Architecture" tab
   useEffect(() => {
     if (selectedArchitectureId === 'new-architecture') {
-      const emptyGraph = {
-        id: "root",
-        children: [],
-        edges: []
-      };
-      console.log('🔄 Setting empty graph for New Architecture tab');
-      setRawGraph(emptyGraph);
+      // Only set default architecture if we don't already have content
+      if (!rawGraph || !rawGraph.children || rawGraph.children.length === 0) {
+        console.log('🔄 Setting default architecture for New Architecture tab');
+        setRawGraph(DEFAULT_ARCHITECTURE);
+      } else {
+        console.log('🔄 New Architecture tab already has content, keeping existing graph');
+      }
     }
-  }, [selectedArchitectureId, setRawGraph]);
+  }, [selectedArchitectureId, setRawGraph, rawGraph]);
 
   // Debug logging for graph state changes
   useEffect(() => {
@@ -1482,16 +1493,16 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         // Force React Flow to recalculate its dimensions
         window.dispatchEvent(new Event('resize'));
         
-        // Then fit the view with animation
-        setTimeout(() => {
-          if (reactFlowRef.current) {
-            reactFlowRef.current.fitView({ 
-              padding: 0.1,
-              includeHiddenNodes: false,
-              duration: 300
-            });
-          }
-        }, 100);
+        // Disabled fitView
+        // setTimeout(() => {
+        //   if (reactFlowRef.current) {
+        //     reactFlowRef.current.fitView({ 
+        //       padding: 0.1,
+        //       includeHiddenNodes: false,
+        //       duration: 300
+        //     });
+        //   }
+        // }, 100);
       }
     }, 150);
 
@@ -1635,21 +1646,25 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Removed individual tracking refs - now using unified fitView approach
   // Track agent busy state to disable input while drawing
   const [agentBusy, setAgentBusy] = useState(false);
+  
+  // Track whether current graph change is user-initiated (drag-drop) or agent-initiated
+  const [isUserOperation, setIsUserOperation] = useState(false);
 
-  // Manual fit view function that can be called anytime
+  // Manual fit view function that can be called anytime (DISABLED)
   const manualFitView = useCallback(() => {
-    if (reactFlowRef.current) {
-      try {
-        reactFlowRef.current.fitView({
-          padding: 0.2,
-          duration: 800,
-          maxZoom: 1.5,
-          minZoom: 0.1
-        });
-      } catch (error) {
-        console.warn('Failed to fit view:', error);
-      }
-    }
+    console.log('🚫 manualFitView disabled');
+    // if (reactFlowRef.current) {
+    //   try {
+    //     reactFlowRef.current.fitView({
+    //       padding: 0.2,
+    //       duration: 800,
+    //       maxZoom: 1.5,
+    //       minZoom: 0.1
+    //     });
+    //   } catch (error) {
+    //     console.warn('Failed to fit view:', error);
+    //   }
+    // }
   }, []);
 
   // Unified auto-fit view: triggers on ANY graph state change
@@ -1751,6 +1766,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       if (event.key === 'Delete' || event.key === 'Backspace') {
         if (selectedNodes.length > 0 || selectedEdges.length > 0) {
           event.preventDefault();
+          
+          // Mark this as a user operation to prevent view reset
+          setIsUserOperation(true);
+          
           // Create a deep copy of the graph (like DevPanel does)
           let updatedGraph = JSON.parse(JSON.stringify(rawGraph));
           
@@ -1784,6 +1803,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             newGraphNodeCount: updatedGraph?.children?.length || 0
           });
           handleGraphChange(updatedGraph);
+          
+          // Reset user operation flag after a short delay
+          setTimeout(() => {
+            setIsUserOperation(false);
+          }, 100);
           // Clear selection after deletion
           setSelectedNodes([]);
           setSelectedEdges([]);
@@ -1803,48 +1827,196 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Create node types with handlers - memoized to prevent recreation
   const memoizedNodeTypes = useMemo(() => {
     const types = {
-    custom: (props: any) => <CustomNodeComponent {...props} onLabelChange={handleLabelChange} />,
+    custom: (props: any) => (
+      <EnhancedCustomNode 
+        {...props} 
+        onLabelChange={handleLabelChange}
+        onGraphChange={handleGraphChange}
+        rawGraph={rawGraph}
+      />
+    ),
     group: (props: any) => <GroupNode {...props} onAddNode={handleAddNodeToGroup} />,
     };
     return types;
-  }, [handleLabelChange, handleAddNodeToGroup]);
+  }, [handleLabelChange, handleAddNodeToGroup, handleGraphChange, rawGraph]);
   const memoizedEdgeTypes = useMemo(() => edgeTypes, []);
 
-  // Edge creation: track source node when starting a connection
-  const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+  // Enhanced drag-to-connect system with hover highlighting
+  const [connectingFrom, setConnectingFrom] = useState<{ nodeId: string; handleId?: string } | null>(null);
+  const connectingFromRef = useRef<{ nodeId: string; handleId?: string } | null>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const moveHandlerRef = useRef<((ev: any) => void) | null>(null);
 
   const handleConnectStart = useCallback((_e: any, params: OnConnectStartParams) => {
-    setConnectingFrom(params.nodeId ?? null);
-  }, []);
+    console.log('🎯 Connection started from:', params.nodeId, 'handle:', params.handleId);
+    const connectionData = { nodeId: params.nodeId ?? '', handleId: params.handleId };
+    setConnectingFrom(connectionData);
+    connectingFromRef.current = connectionData;
+
+    // Set up live hover highlighting while dragging
+    const handleMove = (ev: any) => {
+      const pt = ev?.changedTouches ? ev.changedTouches[0] : ev;
+      const x = pt.clientX;
+      const y = pt.clientY;
+      const allNodes = nodes;
+      
+      // Use document.elementsFromPoint to get all elements under the cursor,
+      // ordered from top-most to bottom-most.
+      const elements = document.elementsFromPoint(x, y);
+      
+      // Find the first element that is a React Flow node and is not the source node.
+      const targetElement = elements.find(el => 
+        el.classList.contains('react-flow__node') &&
+        el.getAttribute('data-id') !== params.nodeId
+      );
+
+      const nextHover = targetElement ? targetElement.getAttribute('data-id') : null;
+
+      if (nextHover !== hoveredNodeId) {
+        // console.log('🔍 Hovering over:', nextHover);
+        setHoveredNodeId(nextHover);
+        
+        // Update node data to trigger hover styling
+        setNodes(prevNodes => 
+          prevNodes.map(node => ({
+            ...node,
+            data: { ...node.data, hoverTarget: node.id === nextHover }
+          }))
+        );
+      }
+    };
+
+    moveHandlerRef.current = handleMove;
+    window.addEventListener("pointermove", handleMove, { passive: true });
+    window.addEventListener("mousemove", handleMove, { passive: true });
+    window.addEventListener("touchmove", handleMove, { passive: true });
+  }, [nodes, hoveredNodeId, setNodes]);
 
   const handleConnectEnd = useCallback((event: any) => {
-    const target = event.target as HTMLElement;
-    const droppedOnPane = target?.classList?.contains('react-flow__pane');
-    if (!droppedOnPane || !connectingFrom) {
+    // Use ref to avoid React state batching issues
+    const start = connectingFromRef.current;
+    console.log('🎯 Connection ended, current connecting from:', start);
+    
+    // Early validation
+    if (!start?.nodeId) {
+      console.log('❌ No source node found, aborting connection');
       setConnectingFrom(null);
+      setHoveredNodeId(null);
+      connectingFromRef.current = null;
       return;
     }
 
-    // Create a new node next to the cursor and connect from source → new
-    const sourceNode = nodes.find(n => n.id === connectingFrom);
-    const parentForNew = (sourceNode as any)?.parentId || 'root';
-    const nodeName = `node_${Date.now()}`;
-    const edgeId = `edge_${Math.random().toString(36).slice(2, 9)}`;
-    const newNodeId = nodeName.toLowerCase();
+    // Cleanup move listeners
+    const moveHandler = moveHandlerRef.current;
+    if (moveHandler) {
+      window.removeEventListener("pointermove", moveHandler as any);
+      window.removeEventListener("mousemove", moveHandler as any);
+      window.removeEventListener("touchmove", moveHandler as any);
+      moveHandlerRef.current = null;
+    }
 
-    const updated = batchUpdate([
-      { name: 'add_node', nodename: nodeName, parentId: parentForNew, data: { label: 'New Node' } },
-      { name: 'add_edge', edgeId, sourceId: connectingFrom, targetId: newNodeId }
-    ], structuredClone(rawGraph));
+    // Clear all hover states
+    setNodes(prevNodes => 
+      prevNodes.map(node => ({
+        ...node,
+        data: { ...node.data, hoverTarget: false }
+      }))
+    );
 
-    handleGraphChange(updated);
-    // Focus edit the newly added node in RF view once nodes sync
-    setTimeout(() => {
-      setNodes(nds => nds.map(n => n.id === newNodeId ? { ...n, data: { ...n.data, isEditing: true } } : n));
-    }, 0);
+    const point = "changedTouches" in event ? (event as TouchEvent).changedTouches[0] : (event as MouseEvent);
+    const x = point.clientX;
+    const y = point.clientY;
 
-    setConnectingFrom(null);
-  }, [connectingFrom, nodes, rawGraph, setNodes, setRawGraph]);
+    // Use document.elementsFromPoint to find the top-most drop target
+    const elements = document.elementsFromPoint(x, y);
+    const targetElement = elements.find(el =>
+      el.classList.contains('react-flow__node') &&
+      el.getAttribute('data-id') !== start.nodeId
+    );
+    
+    const targetId = targetElement ? targetElement.getAttribute('data-id') : null;
+    const targetNode = targetId ? nodes.find(n => n.id === targetId) : null;
+
+    if (!targetNode) {
+      console.log('🚫 Dropped on canvas, no edge created');
+      setConnectingFrom(null);
+      setHoveredNodeId(null);
+      connectingFromRef.current = null;
+      return;
+    }
+
+    // console.log('✅ Creating edge from', start.nodeId, 'to', targetNode.id);
+
+    // Create edge using the existing graph update system
+    try {
+      console.log('🚀 NEW CODE: Starting edge creation process...');
+      
+      // Mark this as a user operation to prevent view reset
+      setIsUserOperation(true);
+      
+      // Create the edge ID (same format as DevPanel)
+      const edgeId = `edge_${start.nodeId}_to_${targetNode.id}`;
+      
+      // Clean up invalid edges that target 'root' before creating new edge
+      console.log('🧹 Cleaning up invalid edges targeting "root"...');
+      const cleanInvalidEdges = (node: any, path = ''): number => {
+        let removedCount = 0;
+        if (node.edges && node.edges.length > 0) {
+          const originalCount = node.edges.length;
+          node.edges = node.edges.filter((edge: any) => {
+            const targetId = edge.targets?.[0];
+            if (targetId === 'root') {
+              console.log(`🗑️ Removing invalid edge: ${edge.id} (${edge.sources?.[0]} → root) from ${path || 'root'}`);
+              return false;
+            }
+            return true;
+          });
+          removedCount += originalCount - node.edges.length;
+        }
+        if (node.children) {
+          node.children.forEach((child: any) => {
+            removedCount += cleanInvalidEdges(child, `${path}/${child.id}`);
+          });
+        }
+        return removedCount;
+      };
+      
+      const removedCount = cleanInvalidEdges(rawGraph);
+      console.log(`🧹 Removed ${removedCount} invalid edges targeting "root"`);
+      
+      // Update the graph with cleaned edges
+      if (removedCount > 0) {
+        handleGraphChange(rawGraph);
+        console.log('✅ Graph updated with cleaned edges');
+        return; // Exit early to let the cleaned graph process
+      }
+      
+      // Create a deep copy of the graph (same as DevPanel)
+      const updatedGraph = JSON.parse(JSON.stringify(rawGraph));
+      
+      // Use the mutation function directly (same as DevPanel)
+      const mutatedGraph = addEdge(edgeId, start.nodeId, targetNode.id, updatedGraph);
+      
+
+      
+      // Pass the updated graph back (same as DevPanel)
+      handleGraphChange(mutatedGraph);
+      console.log('🔗 Edge created successfully:', edgeId);
+      
+    } catch (error) {
+      console.error('❌ Error creating edge:', error);
+    } finally {
+      // Clear connection state after attempting edge creation
+      setConnectingFrom(null);
+      setHoveredNodeId(null);
+      connectingFromRef.current = null;
+      
+      // Reset user operation flag after a short delay to allow graph update to complete
+      setTimeout(() => {
+        setIsUserOperation(false);
+      }, 100);
+    }
+  }, [nodes, rawGraph, setNodes, handleGraphChange]);
   
   const {
     messages,
@@ -2730,15 +2902,15 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             const isMainSite = window.location.hostname === 'app.atelier-inc.net' || window.location.hostname === 'localhost';
             
             // Debug logging
-            console.log('🔍 [BUTTON DEBUG] Detection results:', {
-              hostname: window.location.hostname,
-              pathname: window.location.pathname,
-              isEmbedded,
-              isMainSite,
-              hasArchitectureId,
-              architectureId: urlParams.get('arch'),
-              isInIframe: window.parent !== window
-            });
+            // console.log('🔍 [BUTTON DEBUG] Detection results:', {
+            //   hostname: window.location.hostname,
+            //   pathname: window.location.pathname,
+            //   isEmbedded,
+            //   isMainSite,
+            //   hasArchitectureId,
+            //   architectureId: urlParams.get('arch'),
+            //   isInIframe: window.parent !== window
+            // });
             
             // Button configuration based on context
             // Show "Save" on main site, "Edit" in embedded version
@@ -2756,12 +2928,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               title: 'Edit in full app'
             };
             
-            console.log('🔍 [BUTTON DEBUG] Button config:', buttonConfig);
+            // console.log('🔍 [BUTTON DEBUG] Button config:', buttonConfig);
             
             return (
           <button
             onClick={async () => {
-                  console.log('🔄 [BUTTON DEBUG] Button clicked, action:', buttonConfig.action);
+                  // console.log('🔄 [BUTTON DEBUG] Button clicked, action:', buttonConfig.action);
                   
                   if (buttonConfig.action === 'new-tab') {
                     // Embedded version: open main site in new tab
@@ -2831,6 +3003,16 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         
 
 
+        {/* Settings/Dev Panel Button - Always visible */}
+        <button
+          onClick={() => setShowDev(!showDev)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:shadow-md transition-all duration-200"
+          title="Developer Panel"
+        >
+          <Settings className="w-4 h-4" />
+          <span className="text-sm font-medium">Dev</span>
+        </button>
+
         {/* Profile/Auth - Hidden in embedded version, visible on main site */}
         {(() => {
           // Show SaveAuth during SSR, will be corrected on client-side
@@ -2869,6 +3051,13 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       */}
 
       <div className="flex-1 relative min-h-0 overflow-hidden">
+        {/* Debug HUD showing which node is currently hovered while dragging */}
+        {connectingFrom && (
+          <div className="absolute right-4 top-16 bg-gray-900 text-white px-3 py-2 rounded-lg text-sm z-50 opacity-90">
+            Hover target: {hoveredNodeId ?? "(none)"}
+          </div>
+        )}
+        
         {/* ReactFlow container - only show when in ReactFlow mode */}
         {useReactFlow && (
           <div className="absolute inset-0 h-full w-full z-0">
@@ -2879,9 +3068,16 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
+              onConnectStart={handleConnectStart}
+              onConnectEnd={handleConnectEnd}
               onSelectionChange={onSelectionChange}
               onInit={(instance) => {
                 reactFlowRef.current = instance;
+                
+                // Disable fitView completely
+                instance.fitView = () => {
+                  console.log('🚫 fitView disabled');
+                };
               }}
               nodeTypes={memoizedNodeTypes}
               edgeTypes={memoizedEdgeTypes}
@@ -2891,7 +3087,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 animated: false,
                 zIndex: CANVAS_STYLES.zIndex.edgeLabels,
               }}
-              fitView
+
               minZoom={CANVAS_STYLES.canvas.zoom.min}
               maxZoom={CANVAS_STYLES.canvas.zoom.max}
               defaultViewport={CANVAS_STYLES.canvas.viewport.default}
@@ -3032,8 +3228,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           </div>
         )}
         
-        {/* Comprehensive Dev Panel - Contains all developer tools - Hidden in public mode */}
-        {showDev && !isPublicMode && (
+        {/* Comprehensive Dev Panel - Contains all developer tools - Temporarily always visible for debugging */}
+        {showDev && (
           <div className="absolute top-16 right-4 z-50 w-80 max-h-[calc(100vh-80px)]">
             <div className="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden h-full flex flex-col">
               {/* Panel Header */}

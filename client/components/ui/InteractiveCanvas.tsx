@@ -16,7 +16,7 @@ import { cn } from "../../lib/utils"
 // Import types from separate type definition files
 import { InteractiveCanvasProps } from "../../types/chat"
 import { RawGraph } from "../graph/types/index"
-import { deleteNode, deleteEdge, addEdge, moveNode } from "../graph/mutations"
+import { deleteNode, deleteEdge, addEdge, moveNode, findNodeById } from "../graph/mutations"
 import { batchUpdate } from "../graph/mutations"
 import { CANVAS_STYLES, getEdgeStyle, getEdgeZIndex } from "../graph/styles/canvasStyles"
 import { useElkToReactflowGraphConverter } from "../../hooks/useElkToReactflowGraphConverter"
@@ -1632,6 +1632,20 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   const handleAddNodeToGroup = useCallback((groupId: string) => {
     const nodeName = `new_node_${Date.now()}`;
+    console.log(`🔍 Adding node to group: ${groupId}`);
+    
+    // Create a deep copy to ensure new object reference for React state updates
+    const graphCopy = JSON.parse(JSON.stringify(rawGraph));
+    
+    // Verify the parent exists in our copy
+    const parentNode = findNodeById(graphCopy, groupId);
+    if (!parentNode) {
+      console.error(`❌ Parent node '${groupId}' not found in graph copy`);
+      return;
+    }
+    
+    console.log(`✅ Found parent node in graph copy: ${groupId}`);
+    
     const updated = batchUpdate([
       {
         name: "add_node",
@@ -1639,7 +1653,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         parentId: groupId,
         data: { label: "New Node" }
       }
-    ], structuredClone(rawGraph));
+    ], graphCopy);
     handleGraphChange(updated);
     // Try to focus edit on the newly created node in RF layer
     const newNodeId = nodeName.toLowerCase();

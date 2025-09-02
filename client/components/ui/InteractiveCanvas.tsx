@@ -16,8 +16,9 @@ import { cn } from "../../lib/utils"
 // Import types from separate type definition files
 import { InteractiveCanvasProps } from "../../types/chat"
 import { RawGraph } from "../graph/types/index"
-import { deleteNode, deleteEdge, addEdge, moveNode, findNodeById } from "../graph/mutations"
+import { deleteNode, deleteEdge, addEdge, moveNode, addNode } from "../graph/mutations"
 import { batchUpdate } from "../graph/mutations"
+import { findNodeById } from "../graph/utils/find"
 import { CANVAS_STYLES, getEdgeStyle, getEdgeZIndex } from "../graph/styles/canvasStyles"
 import { useElkToReactflowGraphConverter } from "../../hooks/useElkToReactflowGraphConverter"
 import { useChatSession } from '../../hooks/useChatSession'
@@ -1332,7 +1333,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     // Set default architecture on initial mount if no content exists
     if (!rawGraph || !rawGraph.children || rawGraph.children.length === 0) {
       console.log('🚀 Initializing with default architecture');
+      console.log('🚀 DEFAULT_ARCHITECTURE:', DEFAULT_ARCHITECTURE);
       setRawGraph(DEFAULT_ARCHITECTURE);
+    } else {
+      console.log('🚀 Already has content, children length:', rawGraph.children?.length);
     }
   }, []); // Empty dependency array - only run once on mount
 
@@ -1340,7 +1344,15 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   useEffect(() => {
     if (selectedArchitectureId === 'new-architecture') {
       // Only set default architecture if we don't already have content
-      if (!rawGraph || !rawGraph.children || rawGraph.children.length === 0) {
+      const hasContent = rawGraph && rawGraph.children && rawGraph.children.length > 0;
+      console.log('🔄 New Architecture tab check:', { 
+        hasRawGraph: !!rawGraph, 
+        hasChildren: !!rawGraph?.children,
+        childrenLength: rawGraph?.children?.length,
+        hasContent 
+      });
+      
+      if (!hasContent) {
         console.log('🔄 Setting default architecture for New Architecture tab');
         setRawGraph(DEFAULT_ARCHITECTURE);
       } else {
@@ -1634,27 +1646,49 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     const nodeName = `new_node_${Date.now()}`;
     console.log(`🔍 Adding node to group: ${groupId}`);
     
-    // Create a deep copy to ensure new object reference for React state updates
-    const graphCopy = JSON.parse(JSON.stringify(rawGraph));
+    // Get the current architecture graph instead of ELK converter's rawGraph
+    const currentArch = savedArchitectures.find(arch => arch.id === selectedArchitectureId);
+    const currentGraph = currentArch?.rawGraph || rawGraph;
     
-    // Verify the parent exists in our copy
-    const parentNode = findNodeById(graphCopy, groupId);
-    if (!parentNode) {
-      console.error(`❌ Parent node '${groupId}' not found in graph copy`);
+    console.log(`🔍 Current architecture:`, currentArch?.name);
+    console.log(`🔍 Current graph:`, currentGraph);
+    console.log(`🔍 ELK rawGraph:`, rawGraph);
+    
+    // Check if we have a valid graph with content
+    if (!currentGraph || !currentGraph.children || currentGraph.children.length === 0) {
+      console.error(`❌ Cannot add node - no valid graph found`);
+      console.error(`❌ currentGraph:`, currentGraph);
+      console.error(`❌ selectedArchitectureId:`, selectedArchitectureId);
+      console.error(`❌ savedArchitectures:`, savedArchitectures);
       return;
     }
     
-    console.log(`✅ Found parent node in graph copy: ${groupId}`);
-    
-    const updated = batchUpdate([
-      {
-        name: "add_node",
-        nodename: nodeName,
-        parentId: groupId,
-        data: { label: "New Node" }
-      }
-    ], graphCopy);
-    handleGraphChange(updated);
+    // Use the same pattern as DevPanel: direct addNode call instead of batchUpdate
+    try {
+      // Create a deep copy to ensure new object reference for React state updates
+      const graphCopy = JSON.parse(JSON.stringify(currentGraph));
+      console.log(`🔍 Graph copy:`, graphCopy);
+      
+      // Debug: List all node IDs in the graph
+      const getAllNodeIds = (node: any, ids: string[] = []): string[] => {
+        if (node.id) ids.push(node.id);
+        if (node.children) {
+          node.children.forEach((child: any) => getAllNodeIds(child, ids));
+        }
+        return ids;
+      };
+      
+      const allIds = getAllNodeIds(graphCopy);
+      console.log(`🔍 All node IDs in graph:`, allIds);
+      
+      // Use the addNode function directly like DevPanel does
+      const mutatedGraph = addNode(nodeName, groupId, graphCopy, { label: "New Node" });
+      
+      console.log(`✅ addNode completed, calling handleGraphChange`);
+      handleGraphChange(mutatedGraph);
+    } catch (error) {
+      console.error(`❌ Error in handleAddNodeToGroup:`, error);
+    }
     // Try to focus edit on the newly created node in RF layer
     const newNodeId = nodeName.toLowerCase();
     setTimeout(() => {

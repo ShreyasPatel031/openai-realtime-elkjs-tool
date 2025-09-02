@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Handle, Position } from 'reactflow';
 import { baseHandleStyle } from './graph/handles';
 import { iconLists } from '../generated/iconLists';
@@ -82,6 +82,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
   const [iconError, setIconError] = useState(false);
   const [finalIconSrc, setFinalIconSrc] = useState<string | undefined>(undefined);
   const [fallbackAttempted, setFallbackAttempted] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const apiEndpoint = useApiEndpoint();
 
   // helpers hoisted for reuse
@@ -264,6 +265,23 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
     setIsEditing(true);
   };
 
+  // Handle click outside to exit editing
+  useEffect(() => {
+    if (!isEditing) return;
+    
+    const handleClickOutside = (event: MouseEvent) => {
+      if (inputRef.current && !inputRef.current.contains(event.target as Node)) {
+        setIsEditing(false);
+        onLabelChange(id, label);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isEditing, id, label, onLabelChange]);
+
   const nodeStyle = {
     background: selected ? '#f8f9fa' : 'white',
     border: selected ? '2px solid #6c757d' : '1px solid #ccc',
@@ -430,6 +448,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
         </div>
         {isEditing ? (
           <input
+            ref={inputRef}
             type="text"
             value={label}
             onChange={handleLabelChange}
@@ -437,10 +456,14 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
             autoFocus
             style={{
               width: '100%',
-              padding: '4px',
+              padding: '4px 8px', // Added horizontal padding for space on left and right
               border: '1px solid #ccc',
               borderRadius: '4px',
               textAlign: 'center',
+              fontSize: '12px',
+              boxSizing: 'border-box', // Include padding in width calculation
+              outline: 'none', // Remove default focus outline
+              boxShadow: '0 0 0 2px rgba(0, 123, 255, 0.25)', // Custom focus style
             }}
           />
         ) : (

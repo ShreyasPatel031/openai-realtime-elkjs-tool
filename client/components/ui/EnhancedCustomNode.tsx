@@ -72,12 +72,43 @@ const EnhancedCustomNode: React.FC<EnhancedCustomNodeProps> = ({
     // Don't start ghost drag when grabbing an edge handle
     const targetEl = ev.target as HTMLElement;
     if (targetEl.closest('.react-flow__handle')) return;
+    
+    // Only start ghost drag and prevent default on actual drag (not click)
     if (data?.startGhostDrag) {
-      (ev.currentTarget as HTMLElement).setPointerCapture?.(ev.pointerId);
-      data.startGhostDrag(id, ev as unknown as PointerEvent);
-      // Prevent ReactFlow default drag
-      ev.stopPropagation();
-      ev.preventDefault();
+      // Store the element reference
+      const element = ev.currentTarget as HTMLElement;
+      const startPos = { x: ev.clientX, y: ev.clientY };
+      
+      const onPointerMove = (moveEv: PointerEvent) => {
+        const distance = Math.sqrt(
+          Math.pow(moveEv.clientX - startPos.x, 2) + 
+          Math.pow(moveEv.clientY - startPos.y, 2)
+        );
+        
+        // If moved more than 5px, it's a drag
+        if (distance > 5) {
+          element.setPointerCapture?.(ev.pointerId);
+          data.startGhostDrag(id, ev as unknown as PointerEvent);
+          
+          // Clean up move listener
+          window.removeEventListener('pointermove', onPointerMove);
+          window.removeEventListener('pointerup', onPointerUp);
+          
+          // Prevent ReactFlow default drag
+          ev.stopPropagation();
+          ev.preventDefault();
+        }
+      };
+      
+      const onPointerUp = () => {
+        // Clean up listeners
+        window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerup', onPointerUp);
+        // If we get here, it was just a click - let ReactFlow handle selection
+      };
+      
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
     }
   };
 

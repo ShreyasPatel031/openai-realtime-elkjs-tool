@@ -1726,21 +1726,21 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const [dropHoverGroup, setDropHoverGroup] = useState<string | null>(null);
   const canvasWrapperRef = useRef<HTMLDivElement | null>(null);
 
-  // Custom onNodesChange handler that blocks all position changes
+  // Custom onNodesChange handler that blocks ALL position changes (use ghost drag only)
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
     console.log('🎯 handleNodesChange:', changes);
     
-    // Filter out ALL position changes to keep nodes static
+    // Always allow non-position changes (selection, etc.)
     const nonPositionChanges = changes.filter(change => change.type !== 'position');
-    
     if (nonPositionChanges.length > 0) {
       onNodesChange(nonPositionChanges);
     }
     
-    // Log blocked position changes
-    const blockedPositionChanges = changes.filter(change => change.type === 'position');
-    if (blockedPositionChanges.length > 0) {
-      console.log('🚫 Blocked position changes to keep nodes static:', blockedPositionChanges);
+    // BLOCK all position changes - we only want ghost drag movement
+    const positionChanges = changes.filter(change => change.type === 'position');
+    if (positionChanges.length > 0) {
+      console.log('🚫 Blocking ALL position changes - use ghost drag only:', positionChanges);
+      // Don't call onNodesChange for position changes - ghost drag handles all movement
     }
   }, [onNodesChange]);
 
@@ -1828,6 +1828,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       const groupNodes = nodes.filter(n => n.type === 'group');
       let hovering: string | null = null;
       let smallestArea = Infinity;
+      const groupsUnderCursor: Array<{id: string, area: number}> = [];
       
       for (const g of groupNodes) {
         const gel = document.querySelector(`.react-flow__node[data-id="${g.id}"]`) as HTMLElement | null;
@@ -1835,6 +1836,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         const r = gel.getBoundingClientRect();
         if (p.clientX >= r.left && p.clientX <= r.right && p.clientY >= r.top && p.clientY <= r.bottom) {
           const area = r.width * r.height;
+          groupsUnderCursor.push({id: g.id, area});
+          
           // Select the smallest group (most specific), but prefer non-root groups
           if (g.id !== 'root' && area < smallestArea) {
             smallestArea = area;
@@ -1844,6 +1847,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             hovering = g.id;
           }
         }
+      }
+      
+      // Debug log groups under cursor
+      if (groupsUnderCursor.length > 0) {
+        console.log(`🎯 Groups under cursor:`, groupsUnderCursor.map(g => `${g.id}(${g.area})`).join(', '));
+        console.log(`🎯 Selected highest group: ${hovering}`);
       }
       setDropHoverGroup(hovering);
     };
@@ -2105,6 +2114,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             ...node, 
             data: { 
               ...node.data, 
+              startGhostDrag, // Add startGhostDrag to group nodes too
               dropHover: dropHoverGroup === node.id,
               ghostActive: ghost.active,
               currentDropHover: dropHoverGroup
@@ -2125,24 +2135,91 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   ), []);
 
   const createGroupNode = useCallback((props: any) => {
-    // Get highlighting from props instead of closure
+    console.log(`🏗️ Creating group node ${props.id} with props:`, {
+      id: props.id,
+      type: props.type,
+      hasStartGhostDrag: !!props.data?.startGhostDrag,
+      dataKeys: Object.keys(props.data || {})
+    });
+    
+    // Get highlighting from props instead of closure (EXACTLY like before)
     const isHighlighted = props.data?.dropHover;
     const isGhostActive = props.data?.ghostActive;
     const currentDropHover = props.data?.currentDropHover;
     
+    // Handle ghost drag start (same logic as EnhancedCustomNode)
+    const onPointerDown = (ev: React.PointerEvent) => {
+      console.log(`🎯 Group ${props.id} onPointerDown triggered`);
+      
+      // Don't start ghost drag when grabbing an edge handle
+      const targetEl = ev.target as HTMLElement;
+      if (targetEl.closest('.react-flow__handle')) {
+        console.log(`🎯 Group ${props.id} - skipping, clicked on handle`);
+        return;
+      }
+      
+      // Only start ghost drag and prevent default on actual drag (not click)
+      if (props.data?.startGhostDrag) {
+        console.log(`🎯 Group ${props.id} - has startGhostDrag, setting up listeners`);
+        // Store the element reference
+        const element = ev.currentTarget as HTMLElement;
+        const startPos = { x: ev.clientX, y: ev.clientY };
+        
+        const onPointerMove = (moveEv: PointerEvent) => {
+          const distance = Math.sqrt(
+            Math.pow(moveEv.clientX - startPos.x, 2) + 
+            Math.pow(moveEv.clientY - startPos.y, 2)
+          );
+          
+          // If moved more than 5px, it's a drag
+          if (distance > 5) {
+            console.log(`🎯 Group ${props.id} - starting ghost drag (distance: ${distance})`);
+            element.setPointerCapture?.(ev.pointerId);
+            props.data.startGhostDrag(props.id, ev as unknown as PointerEvent);
+            
+            // Clean up move listener
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+            
+            // Prevent ReactFlow default drag
+            ev.stopPropagation();
+            ev.preventDefault();
+          }
+        };
+        
+        const onPointerUp = () => {
+          console.log(`🎯 Group ${props.id} - pointer up, cleaning up listeners`);
+          // Clean up listeners
+          window.removeEventListener('pointermove', onPointerMove);
+          window.removeEventListener('pointerup', onPointerUp);
+          // If we get here, it was just a click - let ReactFlow handle selection
+        };
+        
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+      } else {
+        console.log(`🎯 Group ${props.id} - no startGhostDrag function found in data`);
+      }
+    };
+    
     return (
-      <div style={{
-        width: '100%',
-        height: '100%',
-        position: 'relative',
-        opacity: isGhostActive && currentDropHover && currentDropHover !== props.id ? 0.5 : 1,
-        backgroundColor: isHighlighted ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
-        border: isHighlighted ? '2px solid #3B82F6' : 'none',
-        borderRadius: isHighlighted ? '8px' : '0px',
-        transition: 'all 0.2s ease',
-        boxSizing: 'border-box',
-        boxShadow: isHighlighted ? '0 0 0 4px rgba(59,130,246,0.15)' : 'none'
-      }}>
+      <div 
+        onPointerDown={onPointerDown}
+        style={{
+          width: '100%',
+          height: '100%',
+          position: 'relative',
+          cursor: 'grab',
+          userSelect: 'none',
+          opacity: isGhostActive && currentDropHover && currentDropHover !== props.id ? 0.5 : 1,
+          backgroundColor: isHighlighted ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+          border: isHighlighted ? '2px solid #3B82F6' : 'none',
+          borderRadius: isHighlighted ? '8px' : '0px',
+          transition: 'all 0.2s ease',
+          boxSizing: 'border-box',
+          boxShadow: isHighlighted ? '0 0 0 4px rgba(59,130,246,0.15)' : 'none'
+        }}
+      >
         <GroupNode {...props} onAddNode={handleAddNodeToGroup} />
       </div>
     );
@@ -2677,6 +2754,16 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     }
     if (selectedNodesParam.length > 0) {
       console.log(`📦 Selected nodes:`, selectedNodesParam.map(node => node.id));
+      
+      // Debug group selection specifically
+      const selectedGroups = selectedNodesParam.filter(n => n.type === 'group');
+      if (selectedGroups.length > 0) {
+        console.log('🎯 Selected GROUPS:', selectedGroups.map(g => `${g.id} (type: ${g.type})`));
+        selectedGroups.forEach(group => {
+          console.log(`🔍 Group ${group.id} data:`, group.data);
+          console.log(`🔍 Group ${group.id} has startGhostDrag:`, !!group.data?.startGhostDrag);
+        });
+      }
     }
     
     if (selectedNodesParam.length > 0) {
@@ -3409,7 +3496,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               panOnDrag
               selectionOnDrag
               elementsSelectable={true}
-              nodesDraggable={false}
+              nodesDraggable={true}
               nodesConnectable={true}
               selectNodesOnDrag={true}
               style={{ cursor: 'grab' }}

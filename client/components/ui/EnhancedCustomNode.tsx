@@ -71,7 +71,10 @@ const EnhancedCustomNode: React.FC<EnhancedCustomNodeProps> = ({
   const onPointerDown = (ev: React.PointerEvent) => {
     // Don't start ghost drag when grabbing an edge handle
     const targetEl = ev.target as HTMLElement;
-    if (targetEl.closest('.react-flow__handle')) return;
+    if (targetEl.closest('.react-flow__handle')) {
+      console.log(`🎯 Handle detected - letting ReactFlow handle it`);
+      return;
+    }
     
     // Only start ghost drag and prevent default on actual drag (not click)
     if (data?.startGhostDrag) {

@@ -32,6 +32,10 @@ export const DragDropEdgeHandler: React.FC<DragDropEdgeHandlerProps> = ({
 }) => {
   // Note: Connection handling is managed by the parent InteractiveCanvas
   // This component only provides the visual arrow handles
+  
+  if (isSelected) {
+  
+  }
 
   return (
     <div style={{ position: "relative" }}>
@@ -45,6 +49,7 @@ export const DragDropEdgeHandler: React.FC<DragDropEdgeHandlerProps> = ({
             type="source" 
             position={Position.Top} 
             id={`${nodeId}-top`}
+            isConnectable={true}
             style={{
               position: "absolute",
               top: -32,
@@ -53,16 +58,10 @@ export const DragDropEdgeHandler: React.FC<DragDropEdgeHandlerProps> = ({
               width: 32,
               height: 32,
               borderRadius: "50%",
-              background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
-              border: "2px solid #d1d5db",
-              boxShadow: "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)",
-              backdropFilter: "blur(10px)",
-              cursor: "grab",
-              zIndex: "99999 !important",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s ease-in-out",
+              background: "transparent",
+              border: "none",
+              cursor: "crosshair",
+              zIndex: "100001 !important",
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = e.currentTarget.style.transform.replace(')', ' scale(1.1))');
@@ -112,7 +111,7 @@ export const DragDropEdgeHandler: React.FC<DragDropEdgeHandlerProps> = ({
               border: "2px solid #d1d5db",
               boxShadow: "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)",
               backdropFilter: "blur(10px)",
-              cursor: "grab",
+              cursor: "crosshair",
               zIndex: "99999 !important",
               display: "flex",
               alignItems: "center",
@@ -167,7 +166,7 @@ export const DragDropEdgeHandler: React.FC<DragDropEdgeHandlerProps> = ({
               border: "2px solid #d1d5db",
               boxShadow: "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)",
               backdropFilter: "blur(10px)",
-              cursor: "grab",
+              cursor: "crosshair",
               zIndex: "99999 !important",
               display: "flex",
               alignItems: "center",
@@ -222,7 +221,7 @@ export const DragDropEdgeHandler: React.FC<DragDropEdgeHandlerProps> = ({
               border: "2px solid #d1d5db",
               boxShadow: "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)",
               backdropFilter: "blur(10px)",
-              cursor: "grab",
+              cursor: "crosshair",
               zIndex: "99999 !important",
               display: "flex",
               alignItems: "center",

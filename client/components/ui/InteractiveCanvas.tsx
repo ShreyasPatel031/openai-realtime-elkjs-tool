@@ -1728,8 +1728,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   // Custom onNodesChange handler that blocks ALL position changes (use ghost drag only)
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    console.log('🎯 handleNodesChange:', changes);
-    
     // Always allow non-position changes (selection, etc.)
     const nonPositionChanges = changes.filter(change => change.type !== 'position');
     if (nonPositionChanges.length > 0) {
@@ -1739,7 +1737,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     // BLOCK all position changes - we only want ghost drag movement
     const positionChanges = changes.filter(change => change.type === 'position');
     if (positionChanges.length > 0) {
-      console.log('🚫 Blocking ALL position changes - use ghost drag only:', positionChanges);
       // Don't call onNodesChange for position changes - ghost drag handles all movement
     }
   }, [onNodesChange]);
@@ -2135,12 +2132,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   ), []);
 
   const createGroupNode = useCallback((props: any) => {
-    console.log(`🏗️ Creating group node ${props.id} with props:`, {
-      id: props.id,
-      type: props.type,
-      hasStartGhostDrag: !!props.data?.startGhostDrag,
-      dataKeys: Object.keys(props.data || {})
-    });
+
     
     // Get highlighting from props instead of closure (EXACTLY like before)
     const isHighlighted = props.data?.dropHover;
@@ -2149,18 +2141,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     
     // Handle ghost drag start (same logic as EnhancedCustomNode)
     const onPointerDown = (ev: React.PointerEvent) => {
-      console.log(`🎯 Group ${props.id} onPointerDown triggered`);
-      
       // Don't start ghost drag when grabbing an edge handle
       const targetEl = ev.target as HTMLElement;
-      if (targetEl.closest('.react-flow__handle')) {
-        console.log(`🎯 Group ${props.id} - skipping, clicked on handle`);
-        return;
-      }
+      if (targetEl.closest('.react-flow__handle')) return;
       
       // Only start ghost drag and prevent default on actual drag (not click)
       if (props.data?.startGhostDrag) {
-        console.log(`🎯 Group ${props.id} - has startGhostDrag, setting up listeners`);
         // Store the element reference
         const element = ev.currentTarget as HTMLElement;
         const startPos = { x: ev.clientX, y: ev.clientY };
@@ -2173,7 +2159,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           
           // If moved more than 5px, it's a drag
           if (distance > 5) {
-            console.log(`🎯 Group ${props.id} - starting ghost drag (distance: ${distance})`);
             element.setPointerCapture?.(ev.pointerId);
             props.data.startGhostDrag(props.id, ev as unknown as PointerEvent);
             
@@ -2188,7 +2173,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         };
         
         const onPointerUp = () => {
-          console.log(`🎯 Group ${props.id} - pointer up, cleaning up listeners`);
           // Clean up listeners
           window.removeEventListener('pointermove', onPointerMove);
           window.removeEventListener('pointerup', onPointerUp);
@@ -2197,8 +2181,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
-      } else {
-        console.log(`🎯 Group ${props.id} - no startGhostDrag function found in data`);
       }
     };
     
@@ -2236,18 +2218,41 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const connectingFromRef = useRef<{ nodeId: string; handleId?: string } | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const moveHandlerRef = useRef<((ev: any) => void) | null>(null);
+  const [connectionLine, setConnectionLine] = useState<{x1: number, y1: number, x2: number, y2: number} | null>(null);
 
   const handleConnectStart = useCallback((_e: any, params: OnConnectStartParams) => {
-    console.log('🎯 Connection started from:', params.nodeId, 'handle:', params.handleId);
+    console.log('🔗 CONNECTION START TRIGGERED!', params);
     const connectionData = { nodeId: params.nodeId ?? '', handleId: params.handleId };
     setConnectingFrom(connectionData);
     connectingFromRef.current = connectionData;
+
+    // Get the handle position for the connection line start point
+    const sourceNode = nodes.find(n => n.id === params.nodeId);
+    const handleElement = document.querySelector(`[data-handleid="${params.handleId}"]`);
+    
+    let startX = 0, startY = 0;
+    if (handleElement) {
+      const rect = handleElement.getBoundingClientRect();
+      const canvasRect = document.querySelector('.react-flow')?.getBoundingClientRect();
+      if (canvasRect) {
+        startX = rect.left + rect.width / 2 - canvasRect.left;
+        startY = rect.top + rect.height / 2 - canvasRect.top;
+      }
+    }
 
     // Set up live hover highlighting while dragging
     const handleMove = (ev: any) => {
       const pt = ev?.changedTouches ? ev.changedTouches[0] : ev;
       const x = pt.clientX;
       const y = pt.clientY;
+      
+      // Update connection line to follow cursor
+      const canvasRect = document.querySelector('.react-flow')?.getBoundingClientRect();
+      if (canvasRect) {
+        const endX = x - canvasRect.left;
+        const endY = y - canvasRect.top;
+        setConnectionLine({ x1: startX, y1: startY, x2: endX, y2: endY });
+      }
       const allNodes = nodes;
       
       // Use document.elementsFromPoint to get all elements under the cursor,
@@ -2285,13 +2290,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const handleConnectEnd = useCallback((event: any) => {
     // Use ref to avoid React state batching issues
     const start = connectingFromRef.current;
-    console.log('🎯 Connection ended, current connecting from:', start);
     
     // Early validation
     if (!start?.nodeId) {
-      console.log('❌ No source node found, aborting connection');
       setConnectingFrom(null);
       setHoveredNodeId(null);
+      setConnectionLine(null);
       connectingFromRef.current = null;
       return;
     }
@@ -2331,6 +2335,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       console.log('🚫 Dropped on canvas, no edge created');
     setConnectingFrom(null);
       setHoveredNodeId(null);
+      setConnectionLine(null);
       connectingFromRef.current = null;
       return;
     }
@@ -2399,6 +2404,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       // Clear connection state after attempting edge creation
       setConnectingFrom(null);
       setHoveredNodeId(null);
+      setConnectionLine(null);
       connectingFromRef.current = null;
       
       // Reset user operation flag after a short delay to allow graph update to complete
@@ -2753,17 +2759,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       console.log(`🔗 Selected edges:`, selectedEdgesParam.map(edge => edge.id));
     }
     if (selectedNodesParam.length > 0) {
-      console.log(`📦 Selected nodes:`, selectedNodesParam.map(node => node.id));
-      
-      // Debug group selection specifically
-      const selectedGroups = selectedNodesParam.filter(n => n.type === 'group');
-      if (selectedGroups.length > 0) {
-        console.log('🎯 Selected GROUPS:', selectedGroups.map(g => `${g.id} (type: ${g.type})`));
-        selectedGroups.forEach(group => {
-          console.log(`🔍 Group ${group.id} data:`, group.data);
-          console.log(`🔍 Group ${group.id} has startGhostDrag:`, !!group.data?.startGhostDrag);
-        });
-      }
+      // Track selected nodes without verbose logging
     }
     
     if (selectedNodesParam.length > 0) {
@@ -3471,6 +3467,15 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               onConnectStart={handleConnectStart}
               onConnectEnd={handleConnectEnd}
               onSelectionChange={onSelectionChange}
+              connectOnClick={false}
+              connectionLineType="smoothstep"
+              connectionLineStyle={{
+                strokeWidth: 3,
+                stroke: '#ff0000',
+                strokeDasharray: '5,5',
+                zIndex: 999999
+              }}
+
               onInit={(instance) => {
                 reactFlowRef.current = instance;
                 
@@ -3533,6 +3538,36 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
               {/* <DebugGeometry /> */}
             </ReactFlow>
+
+            {/* Connection line during drag */}
+            {connectionLine && (
+              <svg 
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  pointerEvents: 'none',
+                  zIndex: 999999
+                }}
+              >
+                <defs>
+                  <marker id="connectionArrowhead" markerWidth="10" markerHeight="7" 
+                          refX="9" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" fill="#0066cc" />
+                  </marker>
+                </defs>
+                <path 
+                  d={`M ${connectionLine.x1} ${connectionLine.y1} L ${connectionLine.x1} ${(connectionLine.y1 + connectionLine.y2) / 2} L ${connectionLine.x2} ${(connectionLine.y1 + connectionLine.y2) / 2} L ${connectionLine.x2} ${connectionLine.y2}`}
+                  stroke="#0066cc"
+                  strokeWidth="2"
+                  strokeDasharray="5,5"
+                  fill="none"
+                  markerEnd="url(#connectionArrowhead)"
+                />
+              </svg>
+            )}
 
             {/* Ghost visual for drag operations - clone the original node appearance */}
             {ghost.active && (

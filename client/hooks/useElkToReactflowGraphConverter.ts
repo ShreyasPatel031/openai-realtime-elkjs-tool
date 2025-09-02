@@ -124,7 +124,19 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
   /* 🔹 5. layout side-effect                           */
   /* -------------------------------------------------- */
   useEffect(() => {
-    if (!rawGraph) return;
+    if (!rawGraph) {
+      console.log(`❌ [ELK Converter] rawGraph is null/undefined, skipping`);
+      return;
+    }
+    
+    const timestamp = new Date().toISOString();
+    const newHash = structuralHash(rawGraph);
+    const oldHash = hashRef.current;
+    
+    console.log(`🔄 [ELK Converter] Received rawGraph change - ${timestamp}`);
+    console.log(`🔄 [ELK Converter] rawGraph has ${rawGraph.children?.length || 0} children`);
+    console.log(`🔄 [ELK Converter] Hash check: ${oldHash} → ${newHash}`);
+    console.log(`🔄 [ELK Converter] Hash changed: ${oldHash !== newHash}`);
     
     /* cancel any in-flight run */
     abortRef.current?.abort();
@@ -137,6 +149,28 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
       try {
         // 1) inject IDs + elkOptions onto a clone of rawGraph
         const prepared = ensureIds(structuredClone(rawGraph));
+        
+        // Debug: Compare rawGraph vs prepared graph edge counts
+        const countEdges = (node: any): number => {
+          let count = (node.edges || []).length;
+          if (node.children) {
+            for (const child of node.children) {
+              count += countEdges(child);
+            }
+          }
+          return count;
+        };
+        
+        const rawEdgeCount = countEdges(rawGraph);
+        const preparedEdgeCount = countEdges(prepared);
+        
+        console.log(`🔍 [ELK Pipeline] rawGraph edges: ${rawEdgeCount}, prepared edges: ${preparedEdgeCount}`);
+        
+        if (rawEdgeCount !== preparedEdgeCount) {
+          console.error(`❌ [ELK Pipeline] Edge count mismatch! ${rawEdgeCount} → ${preparedEdgeCount}`);
+          console.log('Raw root edges:', rawGraph.edges?.length || 0);
+          console.log('Prepared root edges:', prepared.edges?.length || 0);
+        }
         
         // 2) run ELK
         const layout = await elk.layout(prepared);
@@ -157,9 +191,15 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
             padding    : 10
           });
         
+        const timestamp = new Date().toISOString();
+        console.log(`✅ [ELK Converter] Layout complete, updating visual nodes - ${timestamp}`);
+        console.log(`✅ [ELK Converter] Setting ${rfNodes.length} nodes and ${rfEdges.length} edges`);
+        
         setNodes(rfNodes);
         setEdges(rfEdges);
         incLayoutVersion(v => v + 1);
+        
+        console.log(`✅ [ELK Converter] Visual update complete - layout version incremented`);
       } catch (e: any) {
         if (e.name !== "AbortError")
           console.error("[ELK] layout failed", e);

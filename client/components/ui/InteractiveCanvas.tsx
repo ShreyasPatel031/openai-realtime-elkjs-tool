@@ -7,7 +7,8 @@ import ReactFlow, {
   BackgroundVariant,
   Node,
   Edge,
-  OnConnectStartParams
+  OnConnectStartParams,
+  NodeChange
 } from "reactflow"
 import "reactflow/dist/style.css"
 import { cn } from "../../lib/utils"
@@ -15,7 +16,7 @@ import { cn } from "../../lib/utils"
 // Import types from separate type definition files
 import { InteractiveCanvasProps } from "../../types/chat"
 import { RawGraph } from "../graph/types/index"
-import { deleteNode, deleteEdge, addEdge } from "../graph/mutations"
+import { deleteNode, deleteEdge, addEdge, moveNode } from "../graph/mutations"
 import { batchUpdate } from "../graph/mutations"
 import { CANVAS_STYLES, getEdgeStyle, getEdgeZIndex } from "../graph/styles/canvasStyles"
 import { useElkToReactflowGraphConverter } from "../../hooks/useElkToReactflowGraphConverter"
@@ -1515,14 +1516,21 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   // Handler for graph changes from DevPanel or manual interactions
   const handleGraphChange = useCallback(async (newGraph: RawGraph) => {
-    console.group('[Graph Change] Manual/DevPanel Update');
+    const timestamp = new Date().toISOString();
+    console.group(`[Graph Change] Manual/DevPanel Update - ${timestamp}`);
     console.log('raw newGraph:', newGraph);
     console.log('Previous rawGraph had', rawGraph?.children?.length || 0, 'children');
     console.log('New graph has', newGraph?.children?.length || 0, 'children');
     
     // Update the local state immediately
+    console.log('🚀 About to call setRawGraph...');
+    console.log('🔍 Current rawGraph:', rawGraph);
+    console.log('🔍 New graph to set:', newGraph);
+    console.log('🔍 Are they the same object?', rawGraph === newGraph);
+    console.log('🔍 setRawGraph function:', setRawGraph);
+    
     setRawGraph(newGraph);
-    console.log('…called setRawGraph');
+    console.log('✅ Called setRawGraph - state should update and trigger ELK converter');
     
     // Save to Firebase (signed in) or anonymous storage (public mode)
     if (user && selectedArchitectureId !== 'new-architecture') {
@@ -1646,9 +1654,224 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Removed individual tracking refs - now using unified fitView approach
   // Track agent busy state to disable input while drawing
   const [agentBusy, setAgentBusy] = useState(false);
-  
+
   // Track whether current graph change is user-initiated (drag-drop) or agent-initiated
   const [isUserOperation, setIsUserOperation] = useState(false);
+
+  // Ghost drag state (similar to reference example)
+  const [ghost, setGhost] = useState<
+    | {
+        active: true;
+        nodeId: string;
+        label: string;
+        width: number;
+        height: number;
+        offsetX: number;
+        offsetY: number;
+        fromGroupId: string | null;
+        left: number;
+        top: number;
+      }
+    | { active: false }
+  >({ active: false });
+
+  const [dropHoverGroup, setDropHoverGroup] = useState<string | null>(null);
+  const canvasWrapperRef = useRef<HTMLDivElement | null>(null);
+
+  // Custom onNodesChange handler that blocks all position changes
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    console.log('🎯 handleNodesChange:', changes);
+    
+    // Filter out ALL position changes to keep nodes static
+    const nonPositionChanges = changes.filter(change => change.type !== 'position');
+    
+    if (nonPositionChanges.length > 0) {
+      onNodesChange(nonPositionChanges);
+    }
+    
+    // Log blocked position changes
+    const blockedPositionChanges = changes.filter(change => change.type === 'position');
+    if (blockedPositionChanges.length > 0) {
+      console.log('🚫 Blocked position changes to keep nodes static:', blockedPositionChanges);
+    }
+  }, [onNodesChange]);
+
+  // Helper function to find which group contains a specific position
+  const findGroupAtPosition = useCallback((x: number, y: number): string | null => {
+    // Find the group node that contains this position
+    for (const node of nodes) {
+      if (node.type === 'group' && node.position && node.width && node.height) {
+        const nodeLeft = node.position.x;
+        const nodeTop = node.position.y;
+        const nodeRight = nodeLeft + node.width;
+        const nodeBottom = nodeTop + node.height;
+        
+        if (x >= nodeLeft && x <= nodeRight && y >= nodeTop && y <= nodeBottom) {
+          console.log(`📦 Found group ${node.id} at position (${x}, ${y})`);
+          return node.id;
+        }
+      }
+    }
+    
+    // If not in any group, return root
+    console.log(`📦 Position (${x}, ${y}) is in root`);
+    return 'root';
+  }, [nodes]);
+
+  // Helper function to get current parent of a node
+  const getCurrentParentId = useCallback((nodeId: string): string => {
+    const findParent = (graph: any, targetId: string): string | null => {
+      if (graph.children) {
+        for (const child of graph.children) {
+          if (child.id === targetId) {
+            return graph.id;
+          }
+          const parentFromChild = findParent(child, targetId);
+          if (parentFromChild) {
+            return parentFromChild;
+          }
+        }
+      }
+      return null;
+    };
+    
+    return findParent(rawGraph, nodeId) || 'root';
+  }, [rawGraph]);
+
+  // Ghost drag implementation (based on reference example)
+  const startGhostDrag = useCallback((nodeId: string, ev: PointerEvent | MouseEvent | TouchEvent) => {
+    const nodeEl = document.querySelector(`.react-flow__node[data-id="${nodeId}"]`) as HTMLElement | null;
+    const wrapper = canvasWrapperRef.current;
+    if (!nodeEl || !wrapper) return;
+
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const nodeRect = nodeEl.getBoundingClientRect();
+    const pt = (ev as any).changedTouches ? (ev as TouchEvent).changedTouches[0] : (ev as PointerEvent | MouseEvent);
+    const offsetX = pt.clientX - nodeRect.left;
+    const offsetY = pt.clientY - nodeRect.top;
+
+    // Find current parent group
+    const currentNode = nodes.find(n => n.id === nodeId);
+    let fromGroupId: string | null = (currentNode as any)?.parentNode ?? null;
+    if (!fromGroupId) {
+      fromGroupId = getCurrentParentId(nodeId);
+    }
+
+    setGhost({
+      active: true,
+      nodeId,
+      label: (currentNode as any)?.data?.label ?? nodeId,
+      width: nodeRect.width,
+      height: nodeRect.height,
+      offsetX,
+      offsetY,
+      fromGroupId,
+      left: nodeRect.left - wrapperRect.left,
+      top: nodeRect.top - wrapperRect.top,
+    });
+
+    const onMove = (e: any) => {
+      const p = e.changedTouches ? e.changedTouches[0] : e;
+      const left = p.clientX - wrapperRect.left - offsetX;
+      const top = p.clientY - wrapperRect.top - offsetY;
+      setGhost((g) => g.active ? { ...g, left, top } : g);
+
+      // Group hover detection - find the most specific (smallest) group containing the cursor
+      const groupNodes = nodes.filter(n => n.type === 'group');
+      let hovering: string | null = null;
+      let smallestArea = Infinity;
+      
+      for (const g of groupNodes) {
+        const gel = document.querySelector(`.react-flow__node[data-id="${g.id}"]`) as HTMLElement | null;
+        if (!gel) continue;
+        const r = gel.getBoundingClientRect();
+        if (p.clientX >= r.left && p.clientX <= r.right && p.clientY >= r.top && p.clientY <= r.bottom) {
+          const area = r.width * r.height;
+          // Select the smallest group (most specific), but prefer non-root groups
+          if (g.id !== 'root' && area < smallestArea) {
+            smallestArea = area;
+            hovering = g.id;
+          } else if (hovering === null && g.id === 'root') {
+            // Only set root if no other group is found
+            hovering = g.id;
+          }
+        }
+      }
+      setDropHoverGroup(hovering);
+    };
+
+    const onUp = (e: any) => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('touchend', onUp);
+
+      setGhost({ active: false });
+
+      const p = e.changedTouches ? e.changedTouches[0] : e;
+      const groupNodes = nodes.filter(n => n.type === 'group');
+      let targetGroup: string | null = null;
+      let smallestArea = Infinity;
+      
+      for (const g of groupNodes) {
+        const gel = document.querySelector(`.react-flow__node[data-id="${g.id}"]`) as HTMLElement | null;
+        if (!gel) continue;
+        const r = gel.getBoundingClientRect();
+        if (p.clientX >= r.left && p.clientX <= r.right && p.clientY >= r.top && p.clientY <= r.bottom) {
+          const area = r.width * r.height;
+          // Select the smallest group (most specific), but prefer non-root groups
+          if (g.id !== 'root' && area < smallestArea) {
+            smallestArea = area;
+            targetGroup = g.id;
+          } else if (targetGroup === null && g.id === 'root') {
+            // Only set root if no other group is found
+            targetGroup = g.id;
+          }
+        }
+      }
+      
+      // If no group found at all, default to root
+      if (!targetGroup) {
+        targetGroup = 'root';
+      }
+
+                  if (targetGroup && targetGroup !== fromGroupId) {
+        console.log(`🔄 Moving node ${nodeId} from ${fromGroupId} to ${targetGroup}`);
+        try {
+          setIsUserOperation(true);
+          
+          // Just do exactly what the dev panel does - no animations
+          // Create a deep copy to ensure new object reference for React state updates
+          const graphCopy = JSON.parse(JSON.stringify(rawGraph));
+          const updatedGraph = moveNode(nodeId, targetGroup, graphCopy);
+          
+          console.group("[DragDrop] onGraphChange");
+          console.log("updatedGraph (domain graph)", updatedGraph);
+          console.log("Previous rawGraph had", rawGraph?.children?.length || 0, "children");
+          console.log("New graph has", updatedGraph?.children?.length || 0, "children");
+          console.groupEnd();
+          
+          handleGraphChange(updatedGraph);
+          console.log(`✅ Successfully moved node ${nodeId} to group ${targetGroup}`);
+          
+      } catch (error) {
+          console.error(`❌ Error moving node ${nodeId}:`, error);
+        } finally {
+          setTimeout(() => setIsUserOperation(false), 100);
+        }
+      }
+      setDropHoverGroup(null);
+    };
+
+    window.addEventListener('pointermove', onMove, { passive: true });
+    window.addEventListener('mousemove', onMove, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('pointerup', onUp, { once: true });
+    window.addEventListener('mouseup', onUp, { once: true });
+    window.addEventListener('touchend', onUp, { once: true });
+  }, [nodes, getCurrentParentId, rawGraph, handleGraphChange]);
 
   // Manual fit view function that can be called anytime (DISABLED)
   const manualFitView = useCallback(() => {
@@ -1824,21 +2047,63 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     };
   }, [selectedNodes, selectedEdges, rawGraph, handleGraphChange]);
   
-  // Create node types with handlers - memoized to prevent recreation
-  const memoizedNodeTypes = useMemo(() => {
-    const types = {
-    custom: (props: any) => (
-      <EnhancedCustomNode 
-        {...props} 
-        onLabelChange={handleLabelChange}
-        onGraphChange={handleGraphChange}
-        rawGraph={rawGraph}
-      />
-    ),
-    group: (props: any) => <GroupNode {...props} onAddNode={handleAddNodeToGroup} />,
-    };
-    return types;
-  }, [handleLabelChange, handleAddNodeToGroup, handleGraphChange, rawGraph]);
+  // Inject startGhostDrag into node data and create node types
+  const nodesWithGhostDrag = useMemo(() => {
+    return nodes.map(node => 
+      node.type === 'custom' 
+        ? { ...node, data: { ...node.data, startGhostDrag } }
+        : node.type === 'group'
+        ? { 
+            ...node, 
+            data: { 
+              ...node.data, 
+              dropHover: dropHoverGroup === node.id,
+              ghostActive: ghost.active,
+              currentDropHover: dropHoverGroup
+            } 
+          }
+        : node
+    );
+  }, [nodes, startGhostDrag, dropHoverGroup, ghost.active]);
+
+  // Create stable node types to avoid ReactFlow warnings
+  const createCustomNode = useCallback((props: any) => (
+    <EnhancedCustomNode 
+      {...props} 
+      onLabelChange={handleLabelChange}
+      onGraphChange={handleGraphChange}
+      rawGraph={rawGraph}
+    />
+  ), []);
+
+  const createGroupNode = useCallback((props: any) => {
+    // Get highlighting from props instead of closure
+    const isHighlighted = props.data?.dropHover;
+    const isGhostActive = props.data?.ghostActive;
+    const currentDropHover = props.data?.currentDropHover;
+    
+    return (
+      <div style={{
+        width: '100%',
+        height: '100%',
+        position: 'relative',
+        opacity: isGhostActive && currentDropHover && currentDropHover !== props.id ? 0.5 : 1,
+        backgroundColor: isHighlighted ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+        border: isHighlighted ? '2px solid #3B82F6' : 'none',
+        borderRadius: isHighlighted ? '8px' : '0px',
+        transition: 'all 0.2s ease',
+        boxSizing: 'border-box',
+        boxShadow: isHighlighted ? '0 0 0 4px rgba(59,130,246,0.15)' : 'none'
+      }}>
+        <GroupNode {...props} onAddNode={handleAddNodeToGroup} />
+      </div>
+    );
+  }, []);
+
+  const memoizedNodeTypes = useMemo(() => ({
+    custom: createCustomNode,
+    group: createGroupNode,
+  }), [createCustomNode, createGroupNode]);
   const memoizedEdgeTypes = useMemo(() => edgeTypes, []);
 
   // Enhanced drag-to-connect system with hover highlighting
@@ -1939,7 +2204,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
     if (!targetNode) {
       console.log('🚫 Dropped on canvas, no edge created');
-      setConnectingFrom(null);
+    setConnectingFrom(null);
       setHoveredNodeId(null);
       connectingFromRef.current = null;
       return;
@@ -3060,12 +3325,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         
         {/* ReactFlow container - only show when in ReactFlow mode */}
         {useReactFlow && (
-          <div className="absolute inset-0 h-full w-full z-0">
+          <div ref={canvasWrapperRef} className="absolute inset-0 h-full w-full z-0" style={{ position: 'relative' }}>
             <ReactFlow 
               ref={reactFlowRef}
-              nodes={nodes} 
+              nodes={nodesWithGhostDrag} 
               edges={edges}
-              onNodesChange={onNodesChange}
+              onNodesChange={handleNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               onConnectStart={handleConnectStart}
@@ -3096,7 +3361,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               panOnDrag
               selectionOnDrag
               elementsSelectable={true}
-              nodesDraggable={true}
+              nodesDraggable={false}
               nodesConnectable={true}
               selectNodesOnDrag={true}
               style={{ cursor: 'grab' }}
@@ -3133,6 +3398,53 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
               {/* <DebugGeometry /> */}
             </ReactFlow>
+
+            {/* Ghost visual for drag operations - clone the original node appearance */}
+            {ghost.active && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: ghost.left,
+                  top: ghost.top,
+                  width: ghost.width,
+                  height: ghost.height,
+                  opacity: 0.6,
+                  pointerEvents: 'none',
+                  zIndex: 10000,
+                  transform: 'scale(0.95)', // Slightly smaller to show it's a ghost
+                  filter: 'blur(0.5px)', // Slight blur for ghost effect
+                }}
+              >
+                {/* Clone the original node but make it semi-transparent */}
+                <div style={{
+                  width: '100%',
+                  height: '100%',
+                  border: '2px dashed #9CA3AF',
+                  borderRadius: '16px',
+                  background: 'rgba(255,255,255,0.8)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  overflow: 'hidden'
+                }}>
+                  {/* We'll render a simplified version of the node content */}
+                  <div style={{
+                    padding: '8px',
+                    fontSize: '12px', // Fixed size regardless of zoom
+                    fontWeight: '600',
+                    color: '#6B7280',
+                    textAlign: 'center',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    textOverflow: 'ellipsis',
+                    overflow: 'hidden',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {ghost.label}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
         

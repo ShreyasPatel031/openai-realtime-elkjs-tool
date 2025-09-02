@@ -34,8 +34,23 @@ const isDescendantOf = (root: ElkGraphNode, maybeDesc: ElkGraphNode): boolean =>
   collectNodeIds(root).has(maybeDesc.id);
 
 /** True if any edge id matches. */
-const edgeIdExists = (g: ElkGraphNode, eid: EdgeID): boolean =>
-  collectEdges(g).some(({ edgeArr }) => edgeArr.some(e => e.id === eid));
+const edgeIdExists = (g: ElkGraphNode, eid: EdgeID): boolean => {
+  const allEdges = collectEdges(g);
+  console.log(`🔍 [edgeIdExists] Checking for edge: ${eid}`);
+  console.log(`🔍 [edgeIdExists] Found ${allEdges.length} edge containers`);
+  
+  for (const { edgeArr, parent } of allEdges) {
+    console.log(`🔍 [edgeIdExists] Container ${parent.id} has ${edgeArr.length} edges:`, edgeArr.map(e => e.id));
+    const found = edgeArr.find(e => e.id === eid);
+    if (found) {
+      console.log(`❌ [edgeIdExists] FOUND DUPLICATE: ${eid} in container ${parent.id}`);
+      return true;
+    }
+  }
+  
+  console.log(`✅ [edgeIdExists] Edge ${eid} does not exist`);
+  return false;
+};
 
 /** Remove every edge whose *any* endpoint is found in `victimIds`. */
 const purgeEdgesReferencing = (root: ElkGraphNode, victimIds: Set<NodeID>): void => {

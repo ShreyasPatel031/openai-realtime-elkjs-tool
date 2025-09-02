@@ -58,7 +58,7 @@ export const DragDropEdgeHandler: React.FC<DragDropEdgeHandlerProps> = ({
               boxShadow: "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)",
               backdropFilter: "blur(10px)",
               cursor: "grab",
-              zIndex: 99999,
+              zIndex: "99999 !important",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -89,7 +89,7 @@ export const DragDropEdgeHandler: React.FC<DragDropEdgeHandlerProps> = ({
               fontWeight: "bold",
               textShadow: "0 1px 2px rgba(0,0,0,0.1)",
               pointerEvents: "none",
-              zIndex: 100000
+              zIndex: "100000 !important"
             }}
           >
             ➜
@@ -113,7 +113,7 @@ export const DragDropEdgeHandler: React.FC<DragDropEdgeHandlerProps> = ({
               boxShadow: "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)",
               backdropFilter: "blur(10px)",
               cursor: "grab",
-              zIndex: 99999,
+              zIndex: "99999 !important",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -144,7 +144,7 @@ export const DragDropEdgeHandler: React.FC<DragDropEdgeHandlerProps> = ({
               fontWeight: "bold",
               textShadow: "0 1px 2px rgba(0,0,0,0.1)",
               pointerEvents: "none",
-              zIndex: 100000
+              zIndex: "100000 !important"
             }}
           >
             ➜
@@ -168,7 +168,7 @@ export const DragDropEdgeHandler: React.FC<DragDropEdgeHandlerProps> = ({
               boxShadow: "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)",
               backdropFilter: "blur(10px)",
               cursor: "grab",
-              zIndex: 99999,
+              zIndex: "99999 !important",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -199,7 +199,7 @@ export const DragDropEdgeHandler: React.FC<DragDropEdgeHandlerProps> = ({
               fontWeight: "bold",
               textShadow: "0 1px 2px rgba(0,0,0,0.1)",
               pointerEvents: "none",
-              zIndex: 100000
+              zIndex: "100000 !important"
             }}
           >
             ➜
@@ -223,7 +223,7 @@ export const DragDropEdgeHandler: React.FC<DragDropEdgeHandlerProps> = ({
               boxShadow: "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)",
               backdropFilter: "blur(10px)",
               cursor: "grab",
-              zIndex: 99999,
+              zIndex: "99999 !important",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -254,7 +254,7 @@ export const DragDropEdgeHandler: React.FC<DragDropEdgeHandlerProps> = ({
               fontWeight: "bold",
               textShadow: "0 1px 2px rgba(0,0,0,0.1)",
               pointerEvents: "none",
-              zIndex: 100000
+              zIndex: "100000 !important"
             }}
           >
             ➜

@@ -139,9 +139,90 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   apiEndpoint,
   isPublicMode = false,
 }) => {
+  // Dev mode detection
+  const [isDevMode, setIsDevMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('devMode') === '1';
+    }
+    return false;
+  });
+
   // State for DevPanel visibility
   const [showDev, setShowDev] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  
+  // Load/clear default architecture when dev mode changes
+  useEffect(() => {
+    if (isDevMode) {
+      // Only load if canvas is empty
+      if (!rawGraph || !rawGraph.children || rawGraph.children.length === 0) {
+        console.log('🔧 Dev mode: Loading default architecture (no save)');
+        // Set the graph directly without triggering auto-save
+        setRawGraph(EXTERNAL_DEFAULT_ARCHITECTURE as RawGraph);
+      }
+    } else {
+      // When dev mode is disabled, clear the architecture if it's the default one
+      if (rawGraph && JSON.stringify(rawGraph) === JSON.stringify(EXTERNAL_DEFAULT_ARCHITECTURE)) {
+        console.log('🔧 Dev mode disabled: Clearing default architecture');
+        setRawGraph({ id: "root", children: [], edges: [] });
+        // Also reset the URL to remove any Firebase ID
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, [isDevMode]);
+
+  // Setup console helpers for dev mode and listen for storage changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Listen for storage changes (in case dev mode is toggled from another tab)
+      const handleStorageChange = (e: StorageEvent) => {
+        if (e.key === 'devMode') {
+          const newValue = e.newValue === '1';
+          console.log('🔧 Dev mode storage changed:', newValue);
+          setIsDevMode(newValue);
+        }
+      };
+      
+      window.addEventListener('storage', handleStorageChange);
+      
+      window.devMode = {
+        enable: () => {
+          localStorage.setItem('devMode', '1');
+          console.log('🔧 Dev mode enabled! Updating...');
+          setIsDevMode(true);
+        },
+        disable: () => {
+          localStorage.removeItem('devMode');
+          console.log('🔧 Dev mode disabled! Updating...');
+          setIsDevMode(false);
+        },
+        toggle: () => {
+          const current = localStorage.getItem('devMode') === '1';
+          if (current) {
+            window.devMode.disable();
+          } else {
+            window.devMode.enable();
+          }
+        },
+        status: () => {
+          const current = localStorage.getItem('devMode') === '1';
+          console.log(`🔧 Dev mode is currently: ${current ? 'ENABLED' : 'DISABLED'}`);
+          return current;
+        }
+      };
+      
+      // Also support ?dev=1 URL parameter for quick access
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('dev') === '1' && !localStorage.getItem('devMode')) {
+        console.log('🔧 URL parameter detected, enabling dev mode for this session');
+        setIsDevMode(true);
+      }
+      
+      return () => {
+        window.removeEventListener('storage', handleStorageChange);
+      };
+    }
+  }, []);
   // Architecture data from saved architectures
   const [savedArchitectures, setSavedArchitectures] = useState<any[]>(() => {
     // Start with "New Architecture" as first tab
@@ -2661,6 +2742,21 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
       {/* Save/Edit and Settings buttons - top-right */}
       <div className="absolute top-4 right-4 z-[100] flex gap-2">
+        {/* Settings Button - Only visible in dev mode */}
+        {isDevMode && (
+          <button
+            onClick={() => setShowDev(!showDev)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
+              showDev 
+                ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+            title="Toggle Developer Panel"
+          >
+            <Settings className="w-4 h-4" />
+            <span className="text-sm font-medium">Settings</span>
+          </button>
+        )}
         {/* Share Button - Always visible for all users */}
         <button
           onClick={handleShareCurrent}

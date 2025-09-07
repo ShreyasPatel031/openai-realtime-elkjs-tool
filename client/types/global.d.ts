@@ -3,6 +3,12 @@ declare global {
     __RUNTIME_CONFIG__?: {
       OPENAI_API_KEY?: string;
     };
+    devMode?: {
+      enable: () => void;
+      disable: () => void;
+      toggle: () => void;
+      status: () => boolean;
+    };
   }
 }
 

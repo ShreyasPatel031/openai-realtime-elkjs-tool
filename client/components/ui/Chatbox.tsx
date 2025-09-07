@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from "react"
+import React, { useState, useRef, useEffect, useCallback } from "react"
 import { Input } from "./input"
 import { Button } from "./button"
 import { Send, Loader2 } from "lucide-react"
@@ -11,6 +11,7 @@ import type { ChatBoxProps } from "../../types/chat"
 const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit, isDisabled = false, onProcessStart }) => {
   const [textInput, setTextInput] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
+  const [pastedImages, setPastedImages] = useState<string[]>([]) // Array of data URLs
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Example use cases
@@ -26,6 +27,39 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit, isDisabled = false, onProce
       // Prevent the page from scrolling down to the input on initial load
       inputRef.current.focus({ preventScroll: true });
     }
+  }, []);
+
+  // Handle paste events to detect images
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      
+      // Check if the item is an image
+      if (item.type.startsWith('image/')) {
+        e.preventDefault(); // Prevent default paste behavior for images
+        
+        const file = item.getAsFile();
+        if (!file) continue;
+
+        // Convert to base64 data URL
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const dataUrl = event.target?.result as string;
+          if (dataUrl) {
+            setPastedImages(prev => [...prev, dataUrl]);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  }, []);
+
+  // Remove an image from the pasted images list
+  const removeImage = useCallback((index: number) => {
+    setPastedImages(prev => prev.filter((_, i) => i !== index));
   }, []);
 
   const handleExampleClick = async (example: string) => {
@@ -85,10 +119,10 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit, isDisabled = false, onProce
           onProcessStart();
         }
         
-        // Store text input globally for reasoning agent
+        // Store text input and images globally for reasoning agent
         (window as any).originalChatTextInput = textInput.trim(); // Keep original for chat naming
         (window as any).chatTextInput = textInput.trim();
-        (window as any).selectedImages = [];
+        (window as any).selectedImages = pastedImages; // Store pasted images as data URLs
         
         console.log('🚀 Chatbox: Processing user input:', textInput.trim());
         console.log('🌍 Global state set:', {
@@ -101,8 +135,9 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit, isDisabled = false, onProce
         process_user_requirements();
         console.log('✅ Chatbox: process_user_requirements called');
         
-        // Clear the input after processing starts
+        // Clear the input and images after processing starts
         setTextInput("");
+        setPastedImages([]);
         
         // Optional: call onSubmit for any parent component compatibility
         if (onSubmit) {
@@ -143,6 +178,34 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit, isDisabled = false, onProce
         ))}
       </div>
 
+      {/* Image previews */}
+      {pastedImages.length > 0 && (
+        <div className="w-full mb-3">
+          <div className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <span className="text-sm text-gray-600 w-full mb-2">
+              📸 {pastedImages.length} image{pastedImages.length > 1 ? 's' : ''} attached:
+            </span>
+            {pastedImages.map((dataUrl, index) => (
+              <div key={index} className="relative group">
+                <img
+                  src={dataUrl}
+                  alt={`Pasted image ${index + 1}`}
+                  className="w-16 h-16 object-cover rounded border border-gray-300"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeImage(index)}
+                  className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                  title="Remove image"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="w-full">
         <div className="flex items-center gap-3 bg-white rounded-xl border border-gray-200 shadow-sm p-3 hover:shadow-md transition-shadow">
           {/* Input field */}
@@ -151,6 +214,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ onSubmit, isDisabled = false, onProce
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
             onKeyPress={handleKeyPress}
+            onPaste={handlePaste}
             placeholder="Describe your architecture requirements"
             disabled={isProcessing || isDisabled}
             className="flex-grow border-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-base placeholder:text-gray-400"

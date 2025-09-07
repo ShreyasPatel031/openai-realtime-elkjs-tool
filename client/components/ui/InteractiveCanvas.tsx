@@ -3128,8 +3128,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           </div>
         )}
         
-        {/* Comprehensive Dev Panel - Contains all developer tools - Hidden in public mode */}
-        {showDev && !isPublicMode && (
+        {/* Comprehensive Dev Panel - Contains all developer tools */}
+        {showDev && (
           <div className="absolute top-16 right-4 z-50 w-80 max-h-[calc(100vh-80px)]">
             <div className="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden h-full flex flex-col">
               {/* Panel Header */}
@@ -3152,7 +3152,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 <button
                   onClick={() => {
                     console.log('Loading default architecture...');
-                    setRawGraph(DEFAULT_ARCHITECTURE);
+                    setRawGraph(EXTERNAL_DEFAULT_ARCHITECTURE as RawGraph);
                   }}
                   className="w-full px-3 py-2 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700 transition-colors"
                 >

@@ -75,20 +75,35 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
         const fullIconUrl = buildAssetUrl(iconPath, apiEndpoint);
 
         try {
-          const img = new Image();
-          await new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = reject;
-            img.src = fullIconUrl;
-          });
+          // First check if the URL returns actual image content
+          const response = await fetch(fullIconUrl);
+          const contentType = response.headers.get('content-type') || '';
+          
+          // If we get HTML instead of an image, it means the icon doesn't exist
+          if (contentType.includes('text/html')) {
+            throw new Error(`Icon returned HTML instead of image: ${iconName}`);
+          }
+          
+          // If content type looks like an image, try to load it
+          if (contentType.includes('image/') || response.ok) {
+            const img = new Image();
+            await new Promise((resolve, reject) => {
+              img.onload = resolve;
+              img.onerror = reject;
+              img.src = fullIconUrl;
+            });
 
-          // Cache the successfully loaded icon
-          iconCacheService.cacheIcon(iconName, fullIconUrl);
-          console.log(`✅ Cached icon: ${iconName}`);
-          return fullIconUrl;
+            // Cache the successfully loaded icon
+            iconCacheService.cacheIcon(iconName, fullIconUrl);
+            console.log(`✅ Cached icon: ${iconName}`);
+            return fullIconUrl;
+          }
         } catch (error) {
+          console.log(`❌ Icon not found in database: ${iconName} (${error instanceof Error ? error.message : 'Unknown error'})`);
           // Fall through to legacy paths
         }
+      } else {
+        console.log(`❌ Icon not in database: ${iconName} (${provider})`);
       }
     }
     
@@ -106,6 +121,14 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
       const fullUrl = buildAssetUrl(legacyPath, apiEndpoint);
       
       try {
+        // Check content type for legacy paths too
+        const response = await fetch(fullUrl);
+        const contentType = response.headers.get('content-type') || '';
+        
+        if (contentType.includes('text/html')) {
+          continue; // Skip HTML responses
+        }
+        
         const img = new Image();
         await new Promise((resolve, reject) => {
           img.onload = resolve;

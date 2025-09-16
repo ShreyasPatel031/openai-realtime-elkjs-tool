@@ -7,6 +7,7 @@ import { getGroupIconHex, allGroupIcons } from '../generated/groupIconColors';
 import { cn } from '../lib/utils';
 import { iconLists } from '../generated/iconLists';
 import { iconFallbackService } from '../utils/iconFallbackService';
+import { iconCacheService } from '../utils/iconCacheService';
 import { useApiEndpoint, buildAssetUrl } from '../contexts/ApiEndpointContext';
 
 interface GroupNodeProps {
@@ -53,6 +54,14 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
 
   // Function to try loading an icon (same as CustomNode)
   const tryLoadIcon = async (iconName: string) => {
+    // Check cache first
+    const cachedUrl = iconCacheService.getCachedIcon(iconName);
+    if (cachedUrl) {
+      return cachedUrl;
+    }
+
+    console.log(`🔄 Loading icon: ${iconName}`);
+    
     // Check if icon has provider prefix (e.g., 'gcp_cloud_monitoring')
     const prefixMatch = iconName.match(/^(aws|gcp|azure)_(.+)$/);
 
@@ -73,6 +82,9 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
             img.src = fullIconUrl;
           });
 
+          // Cache the successfully loaded icon
+          iconCacheService.cacheIcon(iconName, fullIconUrl);
+          console.log(`✅ Cached icon: ${iconName}`);
           return fullIconUrl;
         } catch (error) {
           // Fall through to legacy paths
@@ -101,6 +113,9 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
           img.src = fullUrl;
         });
         
+        // Cache the successfully loaded icon
+        iconCacheService.cacheIcon(iconName, fullUrl);
+        console.log(`✅ Cached legacy icon: ${iconName}`);
         return fullUrl;
       } catch (error) {
         // Continue to next path
@@ -126,33 +141,30 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
           setFallbackAttempted(false);
         })
         .catch(() => {
-          // Show letter fallback immediately, then try AI search asynchronously
           setIconError(true);
           
-          // Delay AI search to avoid flooding the API
-          setTimeout(() => {
-            if (!fallbackAttempted) {
-              setFallbackAttempted(true);
-              
-              iconFallbackService.findFallbackIcon(data.icon)
-                .then(async (fallbackIcon) => {
-                  if (fallbackIcon) {
-                    try {
-                      const fallbackPath = await tryLoadIcon(fallbackIcon);
-                      setFinalIconSrc(fallbackPath);
-                      setIconLoaded(true);
-                      setIconError(false);
-                      return;
-                    } catch (fallbackLoadError) {
-                      // Keep letter fallback
-                    }
+          // Immediate fallback attempt (removed delay)
+          if (!fallbackAttempted) {
+            setFallbackAttempted(true);
+            
+            iconFallbackService.findFallbackIcon(data.icon)
+              .then(async (fallbackIcon) => {
+                if (fallbackIcon) {
+                  try {
+                    const fallbackPath = await tryLoadIcon(fallbackIcon);
+                    setFinalIconSrc(fallbackPath);
+                    setIconLoaded(true);
+                    setIconError(false);
+                    return;
+                  } catch (fallbackLoadError) {
+                    // Keep letter fallback
                   }
-                })
-                .catch((searchError) => {
-                  // Keep letter fallback on error
-                });
-            }
-          }, Math.random() * 3000 + 1000); // Random delay 1-4 seconds
+                }
+              })
+              .catch((searchError) => {
+                // Keep letter fallback on error
+              });
+          }
         });
     } else {
       // No icon specified - show letter fallback immediately, then try AI search asynchronously
@@ -163,8 +175,9 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
         return;
       }
       
-      // Delay AI search to avoid flooding the API
-      setTimeout(() => {
+      // Immediate fallback attempt (removed delay)  
+      if (!fallbackAttempted) {
+        setFallbackAttempted(true);
         iconFallbackService.findFallbackIcon(`gcp_${id}`)
           .then(async (fallbackIcon) => {
             if (fallbackIcon) {
@@ -182,7 +195,7 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
           .catch((searchError) => {
             // Keep letter fallback on error
           });
-      }, Math.random() * 3000 + 1000); // Random delay 1-4 seconds
+      }
     }
   }, [data.icon, id]);
 

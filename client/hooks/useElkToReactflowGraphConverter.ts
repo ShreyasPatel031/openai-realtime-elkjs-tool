@@ -54,6 +54,9 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
   /* 2) layouted‐graph state */
   const [layoutGraph, setLayoutGraph] = useState<LayoutGraph|null>(null);
   
+  /* 3) layout error state */
+  const [layoutError, setLayoutError] = useState<string | null>(null);
+  
   /* refs that NEVER cause re-render */
   const hashRef = useRef<string>(structuralHash(initialRaw));
   const abortRef = useRef<AbortController | null>(null);
@@ -135,6 +138,9 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
     
     (async () => {
       try {
+        // Clear any previous layout errors
+        setLayoutError(null);
+        
         // 1) inject IDs + elkOptions onto a clone of rawGraph
         const prepared = ensureIds(structuredClone(rawGraph));
         
@@ -161,8 +167,11 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
         setEdges(rfEdges);
         incLayoutVersion(v => v + 1);
       } catch (e: any) {
-        if (e.name !== "AbortError")
+        if (e.name !== "AbortError") {
           console.error("[ELK] layout failed", e);
+          // Set the error state so it can be accessed by components
+          setLayoutError(e.message || e.toString());
+        }
       }
     })();
     
@@ -188,7 +197,7 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
   /* 🔹 7. public API                                   */
   /* -------------------------------------------------- */
   return {
-    rawGraph, layoutGraph, nodes, edges, layoutVersion,
+    rawGraph, layoutGraph, layoutError, nodes, edges, layoutVersion,
     setRawGraph, setNodes, setEdges,
     ...handlers,
     onNodesChange, onEdgesChange, onConnect,

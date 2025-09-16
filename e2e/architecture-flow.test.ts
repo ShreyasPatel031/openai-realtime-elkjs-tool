@@ -10,8 +10,8 @@ test.describe('Architecture Generation Flow', () => {
       }
     });
     
-    // Navigate to the app (server runs on 3004 when 3000 is busy)
-    await page.goto('http://localhost:3004');
+    // Navigate to the app (try port 3000 first)
+    await page.goto('http://localhost:3000');
     
     // Wait for the app to load
     await page.waitForLoadState('networkidle');

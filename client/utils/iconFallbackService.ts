@@ -83,46 +83,93 @@ class IconFallbackService {
     }
 
     try {
+      console.log(`🔍 IconFallback: Searching fallback for "${missingIconName}"`);
+      
+      // Handle both prefixed (gcp_compute) and non-prefixed (server) icon names
+      let provider: string;
+      let searchTerm: string;
+      
       const prefixMatch = missingIconName.match(/^(aws|gcp|azure)_(.+)$/);
-      if (!prefixMatch) {
-        return null;
-      }
-
-      const [, provider, searchTerm] = prefixMatch;
-      const providerIcons = iconLists[provider as keyof typeof iconLists];
-      if (!providerIcons) {
-        return null;
-      }
-
-      const availableIcons = Object.values(providerIcons).flat();
-      if (availableIcons.length === 0) {
-        return null;
+      if (prefixMatch) {
+        [, provider, searchTerm] = prefixMatch;
+        console.log(`🔍 IconFallback: Prefixed name detected - provider: ${provider}, term: ${searchTerm}`);
+      } else {
+        // For non-prefixed names, search across all providers to find the best semantic match
+        provider = 'gcp'; // Default to GCP for result formatting, but we'll search all
+        searchTerm = missingIconName;
+        console.log(`🔍 IconFallback: Non-prefixed name detected - will search all providers for: ${searchTerm}`);
       }
 
       // Get embedding for search term (only 1 API call)
       const searchEmbedding = await this.getEmbedding(searchTerm.replace(/_/g, ' '));
       if (!searchEmbedding) {
+        console.log(`❌ IconFallback: Could not get embedding for "${searchTerm}"`);
         return null;
       }
 
-      // Compare against precomputed icon embeddings (no API calls)
-      let bestMatch: { icon: string; similarity: number } | null = null;
+      // For non-prefixed names, prioritize general icons first, then cloud provider icons
+      let globalBestMatch: { icon: string; similarity: number; provider: string } | null = null;
+      let searchProviders: string[] = [];
+      
+      if (prefixMatch) {
+        // Prefixed names: search only the specified provider
+        searchProviders = [provider];
+      } else {
+        // Non-prefixed names: first search general icons using embeddings, then cloud providers
+        console.log(`🔍 IconFallback: Searching general icons first for "${searchTerm}"`);
+        
+        // Search through all embeddings to find general icons (no provider prefix)
+        for (const [iconName, iconEmbedding] of Object.entries(this.precomputedData.embeddings)) {
+          // General icons don't have provider prefixes (aws_, gcp_, azure_)
+          if (!iconName.match(/^(aws|gcp|azure)_/)) {
+            const similarity = this.cosineSimilarity(searchEmbedding, iconEmbedding);
+            if (!globalBestMatch || similarity > globalBestMatch.similarity) {
+              globalBestMatch = { icon: iconName, similarity, provider: 'general' };
+            }
+          }
+        }
+        
+        // Always search cloud providers to find the absolute best match across all icons
+        console.log(`🔍 IconFallback: Found general icon match: "${searchTerm}" → "${globalBestMatch?.icon || 'none'}" (similarity: ${globalBestMatch?.similarity.toFixed(3) || 'none'}), also searching cloud providers for better match...`);
+        searchProviders = ['gcp', 'aws', 'azure'];
+      }
 
-      for (const icon of availableIcons) {
-        const iconEmbedding = this.precomputedData.embeddings[icon];
-        if (iconEmbedding) {
-          const similarity = this.cosineSimilarity(searchEmbedding, iconEmbedding);
-          if (!bestMatch || similarity > bestMatch.similarity) {
-            bestMatch = { icon, similarity };
+      // Search cloud provider icons to find absolute best match across all providers
+      if (searchProviders.length > 0) {
+        for (const currentProvider of searchProviders) {
+          const providerIcons = iconLists[currentProvider as keyof typeof iconLists];
+          if (!providerIcons) {
+            continue;
+          }
+
+          const availableIcons = Object.values(providerIcons).flat();
+          if (availableIcons.length === 0) {
+            continue;
+          }
+
+          // Compare against precomputed icon embeddings (no API calls)
+          for (const icon of availableIcons) {
+            const iconEmbedding = this.precomputedData.embeddings[icon];
+            if (iconEmbedding) {
+              const similarity = this.cosineSimilarity(searchEmbedding, iconEmbedding);
+              if (!globalBestMatch || similarity > globalBestMatch.similarity) {
+                globalBestMatch = { icon, similarity, provider: currentProvider };
+              }
+            }
           }
         }
       }
 
-      if (bestMatch) {
-        const fallbackIcon = `${provider}_${bestMatch.icon}`;
+      if (globalBestMatch) { // Always use best match, no matter how low similarity
+        // For general icons, don't add provider prefix
+        const fallbackIcon = globalBestMatch.provider === 'general' 
+          ? globalBestMatch.icon 
+          : `${globalBestMatch.provider}_${globalBestMatch.icon}`;
+        console.log(`✅ IconFallback: Found best fallback "${missingIconName}" → "${fallbackIcon}" (similarity: ${globalBestMatch.similarity.toFixed(3)})`);
         this.fallbackCache[missingIconName] = fallbackIcon;
         return fallbackIcon;
       } else {
+        console.log(`❌ IconFallback: No icons found in database for "${missingIconName}"`);
         return null;
       }
 

@@ -234,6 +234,7 @@ ${referenceArchitecture}`
     console.log(`🔧 AGENT: Found ${functionCalls.length} function calls to execute`);
     
     if (functionCalls.length === 0) {
+      // Natural completion - agent has no more work to do
       console.log('✅ AGENT: Natural completion - no more function calls needed');
       return res.status(200).json({ 
         success: true,

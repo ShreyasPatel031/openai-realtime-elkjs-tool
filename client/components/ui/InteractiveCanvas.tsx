@@ -15,12 +15,12 @@ import { cn } from "../../lib/utils"
 // Import types from separate type definition files
 import { InteractiveCanvasProps } from "../../types/chat"
 import { RawGraph } from "../graph/types/index"
-import { deleteNode, deleteEdge } from "../graph/mutations"
-import { batchUpdate } from "../graph/mutations"
+import { deleteNode, deleteEdge, addNode, addEdge, groupNodes, batchUpdate } from "../graph/mutations"
 import { CANVAS_STYLES, getEdgeStyle, getEdgeZIndex } from "../graph/styles/canvasStyles"
 import { useElkToReactflowGraphConverter } from "../../hooks/useElkToReactflowGraphConverter"
 import { useChatSession } from '../../hooks/useChatSession'
 import { elkGraphDescription, agentInstruction } from '../../realtime/agentConfig'
+import { addFunctionCallingMessage, updateStreamingMessage } from '../../utils/chatUtils'
 
 // Import extracted components
 import CustomNodeComponent from "../CustomNode"
@@ -34,16 +34,19 @@ import { ApiEndpointProvider } from '../../contexts/ApiEndpointContext'
 import ProcessingStatusIcon from "../ProcessingStatusIcon"
 import { auth } from "../../lib/firebase"
 import { onAuthStateChanged, User } from "firebase/auth"
-import { Settings, PanelRightOpen, PanelRightClose, Save, Edit } from "lucide-react"
+import { Timestamp } from "firebase/firestore"
+import { Settings, PanelRightOpen, PanelRightClose, Save, Edit, Share } from "lucide-react"
 import { DEFAULT_ARCHITECTURE as EXTERNAL_DEFAULT_ARCHITECTURE } from "../../data/defaultArchitecture"
-import { SAVED_ARCHITECTURES } from "../../data/savedArchitectures"
+// Removed mock architectures import - only using real user architectures now
 import SaveAuth from "../auth/SaveAuth"
 import ArchitectureService from "../../services/architectureService"
+import { anonymousArchitectureService } from "../../services/anonymousArchitectureService"
+import { SharingService } from "../../services/sharingService"
+import { architectureSearchService } from "../../utils/architectureSearchService"
 import ArchitectureSidebar from "./ArchitectureSidebar"
 import { onElkGraph, dispatchElkGraph } from "../../events/graphEvents"
 import { assertRawGraph } from "../../events/graphSchema"
 import { generateChatName } from "../../utils/chatUtils"
-import { splitTextIntoLines } from "../../utils/textMeasurement"
 // import toast, { Toaster } from 'react-hot-toast' // Removed toaster
 
 // Relaxed typing to avoid prop mismatch across layers
@@ -135,20 +138,14 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   sendClientEvent = () => {},
   events = [],
   apiEndpoint,
+  isPublicMode = false,
 }) => {
   // State for DevPanel visibility
   const [showDev, setShowDev] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   // Architecture data from saved architectures
   const [savedArchitectures, setSavedArchitectures] = useState<any[]>(() => {
-    // Start with default architecture as the first tab, then "New Architecture"
-    const defaultArchTab = {
-      id: 'default',
-      name: 'Default GCP Architecture',
-      timestamp: new Date(),
-      rawGraph: DEFAULT_ARCHITECTURE,
-      isDefault: true
-    };
+    // Start with "New Architecture" as first tab
     const newArchTab = {
       id: 'new-architecture',
       name: 'New Architecture',
@@ -156,10 +153,13 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       rawGraph: { id: "root", children: [], edges: [] },
       isNew: true
     };
-    const mockArchs = Object.values(SAVED_ARCHITECTURES).filter(arch => arch.id !== 'default').sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
-    return [defaultArchTab, newArchTab, ...mockArchs];
+    // Only show the "New Architecture" tab initially - no mock architectures
+    return [newArchTab];
   });
-  const [selectedArchitectureId, setSelectedArchitectureId] = useState<string>('default');
+  const [selectedArchitectureId, setSelectedArchitectureId] = useState<string>('new-architecture');
+  
+  // Pending architecture selection (for handling async state updates)
+  const [pendingArchitectureSelection, setPendingArchitectureSelection] = useState<string | null>(null);
   
   // State to lock agent operations to specific architecture during sessions
   const [agentLockedArchitectureId, setAgentLockedArchitectureId] = useState<string | null>(null);
@@ -169,16 +169,32 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     // If agent is locked to an architecture, use that; otherwise use selected
     const targetArchitectureId = agentLockedArchitectureId || selectedArchitectureId;
     (window as any).currentArchitectureId = targetArchitectureId;
-    console.log('🎯 Agent targeting architecture:', targetArchitectureId, agentLockedArchitectureId ? '(LOCKED)' : '(following selection)');
   }, [selectedArchitectureId, agentLockedArchitectureId]);
   
   // State for auth flow
   const [user, setUser] = useState<User | null>(null);
+  const [isLoadingArchitectures, setIsLoadingArchitectures] = useState(false);
 
   // Enhanced Firebase sync with cleanup
   const syncWithFirebase = useCallback(async (userId: string) => {
+    // Don't load architectures in public mode
+    if (isPublicMode) {
+      console.log('🔒 Public mode - skipping Firebase sync');
+      return;
+    }
+    
+    let timeoutId: NodeJS.Timeout;
+    
     try {
       console.log('🔄 Syncing with Firebase for user:', userId);
+      console.log('🔄 Setting loading state to true');
+      setIsLoadingArchitectures(true);
+      
+      // Add timeout to prevent infinite loading
+      timeoutId = setTimeout(() => {
+        console.warn('⚠️ Firebase sync timeout - forcing loading state to false');
+        setIsLoadingArchitectures(false);
+      }, 10000); // 10 second timeout
       
       // First, cleanup any invalid architectures
       await ArchitectureService.cleanupInvalidArchitectures(userId);
@@ -284,14 +300,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           };
         });
         
-        // Keep "Default Architecture" first, then "New Architecture", then Firebase data
-        const defaultArchTab = {
-          id: 'default',
-          name: 'Default GCP Architecture',
-          timestamp: new Date(),
-          rawGraph: DEFAULT_ARCHITECTURE,
-          isDefault: true
-        };
+        // Keep "New Architecture" at top, add Firebase data after
         const newArchTab = {
           id: 'new-architecture',
           name: 'New Architecture',
@@ -300,20 +309,71 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           isNew: true
         };
         
-        // Only keep mock architectures that aren't duplicated in Firebase
-        const mockArchs = Object.values(SAVED_ARCHITECTURES).filter(mockArch => 
-          !validArchs.some(fbArch => fbArch.name === mockArch.name) && mockArch.id !== 'default'
-        );
-        
-        // Sort Firebase and mock architectures by createdAt (newest first)
+        // No mock architectures - only real user architectures from Firebase
         const sortedValidArchs = validArchs.sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
-        const sortedMockArchs = mockArchs.sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
         
-        const allArchs = [defaultArchTab, newArchTab, ...sortedValidArchs, ...sortedMockArchs];
+        // Check for priority architecture (transferred from anonymous session)
+        const priorityArchId = localStorage.getItem('priority_architecture_id');
+        let finalValidArchs = sortedValidArchs;
+        let foundPriorityArch = null; // Track if we found and processed the priority architecture
+        
+        if (priorityArchId) {
+          console.log('📌 Checking for priority architecture:', priorityArchId);
+          console.log('📌 DEBUG: Available Firebase architectures:', sortedValidArchs.map(arch => ({id: arch.id, name: arch.name})));
+          const priorityArchIndex = sortedValidArchs.findIndex(arch => arch.id === priorityArchId);
+          
+          if (priorityArchIndex >= 0) {
+            console.log('✅ Found priority architecture, moving to top');
+            const priorityArch = sortedValidArchs[priorityArchIndex];
+            console.log('✅ DEBUG: Priority architecture details:', {id: priorityArch.id, name: priorityArch.name});
+            finalValidArchs = [
+              priorityArch,
+              ...sortedValidArchs.filter(arch => arch.id !== priorityArchId)
+            ];
+            
+            foundPriorityArch = priorityArch;
+            // Clear the priority flag after using it
+            localStorage.removeItem('priority_architecture_id');
+            console.log('🧹 Cleared priority architecture flag');
+          } else {
+            console.log('⚠️ Priority architecture not found in initial results, fetching directly...');
+            console.log('⚠️ DEBUG: Looking for ID:', priorityArchId, 'in:', sortedValidArchs.map(arch => arch.id));
+            
+            // Try to fetch the priority architecture directly (with small delay for Firebase consistency)
+            try {
+              // Small delay to handle potential Firebase consistency issues
+              await new Promise(resolve => setTimeout(resolve, 500));
+              
+              const priorityArch = await ArchitectureService.getArchitectureById(priorityArchId);
+              if (priorityArch) {
+                console.log('✅ Found priority architecture via direct fetch:', priorityArch.name);
+                finalValidArchs = [
+                  priorityArch,
+                  ...sortedValidArchs
+                ];
+                
+                foundPriorityArch = priorityArch;
+                // Clear the priority flag after using it
+                localStorage.removeItem('priority_architecture_id');
+                console.log('🧹 Cleared priority architecture flag');
+              } else {
+                console.log('❌ Priority architecture not found even with direct fetch');
+                // Keep the priority flag for potential retry
+                console.log('🔄 Keeping priority flag for potential retry');
+              }
+            } catch (error) {
+              console.error('❌ Error fetching priority architecture:', error);
+              // Keep the priority flag for potential retry
+              console.log('🔄 Keeping priority flag for potential retry');
+            }
+          }
+        }
+        
+        const allArchs = [newArchTab, ...finalValidArchs];
         setSavedArchitectures(allArchs);
         
         console.log(`✅ Loaded ${validArchs.length} valid architectures from Firebase`);
-        console.log(`📊 Total architectures: ${allArchs.length} (${validArchs.length} Firebase + ${mockArchs.length} mock)`);
+        console.log(`📊 Total architectures: ${allArchs.length} (${validArchs.length} Firebase + 0 mock)`);
         
         // DEBUG: Log current tab order and timestamps (with error protection)
         console.log('🔍 Current tab order:', allArchs.map((arch, index) => {
@@ -339,38 +399,65 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           return `${index + 1}. ${arch.name} (${arch.id}) - createdAt: ${createdAtStr}, timestamp: ${timestampStr}`;
         }));
         
-        // If current selection is invalid, reset to "Default Architecture"
+        // If current selection is invalid, reset to "New Architecture"
         if (selectedArchitectureId && !allArchs.some(arch => arch.id === selectedArchitectureId)) {
-          console.warn(`⚠️ Selected architecture ${selectedArchitectureId} not found, resetting to Default Architecture`);
-          setSelectedArchitectureId('default');
+          console.warn(`⚠️ Selected architecture ${selectedArchitectureId} not found, resetting to New Architecture`);
+          setSelectedArchitectureId('new-architecture');
+        }
+        
+        // Check if we should auto-select a priority architecture or stay on New Architecture
+        if (foundPriorityArch) {
+          console.log('✅ User signed in - will auto-select transferred architecture after state update:', foundPriorityArch.id, foundPriorityArch.name);
+          // Set a flag to select this architecture after the state updates
+          setPendingArchitectureSelection(foundPriorityArch.id);
+        } else {
+          console.log('✅ User signed in - staying on New Architecture tab for fresh start');
+          
+          // FORCE selection to "New Architecture" to ensure no auto-selection happens
+          if (selectedArchitectureId !== 'new-architecture') {
+            console.log('🔄 Forcing selection back to New Architecture tab after sign-in');
+            setSelectedArchitectureId('new-architecture');
+          }
         }
       }
     } catch (error) {
       console.error('❌ Failed to sync with Firebase:', error);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      console.log('🔄 Setting loading state to false');
+      setIsLoadingArchitectures(false);
     }
-  }, [selectedArchitectureId]);
+  }, [selectedArchitectureId, isPublicMode]);
 
   // Track when we just created an architecture to prevent immediate re-sync
   const [justCreatedArchId, setJustCreatedArchId] = useState<string | null>(null);
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [hasInitialSync, setHasInitialSync] = useState(false);
 
-  // Sync Firebase architectures when user changes
+  // Sync Firebase architectures ONLY when user changes (not when tabs change)
   useEffect(() => {
-    if (user?.uid) {
+    if (user?.uid && !hasInitialSync) {
       // Don't sync immediately after creating an architecture
       if (!justCreatedArchId) {
+        // Clear any existing timeout
+        if (syncTimeoutRef.current) {
+          clearTimeout(syncTimeoutRef.current);
+        }
+        
+        // Only sync once when user signs in
+        console.log('🚀 Initial sync for user:', user.uid);
         syncWithFirebase(user.uid);
+        setHasInitialSync(true);
       } else {
         console.log('🚫 Skipping Firebase sync - just created architecture:', justCreatedArchId);
       }
-    } else {
-      // User signed out - reset to clean state with default architecture first
-      const defaultArchTab = {
-        id: 'default',
-        name: 'Default GCP Architecture',
-        timestamp: new Date(),
-        rawGraph: DEFAULT_ARCHITECTURE,
-        isDefault: true
-      };
+    } else if (!user?.uid) {
+      // Reset sync flag when user signs out
+      setHasInitialSync(false);
+      
+      // User signed out - reset to clean state
       const newArchTab = {
         id: 'new-architecture',
         name: 'New Architecture',
@@ -378,11 +465,56 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         rawGraph: { id: "root", children: [], edges: [] },
         isNew: true
       };
-      const mockArchs = Object.values(SAVED_ARCHITECTURES).filter(arch => arch.id !== 'default').sort((a, b) => (b.createdAt || b.timestamp).getTime() - (a.createdAt || a.timestamp).getTime());
-      setSavedArchitectures([defaultArchTab, newArchTab, ...mockArchs]);
-      setSelectedArchitectureId('default'); // Select default architecture instead of new-architecture
+      
+      // In public mode, only show "New Architecture"
+      if (isPublicMode) {
+        setSavedArchitectures([newArchTab]);
+      } else if (isLoadingArchitectures) {
+        // When loading, show only "New Architecture" but don't override if we already have architectures
+        console.log('🔄 User signed out but still loading - showing only New Architecture');
+        setSavedArchitectures([newArchTab]);
+      } else {
+        // Only show New Architecture when signed out (no mock architectures)
+        setSavedArchitectures([newArchTab]);
+      }
+      setSelectedArchitectureId('new-architecture');
     }
-  }, [user, syncWithFirebase, justCreatedArchId]);
+    
+    // Cleanup timeout on unmount
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, [user, justCreatedArchId, isPublicMode, hasInitialSync]);
+
+  // Handle pending architecture selection after savedArchitectures state is updated
+  useEffect(() => {
+    if (pendingArchitectureSelection && savedArchitectures.length > 0) {
+      const targetArch = savedArchitectures.find(arch => arch.id === pendingArchitectureSelection);
+      if (targetArch) {
+        console.log('🎯 Executing pending architecture selection:', pendingArchitectureSelection, targetArch.name);
+        console.log('🎯 Target architecture data:', {id: targetArch.id, name: targetArch.name, hasRawGraph: !!targetArch.rawGraph});
+        
+        // Use handleSelectArchitecture to properly load the architecture with full functionality
+        handleSelectArchitecture(pendingArchitectureSelection);
+        
+        setPendingArchitectureSelection(null); // Clear the pending selection
+      } else {
+        console.warn('⚠️ Pending architecture not found in savedArchitectures:', pendingArchitectureSelection);
+        console.warn('⚠️ Available architectures:', savedArchitectures.map(arch => ({id: arch.id, name: arch.name})));
+      }
+    }
+  }, [savedArchitectures, pendingArchitectureSelection]);
+
+  // Function to manually refresh architectures (only when actually needed)
+  const refreshArchitectures = useCallback(() => {
+    if (user?.uid && hasInitialSync) {
+      console.log('🔄 Manual refresh of architectures requested');
+      syncWithFirebase(user.uid);
+    }
+  }, [user, hasInitialSync, syncWithFirebase]);
+
   
   // State for StreamViewer visibility
   // const [showStreamViewer, setShowStreamViewer] = useState(false);
@@ -393,8 +525,80 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // State for manual save
   const [isSaving, setIsSaving] = useState(false);
   
+  // State for share overlay (for embedded version when clipboard fails)
+  const [shareOverlay, setShareOverlay] = useState<{ show: boolean; url: string; error?: string; copied?: boolean }>({ show: false, url: '' });
+  const [copyButtonState, setCopyButtonState] = useState<'idle' | 'copying' | 'success'>('idle');
+  const [inputOverlay, setInputOverlay] = useState<{ 
+    show: boolean; 
+    title: string; 
+    placeholder: string; 
+    defaultValue: string; 
+    onConfirm: (value: string) => void; 
+    onCancel: () => void; 
+  }>({ 
+    show: false, 
+    title: '', 
+    placeholder: '', 
+    defaultValue: '', 
+    onConfirm: () => {}, 
+    onCancel: () => {} 
+  });
+  const [deleteOverlay, setDeleteOverlay] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+  }>({
+    show: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    onCancel: () => {}
+  });
+  
+  // Universal notification system (replaces all alert/confirm popups)
+  const [notification, setNotification] = useState<{
+    show: boolean;
+    type: 'success' | 'error' | 'info' | 'confirm';
+    title: string;
+    message: string;
+    onConfirm?: () => void;
+    onCancel?: () => void;
+    confirmText?: string;
+    cancelText?: string;
+  }>({ show: false, type: 'info', title: '', message: '' });
+  
   // State for tracking operations per architecture
   const [architectureOperations, setArchitectureOperations] = useState<Record<string, boolean>>({});
+  
+  // Helper function to show notifications (replaces alerts)
+  const showNotification = useCallback((
+    type: 'success' | 'error' | 'info' | 'confirm',
+    title: string,
+    message: string,
+    options?: {
+      onConfirm?: () => void;
+      onCancel?: () => void;
+      confirmText?: string;
+      cancelText?: string;
+    }
+  ) => {
+    setNotification({
+      show: true,
+      type,
+      title,
+      message,
+      onConfirm: options?.onConfirm,
+      onCancel: options?.onCancel,
+      confirmText: options?.confirmText || 'OK',
+      cancelText: options?.cancelText || 'Cancel'
+    });
+  }, []);
+
+  const hideNotification = useCallback(() => {
+    setNotification({ show: false, type: 'info', title: '', message: '' });
+  }, []);
   
   // Helper functions for operation tracking
   const setArchitectureOperationState = useCallback((architectureId: string, isRunning: boolean) => {
@@ -426,17 +630,25 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Sidebar handlers for ellipsis menu
   const handleDeleteArchitecture = async (architectureId: string) => {
     if (architectureId === 'new-architecture') {
-      alert('Cannot delete the "New Architecture" tab');
+      showNotification('error', 'Cannot Delete', 'Cannot delete the "New Architecture" tab');
       return;
     }
 
     const architecture = savedArchitectures.find(arch => arch.id === architectureId);
     if (!architecture) {
       console.warn('⚠️ Architecture not found for deletion:', architectureId);
+      showNotification('error', 'Architecture Not Found', 'The selected architecture could not be found.');
       return;
     }
 
-    if (confirm(`Are you sure you want to delete "${architecture.name}"? This action cannot be undone.`)) {
+    // Show delete confirmation overlay
+    setDeleteOverlay({
+      show: true,
+      title: 'Delete Architecture',
+      message: `Are you sure you want to delete "${architecture.name}"? This action cannot be undone.`,
+      onConfirm: async () => {
+        setDeleteOverlay(prev => ({ ...prev, show: false }));
+        
       try {
         // Always attempt to delete from Firebase if user is signed in
         if (user?.uid) {
@@ -467,45 +679,70 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         }
 
         console.log('✅ Architecture deleted locally and from Firebase');
-        
-        // Force a Firebase sync to ensure the deletion is reflected
-        if (user?.uid) {
-          console.log('🔄 Forcing Firebase sync after deletion...');
-          setTimeout(() => {
-            syncWithFirebase(user.uid);
-          }, 1000); // Small delay to ensure deletion has propagated
-        }
+          showNotification('success', 'Deleted', `Architecture "${architecture.name}" has been deleted`);
         
       } catch (error) {
         console.error('❌ Error deleting architecture:', error);
-        alert(`Failed to delete architecture: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          showNotification('error', 'Delete Failed', `Failed to delete architecture: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
+      },
+      onCancel: () => {
+        setDeleteOverlay(prev => ({ ...prev, show: false }));
     }
+    });
   };
 
   const handleShareArchitecture = async (architectureId: string) => {
     const architecture = savedArchitectures.find(arch => arch.id === architectureId);
     if (!architecture) {
       console.warn('⚠️ Architecture not found for sharing:', architectureId);
+      showNotification('error', 'Architecture Not Found', 'The selected architecture could not be found.');
       return;
     }
 
     try {
-      // Import the sharing service
-      const { SharingService } = await import('../../services/sharingService');
+      console.log('📤 Sharing architecture from sidebar:', architectureId, architecture.name);
       
-      // Create and copy shareable link
-      await SharingService.shareArchitecture(architectureId);
+      // Create a shareable anonymous copy so anonymous users can access it
+      console.log('📤 Creating shareable anonymous copy of architecture:', architecture.name);
       
-      // Simple success feedback
-      console.log(`✅ Share link for "${architecture.name}" copied to clipboard!`);
+      let anonymousId;
+      try {
+        anonymousId = await anonymousArchitectureService.saveAnonymousArchitecture(
+          `${architecture.name} (Shared)`,
+          architecture.rawGraph
+        );
+      } catch (error) {
+        console.warn('⚠️ Share creation throttled:', error.message);
+        showNotification('error', 'Share Throttled', 'Please wait a moment before sharing again.');
+        return;
+      }
+      
+      // Create shareable URL using the anonymous copy ID
+      if (typeof window === 'undefined') return;
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set('arch', anonymousId);
+      const shareUrl = currentUrl.toString();
+      
+      // Always show overlay, try clipboard as enhancement
+      let clipboardSuccess = false;
+      if (navigator.clipboard) {
+        try {
+          await navigator.clipboard.writeText(shareUrl);
+          clipboardSuccess = true;
+          console.log('✅ Sidebar share link copied to clipboard:', shareUrl);
+        } catch (clipboardError) {
+          console.warn('⚠️ Clipboard failed in sidebar share:', clipboardError.message);
+        }
+      }
+      
+      // Always show overlay regardless of clipboard success
+      setShareOverlay({ show: true, url: shareUrl, copied: clipboardSuccess });
+      
+      console.log('✅ Architecture share link created:', shareUrl);
     } catch (error) {
       console.error('❌ Failed to share architecture:', error);
-      // Fallback to basic sharing
-      const shareUrl = `https://atelier.inc.net/architecture/${architectureId}`;
-      navigator.clipboard.writeText(shareUrl)
-        .then(() => console.log('✅ Fallback share link copied to clipboard'))
-        .catch(() => console.error('❌ Failed to copy to clipboard'));
+      showNotification('error', 'Share Failed', 'Failed to create share link. Please try again.');
     }
   };
 
@@ -513,75 +750,152 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     const architecture = savedArchitectures.find(arch => arch.id === architectureId);
     if (!architecture) {
       console.warn('⚠️ Architecture not found for editing:', architectureId);
+      showNotification('error', 'Architecture Not Found', 'The selected architecture could not be found.');
       return;
     }
 
-    const newName = prompt('Enter new name for the architecture:', architecture.name);
+    // Show input overlay for renaming
+    setInputOverlay({
+      show: true,
+      title: 'Rename Architecture',
+      placeholder: 'Enter architecture name',
+      defaultValue: architecture.name,
+      onConfirm: (newName: string) => {
+        setInputOverlay(prev => ({ ...prev, show: false }));
+        
     if (newName && newName.trim() && newName !== architecture.name) {
       // Ensure the new name is unique
       const otherArchitectures = savedArchitectures.filter(arch => arch.id !== architectureId);
       const uniqueName = ensureUniqueName(newName.trim(), otherArchitectures);
       
       if (uniqueName !== newName.trim()) {
-        const proceed = confirm(`The name "${newName.trim()}" already exists. Use "${uniqueName}" instead?`);
-        if (!proceed) return;
+            showNotification('confirm', 'Name Already Exists', `The name "${newName.trim()}" already exists. Use "${uniqueName}" instead?`, {
+              onConfirm: () => {
+                hideNotification();
+                performRename(architectureId, uniqueName);
+              },
+              onCancel: hideNotification,
+              confirmText: 'Use New Name',
+              cancelText: 'Cancel'
+            });
+            return;
+          }
+          
+          performRename(architectureId, uniqueName);
+        }
+      },
+      onCancel: () => {
+        setInputOverlay(prev => ({ ...prev, show: false }));
       }
+    });
+  };
+
+  const performRename = (architectureId: string, newName: string) => {
+    const architecture = savedArchitectures.find(arch => arch.id === architectureId);
+    if (!architecture) return;
       
       // Update locally
       setSavedArchitectures(prev => prev.map(arch => 
         arch.id === architectureId 
-          ? { ...arch, name: uniqueName }
+        ? { ...arch, name: newName }
           : arch
       ));
 
       // Update in Firebase if it exists there
       if (architecture.isFromFirebase && user?.uid) {
         const firebaseId = architecture.firebaseId || architecture.id;
-        ArchitectureService.updateArchitecture(firebaseId, { name: uniqueName })
-          .then(() => console.log('✅ Architecture name updated in Firebase'))
-          .catch(error => console.error('❌ Error updating name in Firebase:', error));
-      }
+      ArchitectureService.updateArchitecture(firebaseId, { name: newName })
+        .then(() => {
+          console.log('✅ Architecture name updated in Firebase');
+          showNotification('success', 'Renamed Successfully', `Architecture renamed to "${newName}"`);
+        })
+        .catch(error => {
+          console.error('❌ Error updating name in Firebase:', error);
+          showNotification('error', 'Update Failed', 'Failed to update name in the cloud. Changes saved locally.');
+        });
+    } else {
+      showNotification('success', 'Renamed Successfully', `Architecture renamed to "${newName}"`);
     }
   };
 
-  // Chat submission handler with operation tracking
-  const handleChatSubmit = useCallback((message: string) => {
-    console.log('📝 Chat message submitted for architecture:', selectedArchitectureId, message);
-    
-    // Mark operation as starting for current architecture
-    setArchitectureOperationState(selectedArchitectureId, true);
-    
-    // Pass the current architecture ID to the global state for FunctionExecutor
-    (window as any).currentArchitectureId = selectedArchitectureId;
-    
-    // Send the message (if real-time chat is being used)
-    if (sendTextMessage) {
-      sendTextMessage(message);
-    }
-  }, [selectedArchitectureId, setArchitectureOperationState, sendTextMessage]);
+  // Placeholder for handleChatSubmit - will be defined after rawGraph and handleGraphChange are available
 
   // Listen for auth state changes
   useEffect(() => {
-    // Only set up auth listener if Firebase is properly initialized
-    if (auth) {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      console.log('🔐 Auth state changed:', currentUser ? currentUser.email : 'No user');
-      setUser(currentUser);
+    
+    // In public mode, completely skip Firebase auth monitoring and force clean state
+    if (isPublicMode) {
+      setUser(null);
+      setSidebarCollapsed(true);
       
-      // Auto-open sidebar when user signs in, close when they sign out
+      // Check if URL contains a shared anonymous architecture ID
+      const sharedArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
+      if (sharedArchId) {
+        console.log('🔗 Loading shared anonymous architecture:', sharedArchId);
+        loadSharedAnonymousArchitecture(sharedArchId);
+      }
+      
+      return; // Don't set up any Firebase listeners
+    }
+
+    // Only set up auth listener in canvas mode
+    if (auth) {
+      console.log('🔐 CANVAS MODE ACTIVE - setting up Firebase auth listener');
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+        console.log('🔐 Auth state changed:', currentUser ? currentUser.email : 'No user');
+        
+        // On canvas route, use actual auth state
+      setUser(currentUser);
+        
+        // Auto-open sidebar when user signs in, close when they sign out
       if (currentUser) {
-        console.log('👤 User signed in - opening sidebar');
-        setSidebarCollapsed(false);
-      } else {
-        console.log('👤 User signed out - closing sidebar');
-        setSidebarCollapsed(true);
+          console.log('👤 User signed in - opening sidebar');
+          setSidebarCollapsed(false);
+        } else {
+          console.log('👤 User signed out - closing sidebar');
+          setSidebarCollapsed(true);
       }
     });
     return () => unsubscribe();
     } else {
       console.log('🚫 Firebase auth not available - authentication disabled');
     }
-  }, []);
+  }, [isPublicMode]);
+
+
+
+  // Load stored canvas state from public mode (only in full app mode)
+  useEffect(() => {
+    if (!isPublicMode) {
+      const storedState = localStorage.getItem('publicCanvasState');
+      if (storedState) {
+        try {
+          const { elkGraph, timestamp } = JSON.parse(storedState);
+          const ageInMinutes = (Date.now() - timestamp) / (1000 * 60);
+          
+          // Only load if state is less than 30 minutes old
+          if (ageInMinutes < 30 && elkGraph) {
+            console.log('🔄 Loading canvas state from public mode');
+            dispatchElkGraph({
+              elkGraph,
+              source: 'PublicModeHandoff',
+              reason: 'state-restore',
+              targetArchitectureId: selectedArchitectureId
+            });
+            
+            // Clear the stored state after loading
+            localStorage.removeItem('publicCanvasState');
+          } else {
+            console.log('🗑️ Stored canvas state expired or invalid, clearing');
+            localStorage.removeItem('publicCanvasState');
+          }
+        } catch (error) {
+          console.error('❌ Failed to parse stored canvas state:', error);
+          localStorage.removeItem('publicCanvasState');
+        }
+      }
+    }
+  }, [isPublicMode, selectedArchitectureId]);
 
 
 
@@ -682,6 +996,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     // State
     rawGraph,
     layoutGraph,
+    layoutError,
     nodes,
     edges,
     layoutVersion,
@@ -697,17 +1012,89 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     onConnect,
     handleLabelChange,
     
-  } = useElkToReactflowGraphConverter(DEFAULT_ARCHITECTURE);
+  } = useElkToReactflowGraphConverter({
+    id: "root",
+    children: [],
+    edges: []
+  });
+
+    // Real-time sync: Auto-save current canvas to Firebase when state changes
+  const [realtimeSyncId, setRealtimeSyncId] = useState<string | null>(null);
+  const [isRealtimeSyncing, setIsRealtimeSyncing] = useState(false);
+
+  // EMERGENCY: COMPLETELY DISABLED real-time sync to stop infinite Firebase loop
+  // This was causing thousands of writes per second: 
+  // Graph update → Firebase save → triggers graph change → Firebase save → LOOP!
+  useEffect(() => {
+    // TODO: Implement proper auto-save with loop prevention later
+  }, []);
+
+  // Reset real-time sync when switching away from "New Architecture"
+  useEffect(() => {
+    if (selectedArchitectureId !== 'new-architecture') {
+      setRealtimeSyncId(null);
+      setIsRealtimeSyncing(false);
+    }
+  }, [selectedArchitectureId]);
+
+  // Handle shared architecture URLs (works in both public and canvas mode)
+  useEffect(() => {
+    // Check if URL contains a shared architecture ID
+    const sharedArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
+    
+    if (sharedArchId) {
+      console.log('🔗 Loading shared architecture from URL:', sharedArchId, isPublicMode ? '(public mode)' : '(canvas mode)');
+      
+      // Load the shared architecture directly using the service
+      (async () => {
+        try {
+          const sharedArch = await anonymousArchitectureService.loadAnonymousArchitectureById(sharedArchId);
+          if (sharedArch) {
+            console.log('✅ Loaded shared architecture from URL:', sharedArch.name);
+            
+            // Anonymous architectures should not have names - users can't see tabs anyway
+            // AI naming happens during sign-in when the architecture becomes a user architecture
+            
+            setRawGraph(sharedArch.rawGraph);
+          }
+        } catch (error) {
+          console.error('❌ Failed to load shared architecture from URL:', error);
+        }
+      })();
+    }
+  }, [isPublicMode, setRawGraph]);
+
+  // Load shared anonymous architecture from URL
+  const loadSharedAnonymousArchitecture = useCallback(async (architectureId: string) => {
+    try {
+      const sharedArch = await anonymousArchitectureService.loadAnonymousArchitectureById(architectureId);
+      
+      if (sharedArch) {
+        console.log('✅ Loaded shared anonymous architecture:', sharedArch.name);
+        
+        // Set the graph to the shared architecture
+        setRawGraph(sharedArch.rawGraph);
+        
+        // Update the architecture name in the UI (optional - could show "Viewing: Architecture Name")
+        console.log('🎯 Displaying shared architecture:', sharedArch.name);
+      } else {
+        console.warn('⚠️ Shared architecture not found or expired');
+        // Could show a toast notification here
+      }
+    } catch (error) {
+      console.error('❌ Error loading shared anonymous architecture:', error);
+    }
+  }, [setRawGraph]);
 
   // Handler for manual save functionality
   const handleManualSave = useCallback(async () => {
     if (!user) {
-      alert('Please sign in to save your architecture');
+      showNotification('error', 'Sign In Required', 'Please sign in to save your architecture');
       return;
     }
 
     if (!selectedArchitectureId || selectedArchitectureId === 'new-architecture') {
-      alert('No architecture selected to save');
+      showNotification('error', 'No Architecture Selected', 'No architecture selected to save');
       return;
     }
 
@@ -737,13 +1124,181 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       console.log('✅ Architecture manually saved to Firebase');
     } catch (error) {
       console.error('❌ Error manually saving architecture:', error);
-      alert(`❌ Failed to save: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      showNotification('error', 'Save Failed', `Failed to save: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSaving(false);
     }
   }, [user, selectedArchitectureId, savedArchitectures, rawGraph, nodes, edges]);
 
+  // Handler for sharing current architecture (works for both signed-in and anonymous users)
+  const handleShareCurrent = useCallback(async () => {
+    try {
+      // Skip execution during SSR
+      if (typeof window === 'undefined') return;
+      
+      // Detect if we're in embedded version
+      const isEmbedded = window.location.hostname === 'archgen-ecru.vercel.app' || 
+                        window.location.pathname === '/embed' ||
+                        window.parent !== window;
+      
+      // For anonymous users or when no architecture is selected, create a shareable anonymous architecture
+      if (!user || selectedArchitectureId === 'new-architecture') {
+        if (!rawGraph || !rawGraph.children || rawGraph.children.length === 0) {
+          const message = 'Please create some content first before sharing';
+          if (isEmbedded) {
+            setShareOverlay({ show: true, url: '', error: message });
+          } else {
+            showNotification('error', 'Cannot Share', message);
+          }
+          return;
+        }
 
+        console.log('📤 Creating shareable anonymous architecture...');
+        
+        try {
+          // Generate a name for the architecture
+          const architectureName = `Shared Architecture ${new Date().toLocaleDateString()}`;
+          
+          // Save as anonymous architecture and get shareable ID
+          const anonymousId = await anonymousArchitectureService.saveAnonymousArchitecture(
+            architectureName,
+            rawGraph
+          );
+          console.log('✅ Anonymous architecture saved with ID:', anonymousId);
+          
+          // Create shareable URL for anonymous architecture
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.set('arch', anonymousId);
+          const shareUrl = currentUrl.toString();
+          console.log('🔗 Generated share URL:', shareUrl);
+          
+          // Always show the overlay first, then try clipboard as enhancement
+          console.log('🔗 Showing share overlay:', shareUrl);
+          
+          if (isEmbedded) {
+            // For embedded version, just show the overlay (no clipboard in iframes)
+            setShareOverlay({ show: true, url: shareUrl, copied: false });
+          } else {
+            // For non-embedded, try clipboard but don't let it break the overlay
+            let clipboardSuccess = false;
+            try {
+              await navigator.clipboard.writeText(shareUrl);
+              clipboardSuccess = true;
+              console.log('✅ Share link copied to clipboard:', shareUrl);
+            } catch (clipboardError) {
+              console.warn('⚠️ Clipboard failed (document not focused):', clipboardError.message);
+            }
+            
+            // Always show overlay regardless of clipboard success
+            setShareOverlay({ show: true, url: shareUrl, copied: clipboardSuccess });
+          }
+        } catch (shareError) {
+          console.error('❌ Failed to create shareable architecture:', shareError);
+          const message = 'Failed to create share link. Please try again.';
+          if (isEmbedded) {
+            setShareOverlay({ show: true, url: '', error: message });
+          } else {
+            showNotification('error', 'Share Failed', message);
+          }
+        }
+        
+        return;
+      }
+
+      // For signed-in users with saved architectures
+      if (selectedArchitectureId && selectedArchitectureId !== 'new-architecture') {
+        console.log('📤 Sharing signed-in user architecture:', selectedArchitectureId);
+        
+        // Find the architecture to share
+        const architecture = savedArchitectures.find(arch => arch.id === selectedArchitectureId);
+        if (!architecture || !architecture.rawGraph) {
+          const message = 'Architecture not found or has no content to share';
+          if (isEmbedded) {
+            setShareOverlay({ show: true, url: '', error: message });
+          } else {
+            showNotification('error', 'Cannot Share', message);
+          }
+          return;
+        }
+        
+        // Create a shareable anonymous copy so anonymous users can access it
+        console.log('📤 Creating shareable anonymous copy of user architecture:', architecture.name);
+        
+        try {
+          // Create anonymous copy for sharing
+          const anonymousId = await anonymousArchitectureService.saveAnonymousArchitecture(
+            `${architecture.name} (Shared)`,
+            architecture.rawGraph
+          );
+          console.log('✅ Shareable anonymous copy created:', anonymousId);
+          
+          // Create shareable URL using the anonymous copy ID
+          const currentUrl = new URL(window.location.href);
+          currentUrl.searchParams.set('arch', anonymousId);
+          const shareUrl = currentUrl.toString();
+          console.log('🔗 Generated share URL:', shareUrl);
+          
+          // Always show the overlay first, then try clipboard as enhancement
+          console.log('🔗 Showing share overlay:', shareUrl);
+          
+          if (isEmbedded) {
+            // For embedded version, just show the overlay (no clipboard in iframes)
+            setShareOverlay({ show: true, url: shareUrl, copied: false });
+          } else {
+            // For non-embedded, try clipboard but don't let it break the overlay
+            let clipboardSuccess = false;
+            try {
+              await navigator.clipboard.writeText(shareUrl);
+              clipboardSuccess = true;
+              console.log('✅ User architecture share link copied to clipboard:', shareUrl);
+            } catch (clipboardError) {
+              console.warn('⚠️ Clipboard failed (document not focused):', clipboardError.message);
+            }
+            
+            // Always show overlay regardless of clipboard success
+            setShareOverlay({ show: true, url: shareUrl, copied: clipboardSuccess });
+          }
+        } catch (shareError) {
+          console.warn('⚠️ Share creation throttled or failed:', shareError.message);
+          const message = shareError.message.includes('throttled') ? 
+            'Share throttled - try again in a moment' : 
+            'Failed to create share link. Please try again.';
+          
+          if (isEmbedded) {
+            setShareOverlay({ show: true, url: '', error: message });
+          } else {
+            showNotification('error', 'Share Failed', message);
+          }
+        }
+        
+        return;
+      }
+
+      // Fallback
+      const message = 'Please create some content first before sharing';
+      if (isEmbedded) {
+        setShareOverlay({ show: true, url: '', error: message });
+      } else {
+        showNotification('error', 'Cannot Share', message);
+      }
+    } catch (error) {
+      console.error('❌ Error sharing current architecture:', error);
+      const errorMessage = `❌ Failed to share: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      
+      // Skip execution during SSR
+      if (typeof window === 'undefined') return;
+      
+      const isEmbedded = window.location.hostname === 'archgen-ecru.vercel.app' || 
+                        window.location.pathname === '/embed' ||
+                        window.parent !== window;
+      
+      if (isEmbedded) {
+        setShareOverlay({ show: true, url: '', error: errorMessage });
+      } else {
+        showNotification('error', 'Share Failed', errorMessage);
+      }
+    }
+  }, [selectedArchitectureId, handleShareArchitecture, user, rawGraph, anonymousArchitectureService]);
 
   // Initialize with empty canvas for "New Architecture" tab
   useEffect(() => {
@@ -753,20 +1308,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         children: [],
         edges: []
       };
-      console.log('🔄 Setting empty graph for New Architecture tab');
       setRawGraph(emptyGraph);
     }
   }, [selectedArchitectureId, setRawGraph]);
 
   // Debug logging for graph state changes
   useEffect(() => {
-    console.log('📊 Current rawGraph state:', {
-      id: rawGraph?.id,
-      childrenCount: rawGraph?.children?.length || 0,
-      edgesCount: rawGraph?.edges?.length || 0,
-      selectedArchitecture: selectedArchitectureId,
-      graphDetails: rawGraph
-    });
   }, [rawGraph, selectedArchitectureId]);
 
   // Handler for save functionality
@@ -823,7 +1370,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       const savedId = await ArchitectureService.saveArchitecture(architectureData);
       
       // Show success feedback
-      alert(`✅ Architecture saved successfully!\n\nName: ${architectureData.name}\nID: ${savedId}\nNodes: ${architectureData.nodes.length}\nEdges: ${architectureData.edges.length}`);
+      showNotification('success', 'Architecture Saved', `Architecture saved successfully!\n\nName: ${architectureData.name}\nID: ${savedId}\nNodes: ${architectureData.nodes.length}\nEdges: ${architectureData.edges.length}`);
       
     } catch (error) {
       console.error('❌ Error saving architecture:', error);
@@ -837,7 +1384,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         }
       }
       
-      alert(`❌ ${errorMessage}`);
+      showNotification('error', 'Save Failed', errorMessage);
     }
   }, [rawGraph, nodes, edges]);
 
@@ -855,7 +1402,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       edges: []
     };
     setRawGraph(emptyGraph);
-    setShouldAutoFit(true); // Enable auto-fit when creating new architecture
     
     // Reset the "New Architecture" tab name in case it was changed
     setSavedArchitectures(prev => prev.map(arch => 
@@ -878,9 +1424,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       console.log('🔒 Agent is locked to architecture:', agentLockedArchitectureId, '- not retargeting');
     }
     
-    // Load the architecture data (prioritize dynamic savedArchitectures over static mock data)
-    const architecture = savedArchitectures.find(arch => arch.id === architectureId) ||
-                         SAVED_ARCHITECTURES[architectureId];
+    // Load the architecture data from dynamic savedArchitectures
+    const architecture = savedArchitectures.find(arch => arch.id === architectureId);
     
     if (architecture && architecture.rawGraph) {
       console.log('📂 Loading architecture:', architecture.name);
@@ -891,9 +1436,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         source: 'ArchitectureSelector',
         reason: 'architecture-load'
       });
-      
-      // Enable auto-fit when loading a different architecture
-      setShouldAutoFit(true);
     } else {
       console.warn('⚠️ Architecture not found:', architectureId);
     }
@@ -938,7 +1480,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     setRawGraph(newGraph);
     console.log('…called setRawGraph');
     
-    // Update Firebase if user is signed in and not on "New Architecture" tab
+    // Save to Firebase (signed in) or anonymous storage (public mode)
     if (user && selectedArchitectureId !== 'new-architecture') {
       console.log('🔄 Updating Firebase for manual graph change...');
       try {
@@ -1000,10 +1542,376 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       } catch (error) {
         console.error('❌ Error updating Firebase for manual graph change:', error);
       }
+    } else if (isPublicMode && !user && newGraph?.children && newGraph.children.length > 0) {
+      // Save or update anonymous architecture in public mode when there's actual content
+      // But skip if user is signed in (architecture may have been transferred)
+      console.log('💾 Saving/updating anonymous architecture in public mode...');
+      try {
+        const existingArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
+        
+        if (existingArchId) {
+          // Update existing anonymous architecture
+          console.log('🔄 Updating existing anonymous architecture:', existingArchId);
+          await anonymousArchitectureService.updateAnonymousArchitecture(existingArchId, {
+            rawGraph: newGraph,
+            timestamp: Timestamp.now()
+          });
+          console.log('✅ Anonymous architecture updated');
+        } else {
+          // Create new anonymous architecture
+          const architectureName = `Architecture - ${new Date().toLocaleDateString()}`;
+          const newArchId = await anonymousArchitectureService.saveAnonymousArchitecture(architectureName, newGraph);
+          console.log('✅ New anonymous architecture saved with ID:', newArchId);
+        }
+      } catch (error) {
+        // Check if this is the expected "No document to update" error after architecture transfer
+        if (error instanceof Error && error.message?.includes('No document to update')) {
+          console.log('ℹ️ Anonymous architecture was already transferred/deleted - this is expected after sign-in');
+        } else {
+        console.error('❌ Error saving/updating anonymous architecture:', error);
+      }
+      }
+    } else if (isPublicMode && user) {
+      console.log('🚫 DEBUG: Skipping anonymous architecture update in handleGraphChange - user is signed in, architecture may have been transferred');
     }
     
     console.groupEnd();
-  }, [setRawGraph, rawGraph, user, selectedArchitectureId, savedArchitectures]);
+  }, [setRawGraph, rawGraph, user, selectedArchitectureId, savedArchitectures, isPublicMode]);
+
+  // Helper function to extract complete graph state for the agent
+  const extractCompleteGraphState = (graph: any) => {
+    const collectAllNodes = (graph: any): any[] => {
+      const nodes: any[] = [];
+      
+      const traverse = (node: any, parentId?: string) => {
+        nodes.push({
+          id: node.id,
+          label: node.labels?.[0]?.text || node.id,
+          type: node.children ? 'group' : 'node',
+          parentId: parentId || 'root',
+          iconName: node.data?.iconName || '',
+          position: node.position || { x: 0, y: 0 }
+        });
+        
+        if (node.children) {
+          node.children.forEach((child: any) => traverse(child, node.id));
+        }
+      };
+      
+      if (graph.children) {
+        graph.children.forEach((child: any) => traverse(child));
+      }
+      
+      return nodes;
+    };
+    
+    const allNodes = collectAllNodes(graph);
+    const allEdges = graph.edges?.map((edge: any) => ({
+      id: edge.id,
+      source: edge.sources?.[0] || edge.source,
+      target: edge.targets?.[0] || edge.target,
+      label: edge.labels?.[0]?.text || ''
+    })) || [];
+    
+    return {
+      nodeCount: allNodes.length,
+      edgeCount: allEdges.length,
+      groupCount: allNodes.filter(n => n.type === 'group').length,
+      nodes: allNodes,
+      edges: allEdges,
+      structure: graph,
+      summary: `Current graph has ${allNodes.length} nodes (${allNodes.filter(n => n.type === 'group').length} groups) and ${allEdges.length} edges`
+    };
+  };
+
+  // Chat submission handler - PROPER OPENAI RESPONSES API CHAINING
+  const handleChatSubmit = useCallback(async (message: string) => {
+    
+    setArchitectureOperationState(selectedArchitectureId, true);
+    try {
+      let conversationHistory: any[] = [];
+      let currentGraph = JSON.parse(JSON.stringify(rawGraph));
+      let turnNumber = 1;
+      let referenceArchitecture = "";
+      let errorCount = 0;
+      const MAX_ERRORS = 10; // Increased error tolerance
+      let currentResponseId: string | null = null;
+      
+      console.log('🚀 Starting architecture generation (3-turn prompt guidance)...');
+      
+      // 🏗️ Search for matching reference architecture to guide the agent
+      try {
+        const searchInput = message.toLowerCase().trim();
+        const availableArchs = architectureSearchService.getAvailableArchitectures();
+        
+        if (availableArchs.length === 0) {
+          console.warn('⚠️ No architectures loaded in service yet, proceeding without reference');
+          addFunctionCallingMessage(`⚠️ Architecture database not ready, proceeding without reference`);
+        } else {
+          console.log(`🔍 Searching for reference architecture: "${searchInput}"`);
+          const matchedArch = await architectureSearchService.findMatchingArchitecture(searchInput);
+          
+          if (matchedArch) {
+            // Parse the architecture JSON to extract useful patterns for the agent
+            let architectureGuidance = "";
+            try {
+              // The architecture field contains a JSON-like string that needs to be parsed
+              const archStr = matchedArch.architecture;
+              console.log(`🔍 Parsing reference architecture:`, archStr.substring(0, 200) + '...');
+              
+              // Extract key patterns from the architecture description and JSON structure
+              architectureGuidance = `\n\n🏗️ REFERENCE ARCHITECTURE GUIDANCE:
+Found matching pattern: "${matchedArch.subgroup}" from ${matchedArch.cloud.toUpperCase()}
+Description: ${matchedArch.description.substring(0, 300)}...
+
+SOURCE: ${matchedArch.source}
+
+KEY ARCHITECTURAL PATTERNS TO FOLLOW:
+- Use ${matchedArch.cloud}_* icons for cloud-specific services  
+- Follow the layered architecture approach shown in the reference
+- Include proper edge connections between all components
+- Group related services into logical containers
+- Consider observability, security, and data flow patterns shown
+
+ACTUAL REFERENCE GRAPH STRUCTURE (use as inspiration for your design):
+${archStr}
+
+This reference provides proven patterns for ${matchedArch.group} applications.
+Adapt these patterns to your specific requirements while maintaining the overall structure.`;
+              
+            } catch (error) {
+              console.warn('⚠️ Could not parse reference architecture:', error);
+              architectureGuidance = `\n\nREFERENCE ARCHITECTURE: ${matchedArch.subgroup} (${matchedArch.cloud.toUpperCase()})
+SOURCE: ${matchedArch.source}
+Use this ${matchedArch.group} reference pattern as inspiration for your architecture.`;
+            }
+            
+            referenceArchitecture = architectureGuidance;
+            
+            console.log(`🏗️ Found reference architecture: ${matchedArch.subgroup}`);
+            console.log(`📋 Reference architecture content:`, matchedArch);
+            console.log(`📝 Full reference text being sent:`, referenceArchitecture);
+            addFunctionCallingMessage(`🏗️ Found reference architecture: ${matchedArch.subgroup}`);
+            addFunctionCallingMessage(`🔗 Reference URL: ${matchedArch.source}`);
+          } else {
+            console.log('❌ No suitable architecture match found');
+            addFunctionCallingMessage(`⚠️ No matching reference architecture found`);
+          }
+        }
+      } catch (error) {
+        console.warn("⚠️ Architecture search failed:", error);
+        addFunctionCallingMessage(`⚠️ Architecture search failed, proceeding without reference`);
+      }
+      
+      // Make initial conversation call to get response_id
+      console.log(`📞 Making initial agent call for conversation start`);
+      
+      const initialResponse = await fetch('/api/simple-agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message: message.trim(), 
+          conversationHistory,
+          currentGraph: currentGraph,
+          referenceArchitecture: referenceArchitecture
+        })
+      });
+
+      if (!initialResponse.ok) {
+        const errorData = await initialResponse.json();
+        throw new Error(`API error: ${errorData.error}`);
+      }
+
+      let result = await initialResponse.json();
+      currentResponseId = result.responseId || `temp_${Date.now()}`;
+      
+      console.log('🔗 Got initial response ID:', currentResponseId);
+      console.log('🔍 Full result object:', result);
+
+      // Main conversation loop - continue until no more work
+      // Temporarily: continue if we have function calls, regardless of hasMoreWork field
+      while ((result.hasMoreWork !== false && result.functionCalls && result.functionCalls.length > 0) && turnNumber <= 15) {
+        console.log(`📊 Processing turn ${result.turnNumber || turnNumber} with ${result.count || result.functionCalls?.length || 0} operations`);
+        
+        console.log(`📊 Turn ${result.turnNumber} response:`, {
+          functionCalls: result.count,
+          isLikelyFinal: result.isLikelyFinalTurn,
+          continueMessage: result.continueMessage
+        });
+
+        if (result.success && result.functionCalls) {
+          const turnMessageId = addFunctionCallingMessage(`🔄 Turn ${result.turnNumber} - Processing ${result.count} operations`);
+          let batchErrors: string[] = [];
+          let toolOutputs: any[] = [];
+          
+          for (const functionCall of result.functionCalls) {
+            const { name, arguments: args, call_id } = functionCall;
+            const messageId = addFunctionCallingMessage(`${name}(${JSON.stringify(args, null, 2)})`);
+            
+            let executionResult = '';
+            try {
+              switch (name) {
+                case 'add_node':
+                  const nodeName = args.nodename || 'new_node';
+                  const parentId = args.parentId || 'root';
+                  const nodeData = args.data || {};
+                  currentGraph = addNode(nodeName, parentId, currentGraph, {
+                    label: nodeData.label || nodeName,
+                    icon: nodeData.icon || 'api'
+                  });
+                  executionResult = `Successfully created node: ${nodeName}`;
+                  updateStreamingMessage(messageId, `✅ Created node: ${nodeName}`, true, name);
+                  break;
+                case 'add_edge':
+                  currentGraph = addEdge(args.edgeId, args.sourceId, args.targetId, currentGraph, args.label);
+                  executionResult = `Successfully created edge: ${args.sourceId} → ${args.targetId}`;
+                  updateStreamingMessage(messageId, `✅ Created edge: ${args.sourceId} → ${args.targetId}`, true, name);
+                  break;
+                case 'group_nodes':
+                  currentGraph = groupNodes(args.nodeIds, args.parentId, args.groupId, currentGraph);
+                  executionResult = `Successfully grouped nodes: [${args.nodeIds.join(', ')}] → ${args.groupId}`;
+                  updateStreamingMessage(messageId, `✅ Grouped nodes: [${args.nodeIds.join(', ')}] → ${args.groupId}`, true, name);
+                  break;
+                case 'batch_update':
+                  currentGraph = batchUpdate(args.operations, currentGraph);
+                  executionResult = `Successfully executed batch update: ${args.operations.length} operations`;
+                  updateStreamingMessage(messageId, `✅ Batch update: ${args.operations.length} operations`, true, name);
+                  break;
+                default:
+                  executionResult = `Error: Unknown function ${name}`;
+                  updateStreamingMessage(messageId, `❌ Unknown function: ${name}`, true, name);
+                  console.error('❌ Unknown function call:', name);
+                  batchErrors.push(`Unknown function: ${name}`);
+              }
+            } catch (error: any) {
+              let errorMsg = `Error executing ${name}: ${error.message}`;
+              
+              // Special handling for duplicate node errors - provide specific guidance
+              if (error.message.includes('duplicate node id')) {
+                const nodeId = error.message.match(/duplicate node id '([^']+)'/)?.[1];
+                const existingNodes = currentGraph.children?.map((child: any) => child.id).join(', ') || 'none';
+                errorMsg = `DUPLICATE NODE ERROR: Node '${nodeId}' already exists. Do NOT create it again. Existing nodes: ${existingNodes}`;
+              }
+              
+              executionResult = errorMsg;
+              updateStreamingMessage(messageId, `❌ ${errorMsg}`, true, name);
+              console.error(`❌ ${errorMsg}:`, error);
+              batchErrors.push(errorMsg);
+              errorCount++;
+            }
+
+            // Prepare tool output for chaining - SEND COMPLETE GRAPH STATE
+            const completeGraphState = extractCompleteGraphState(currentGraph);
+            toolOutputs.push({
+              type: 'function_call_output',
+              call_id: call_id,
+              output: JSON.stringify({
+                success: batchErrors.length === 0,
+                operation: name,
+                result: executionResult,
+                graph: completeGraphState,
+                instruction: batchErrors.length === 0 
+                  ? "Continue building the architecture by calling the next required function. The current graph state is provided above for your reference."
+                  : "Fix the error and retry the operation. The current graph state is provided above for your reference."
+              })
+            });
+          }
+            
+          updateStreamingMessage(turnMessageId, `✅ Turn ${result.turnNumber} completed (${result.count} operations)`, true, 'batch_update');
+          
+          // 🎯 UPDATE UI AFTER EACH TURN - This makes progress visible to user
+          handleGraphChange(currentGraph);
+          console.log(`🔄 Updated UI with turn ${result.turnNumber} changes`);
+          
+          // Check for ELK layout errors from the hook
+          if (layoutError) {
+            batchErrors.push(`ELK Layout Error: ${layoutError}`);
+            console.error('🔥 ELK Layout Error detected:', layoutError);
+          }
+          
+          // Include error feedback in tool outputs if there were errors
+          if (batchErrors.length > 0 || layoutError) {
+            toolOutputs.forEach(output => {
+              const outputData = JSON.parse(output.output);
+              outputData.errors = batchErrors;
+              if (layoutError) outputData.layout_error = layoutError;
+              output.output = JSON.stringify(outputData);
+            });
+            errorCount += batchErrors.length;
+            console.log(`🔥 Including ${batchErrors.length} errors in tool outputs`);
+          }
+          
+          // Stop if too many errors
+          if (errorCount >= MAX_ERRORS) {
+            console.log(`🛑 Stopping multi-turn generation after ${errorCount} errors`);
+            const errorStopMessage = addFunctionCallingMessage(`🛑 Stopping generation due to ${errorCount} errors. Please review the architecture and try again.`);
+            updateStreamingMessage(errorStopMessage, `❌ Generation stopped due to repeated errors`, true, 'error');
+            break;
+          }
+          
+          // Send tool outputs back to continue conversation
+          console.log('🔗 Sending tool outputs for continuation with response ID:', currentResponseId);
+          const continuationResponse = await fetch('/api/simple-agent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              toolOutputs: toolOutputs,
+              previousResponseId: currentResponseId,
+              currentGraph: currentGraph  // Include updated graph state
+            })
+          });
+
+          if (!continuationResponse.ok) {
+            console.error('❌ Tool output continuation failed');
+            break;
+          }
+
+          result = await continuationResponse.json();
+          currentResponseId = result.responseId;
+          turnNumber++;
+          
+        } else if (result.completed || result.hasMoreWork === false) {
+          console.log('✅ Agent completed architecture generation naturally');
+          const completionMessage = addFunctionCallingMessage(`🏁 Agent completed architecture generation`);
+          updateStreamingMessage(completionMessage, `✅ Architecture generation completed - agent has no more work to do`, true, 'completion');
+          
+          // Fire completion events to update ProcessingStatusIcon and re-enable chatbox
+          window.dispatchEvent(new CustomEvent('allProcessingComplete'));
+          window.dispatchEvent(new CustomEvent('processingComplete'));
+          
+          // Re-enable chatbox for natural completion
+          setTimeout(() => {
+            setArchitectureOperationState(selectedArchitectureId, false);
+          }, 1000);
+          
+          break;
+        } else {
+          console.error('❌ Unexpected response format - stopping');
+          break;
+        }
+      }
+      
+      handleGraphChange(currentGraph);
+      console.log('✅ Architecture generation completed');
+      
+      // Fire completion events to update ProcessingStatusIcon and re-enable chatbox
+      window.dispatchEvent(new CustomEvent('allProcessingComplete'));
+      window.dispatchEvent(new CustomEvent('processingComplete'));
+      
+      setTimeout(() => {
+        setArchitectureOperationState(selectedArchitectureId, false);
+      }, 1000);
+      
+    } catch (error: any) {
+      console.error('❌ MULTI-TURN AGENT error:', error);
+      
+      // Fire completion events to re-enable chatbox even on error
+      window.dispatchEvent(new CustomEvent('allProcessingComplete'));
+      window.dispatchEvent(new CustomEvent('processingComplete'));
+      
+      setArchitectureOperationState(selectedArchitectureId, false);
+    }
+  }, [selectedArchitectureId, setArchitectureOperationState, rawGraph, handleGraphChange]);
 
   const handleAddNodeToGroup = useCallback((groupId: string) => {
     const nodeName = `new_node_${Date.now()}`;
@@ -1046,24 +1954,20 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     }
   }, []);
 
-  // Auto-fit view: only triggers on agent-initiated changes, not user interactions
-  const [shouldAutoFit, setShouldAutoFit] = useState(true); // Start with true for initial load
-  
+  // Unified auto-fit view: triggers on ANY graph state change
   useEffect(() => {
-    // Only trigger if we have content, ReactFlow is ready, and auto-fit is enabled
-    if (nodes.length > 0 && reactFlowRef.current && layoutVersion > 0 && shouldAutoFit) {
+    // Only trigger if we have content and ReactFlow is ready
+    if (nodes.length > 0 && reactFlowRef.current && layoutVersion > 0) {
       const timeoutId = setTimeout(() => {
         manualFitView();
-        setShouldAutoFit(false); // Reset the flag after fitting
       }, 200); // Unified delay to ensure layout is complete
       return () => clearTimeout(timeoutId);
     }
   }, [
-    // Trigger only when auto-fit is explicitly requested:
+    // Trigger on ANY significant graph change:
     nodes.length,           // When nodes are added/removed
     edges.length,           // When edges are added/removed  
     layoutVersion,          // When ELK layout completes (includes groups, moves, etc.)
-    shouldAutoFit,          // Only when auto-fit is requested
     manualFitView
   ]);
 
@@ -1263,29 +2167,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   // Debug chat session state
   useEffect(() => {
-    console.log('💬 Chat session state:', {
-      isSessionActive,
-      messagesCount: messages.length,
-      isSending,
-      messageSendStatus,
-      elkGraphNodes: rawGraph?.children?.length || 0,
-      currentChatName
-    });
   }, [isSessionActive, messages.length, isSending, messageSendStatus, rawGraph, currentChatName]);
 
   // Typed event bridge: Listen for AI-generated graphs and apply them to canvas
   useEffect(() => {
     const unsubscribe = onElkGraph(async ({ elkGraph, source, reason, version, ts, targetArchitectureId }) => {
-      console.log('🔄 Received ELK graph update:', {
-        source,
-        reason,
-        targetArchitectureId,
-        currentlySelected: selectedArchitectureId,
-        nodeCount: elkGraph?.children?.length || 0,
-        edgeCount: elkGraph?.edges?.length || 0,
-        version,
-        timestamp: ts ? new Date(ts).toISOString() : undefined
-      });
       
       // Don't mark operation as complete here - wait for the final completion event
       
@@ -1305,10 +2191,37 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         console.log('✅ Updating canvas for selected architecture');
         setRawGraph(elkGraph);
         
-        // Enable auto-fit only for agent-initiated changes
-        if (source === 'FunctionExecutor' && reason === 'agent-update') {
-          console.log('🎯 Agent update detected - enabling auto-fit');
-          setShouldAutoFit(true);
+        // Save anonymous architecture in public mode when AI updates the graph
+        // But skip if user is signed in (architecture may have been transferred)
+        if (isPublicMode && !user && elkGraph?.children && elkGraph.children.length > 0) {
+          console.log('💾 Saving anonymous architecture after AI update...');
+          try {
+            const existingArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
+            
+            if (existingArchId) {
+              // Update existing anonymous architecture
+              console.log('🔄 Updating existing anonymous architecture:', existingArchId);
+              await anonymousArchitectureService.updateAnonymousArchitecture(existingArchId, {
+                rawGraph: elkGraph,
+                timestamp: Timestamp.now()
+              });
+              console.log('✅ Anonymous architecture updated after AI update');
+            } else {
+              // Create new anonymous architecture
+              const architectureName = `Architecture - ${new Date().toLocaleDateString()}`;
+              const newArchId = await anonymousArchitectureService.saveAnonymousArchitecture(architectureName, elkGraph);
+              console.log('✅ New anonymous architecture saved after AI update with ID:', newArchId);
+            }
+          } catch (error) {
+          // Check if this is the expected "No document to update" error after architecture transfer
+          if (error instanceof Error && error.message?.includes('No document to update')) {
+            console.log('ℹ️ Anonymous architecture was already transferred/deleted - this is expected after sign-in');
+          } else {
+            console.error('❌ Error saving anonymous architecture after AI update:', error);
+          }
+        }
+        } else if (isPublicMode && user) {
+          console.log('🚫 DEBUG: Skipping anonymous architecture update - user is signed in, architecture may have been transferred');
         }
       } else {
         console.log('⏸️ Skipping canvas update - operation for different architecture:', {
@@ -1484,25 +2397,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 : arch
             ));
             
-            // CRITICAL: Also save to Firebase for persistence
-            if (user?.uid) {
-              try {
-                console.log('💾 Auto-saving graph changes to Firebase for:', selectedArchitectureId);
-                const currentArch = savedArchitectures.find(arch => arch.id === selectedArchitectureId);
-                if (currentArch) {
-                  ArchitectureService.updateArchitecture(selectedArchitectureId, {
-                    rawGraph: elkGraph,
-                    lastModified: new Date()
-                  }).then(() => {
-                    console.log('✅ Graph changes auto-saved to Firebase');
-                  }).catch(error => {
-                    console.error('❌ Failed to auto-save graph changes:', error);
-                  });
-                }
-              } catch (error) {
-                console.error('❌ Error auto-saving to Firebase:', error);
-              }
-            }
+            // EMERGENCY: DISABLED auto-save to prevent Firebase quota exhaustion
+            // This was causing 20k+ writes by saving on every single graph update
+            // TODO: Implement proper debounced auto-save with 5+ second delays
+                    // Firebase auto-save disabled to prevent quota exhaustion
           }
           
         } catch (error) {
@@ -1512,7 +2410,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     });
     
     return unsubscribe;
-  }, [setRawGraph, user, rawGraph, selectedArchitectureId]);
+  }, [setRawGraph, user, rawGraph, selectedArchitectureId, isPublicMode]);
 
   // Listen for final processing completion (sync with ProcessingStatusIcon)
   useEffect(() => {
@@ -1531,12 +2429,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       }
       
       // Always unlock the agent when this event fires (this indicates true completion)
-      console.log('🔓 UNLOCKING agent - operations complete');
       setAgentLockedArchitectureId(null);
       
       // Clear loading indicators after unlocking (with small delay)
       setTimeout(() => {
-        console.log('🧹 Final cleanup - clearing all loading indicators');
         setArchitectureOperations({});
       }, 100);
     };
@@ -1687,30 +2583,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   }, [isSessionActive, safeSendClientEvent]);
 
   // Function to generate SVG directly from layoutGraph
-  // Helper function to render multi-line text in SVG using the same logic as ELK
-  const renderMultiLineText = (text: string, x: number, y: number, fontSize: number = 12): string => {
-    const lines = splitTextIntoLines(text, 76); // Use same width as ELK calculation
-    const lineHeight = 14;
-    
-    if (text === "GKE Gateway Controller") {
-      console.log(`🟩 [SVG] Rendering "${text}" at (${x}, ${y})`);
-      console.log(`🟩 [SVG] Got lines: [${lines.join('", "')}] (${lines.length} lines)`);
-    }
-    
-    // Generate SVG text elements for each line
-    let svgText = '';
-    for (let i = 0; i < lines.length; i++) {
-      const lineY = y + (i * lineHeight) - ((lines.length - 1) * lineHeight / 2);
-      svgText += `
-        <text x="${x}" y="${lineY}" 
-          text-anchor="middle" dominant-baseline="middle" 
-          font-size="${fontSize}" font-weight="bold" fill="#2d6bc4"
-          font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">${lines[i]}</text>
-      `;
-    }
-    return svgText;
-  };
-
   const generateSVG = useCallback((layoutedGraph: any): string => {
     if (!layoutedGraph) return '';
     
@@ -1856,39 +2728,43 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       if (label) {
         if (isContainer) {
           // Group node - label at center
-          svg += renderMultiLineText(label, x + width/2, y + height/2, 14);
+          svg += `
+            <text x="${x + width/2}" y="${y + height/2}" 
+              text-anchor="middle" dominant-baseline="middle" 
+              font-size="14" font-weight="bold" fill="#2d6bc4">${label}</text>
+          `;
           
-          // Add icon for container nodes too at the top - FIXED: 48x48 square
+          // Add icon for container nodes too at the top
           if (icon) {
             // Direct image embedding approach
             svg += `
-              <image x="${x + width/2 - 24}" y="${y + 10}" width="48" height="48" 
+              <image x="${x + width/2 - 15}" y="${y + 10}" width="30" height="30" 
                  href="/assets/canvas/${icon}.svg" />
             `;
           }
         } else {
-          // Regular node - text positioned below icon with proper gap
-          // Icon is at y + 10 to y + 58 (48px tall)
-          // Text starts at icon bottom + 12px gap = y + 58 + 12 = y + 70
-          const textY = y + 70;
-          svg += renderMultiLineText(label, x + width/2, textY, 12);
+          // Regular node - label at bottom
+          svg += `
+            <text x="${x + width/2}" y="${y + height - 10}" 
+              text-anchor="middle" dominant-baseline="middle" 
+              font-size="12" font-weight="bold" fill="#2d6bc4">${label}</text>
+          `;
           
-          // Add icon if specified, otherwise use first letter - FIXED: 48x48 square
+          // Add icon if specified, otherwise use first letter
           if (icon) {
             // Direct image embedding approach
             svg += `
-              <image x="${x + width/2 - 24}" y="${y + 10}" width="48" height="48"
+              <image x="${x + width/2 - 20}" y="${y + 10}" width="40" height="40"
                 href="/assets/canvas/${icon}.svg" />
             `;
           } else {
-            // Fallback to first letter in a square - FIXED: 48x48 square
+            // Fallback to first letter in a circle
             const iconLetter = label.charAt(0).toUpperCase();
             svg += `
-              <rect x="${x + width/2 - 24}" y="${y + 10}" width="48" height="48" 
-                fill="#2d6bc4" rx="8" ry="8" />
-              <text x="${x + width/2}" y="${y + 34}" 
+              <circle cx="${x + width/2}" cy="${y + height/2 - 10}" r="15" fill="#2d6bc4" />
+              <text x="${x + width/2}" y="${y + height/2 - 6}" 
                 text-anchor="middle" dominant-baseline="middle" 
-                font-size="16" font-weight="bold" fill="white">${iconLetter}</text>
+                font-size="14" font-weight="bold" fill="white">${iconLetter}</text>
             `;
           }
         }
@@ -2027,10 +2903,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     <ApiEndpointProvider apiEndpoint={apiEndpoint}>
     <div className="w-full h-full flex overflow-hidden bg-white dark:bg-black">
       
-      {/* Architecture Sidebar */}
+      {/* Architecture Sidebar - Always show collapsed in public mode */}
       <ArchitectureSidebar
-        isCollapsed={sidebarCollapsed}
-        onToggleCollapse={user ? handleToggleSidebar : undefined}
+        isCollapsed={isPublicMode ? true : sidebarCollapsed}
+        onToggleCollapse={!isPublicMode && user ? handleToggleSidebar : undefined}
         onNewArchitecture={handleNewArchitecture}
         onSelectArchitecture={handleSelectArchitecture}
         onDeleteArchitecture={handleDeleteArchitecture}
@@ -2040,36 +2916,54 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         architectures={savedArchitectures}
         isArchitectureOperationRunning={isArchitectureOperationRunning}
         user={user}
+        isLoadingArchitectures={isLoadingArchitectures}
       />
 
       {/* Main Content Area */}
       <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${sidebarCollapsed ? 'ml-0' : 'ml-0'}`}>
-        {/* ProcessingStatusIcon with sidebar toggle */}
+        {/* ProcessingStatusIcon with sidebar toggle - Always visible */}
       <div className="absolute top-4 left-4 z-[101]">
-          {/* Atelier icon with hover overlay */}
-          <div className="relative group">
-            <ProcessingStatusIcon onClick={sidebarCollapsed && user ? handleToggleSidebar : undefined} />
-            {/* Hover overlay - show panel-right-close on hover when sidebar is CLOSED and user is signed in */}
-            {sidebarCollapsed && user && (
-              <button 
-                onClick={handleToggleSidebar}
-                className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-200 shadow-lg"
-                title="Open Sidebar"
-              >
-                <PanelRightClose className="w-4 h-4 text-gray-700" />
-              </button>
-            )}
-          </div>
+            {/* Atelier icon with hover overlay */}
+            <div className="relative group">
+              <ProcessingStatusIcon onClick={!isPublicMode && sidebarCollapsed && user ? handleToggleSidebar : undefined} />
+              {/* Hover overlay - show panel-right-close on hover when sidebar is CLOSED and user is signed in (not in public mode) */}
+              {!isPublicMode && sidebarCollapsed && user && (
+                <button 
+                  onClick={handleToggleSidebar}
+                  className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-200 shadow-lg"
+                  title="Open Sidebar"
+                >
+                  <PanelRightClose className="w-4 h-4 text-gray-700" />
+                </button>
+              )}
+      </div>
       </div>
 
 
 
       {/* Save/Edit and Settings buttons - top-right */}
       <div className="absolute top-4 right-4 z-[100] flex gap-2">
-        <SaveAuth onSave={handleSave} isCollapsed={true} />
+        {/* Share Button - Always visible for all users */}
+        <button
+          onClick={handleShareCurrent}
+          disabled={!rawGraph || !rawGraph.children || rawGraph.children.length === 0}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
+            !rawGraph || !rawGraph.children || rawGraph.children.length === 0
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-white text-gray-700 hover:bg-gray-50'
+          }`}
+          title={
+            !rawGraph || !rawGraph.children || rawGraph.children.length === 0
+              ? 'Create some content first to share'
+              : 'Share current architecture'
+          }
+        >
+          <Share className="w-4 h-4" />
+          <span className="text-sm font-medium">Share</span>
+        </button>
         
-        {/* Save Button (only show when signed in) or Edit Button (when not signed in) */}
-        {user ? (
+        {/* Save Button (only show when signed in and not public mode) or Edit Button (when not signed in or public mode) */}
+        {user && !isPublicMode ? (
           <button
             onClick={handleManualSave}
             disabled={isSaving || selectedArchitectureId === 'new-architecture'}
@@ -2094,31 +2988,137 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             <span className="text-sm font-medium">Save</span>
           </button>
         ) : (
+          (() => {
+            // Early return with default config during SSR
+            if (typeof window === 'undefined') {
+              return (
           <button
-            onClick={() => {
-              // Trigger the same sign-in as SaveAuth component
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:shadow-md transition-all duration-200"
+                  title="Edit in full app"
+                >
+                  <Edit className="w-4 h-4" />
+                  <span className="text-sm font-medium">Edit</span>
+                </button>
+              );
+            }
+
+            // Detect if we're in embedded version vs main site
+            const isEmbedded = window.location.hostname === 'archgen-ecru.vercel.app' || 
+                              window.location.pathname === '/embed' ||
+                              window.parent !== window; // Detect if inside iframe
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            const hasArchitectureId = urlParams.has('arch');
+            const isMainSite = window.location.hostname === 'app.atelier-inc.net' || window.location.hostname === 'localhost';
+            
+            
+            // Button configuration based on context
+            // Show "Save" on main site, "Edit" in embedded version
+            const buttonConfig = isMainSite ? {
+              text: 'Save',
+              icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>,
+              action: 'sign-in', // Trigger profile sign-in
+              title: 'Sign in to save'
+            } : {
+              text: 'Edit',
+              icon: <Edit className="w-4 h-4" />,
+              action: 'new-tab', // Open new tab to main site
+              title: 'Edit in full app'
+            };
+            
+            
+            return (
+          <button
+            onClick={async () => {
+                  
+                  if (buttonConfig.action === 'new-tab') {
+                    // Embedded version: open main site in new tab
+              const currentState = {
+                elkGraph: rawGraph,
+                timestamp: Date.now()
+              };
+              localStorage.setItem('publicCanvasState', JSON.stringify(currentState));
+                    console.log('🔄 [EMBEDDED] Opening main site in new tab...');
+                    
+                    // Build target URL with architecture ID
+                    let targetUrl = 'https://app.atelier-inc.net/';
+                    let architectureId = null;
+                    
+                    // Check if we already have an architecture ID in the URL
+                    if (hasArchitectureId) {
+                      architectureId = urlParams.get('arch');
+                      console.log('🔗 [EMBEDDED] Using existing architecture ID:', architectureId);
+                    } else {
+                      // No existing ID - we need to save the current architecture to get an ID
+                      console.log('💾 [EMBEDDED] Saving current architecture to get shareable ID...');
+                      
+                      try {
+                        // Import the anonymous architecture service
+                        const { anonymousArchitectureService } = await import('../../services/anonymousArchitectureService');
+                        
+                        // Save the current rawGraph as an anonymous architecture
+                        architectureId = await anonymousArchitectureService.saveAnonymousArchitecture(
+                          'Architecture from Embed',
+                          rawGraph
+                        );
+                        console.log('✅ [EMBEDDED] Saved architecture with ID:', architectureId);
+                      } catch (error) {
+                        console.error('❌ [EMBEDDED] Failed to save architecture:', error);
+                        // Continue without ID if save fails
+                      }
+                    }
+                    
+                    // Add architecture ID to URL if we have one
+                    if (architectureId) {
+                      targetUrl += `?arch=${architectureId}`;
+                    }
+                    
+                    console.log('🔗 [EMBEDDED] Target URL:', targetUrl);
+                    window.open(targetUrl, '_blank');
+                  } else {
+                    // Main site: trigger sign-in via profile button
+                    console.log('🔄 [MAIN SITE] Triggering sign-in for save...');
               const saveAuthButton = document.querySelector('.save-auth-dropdown button');
               if (saveAuthButton) {
+                      console.log('✅ [MAIN SITE] Found profile button, clicking...');
                 (saveAuthButton as HTMLButtonElement).click();
+                    } else {
+                      console.error('❌ [MAIN SITE] Profile button not found!');
+                    }
               }
             }}
             className="flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:shadow-md transition-all duration-200"
-            title="Sign in to edit and save architectures"
+                title={buttonConfig.title}
           >
-            <Edit className="w-4 h-4" />
-            <span className="text-sm font-medium">Edit</span>
+                {buttonConfig.icon}
+                <span className="text-sm font-medium">{buttonConfig.text}</span>
           </button>
+            );
+          })()
         )}
         
-        <button
-          onClick={() => setShowDev(!showDev)}
-          className={`flex items-center justify-center w-10 h-10 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
-            showDev ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
-          }`}
-          title="Developer Panel"
-        >
-          <Settings className="w-4 h-4" />
-        </button>
+
+
+        {/* Profile/Auth - Hidden in embedded version, visible on main site */}
+        {(() => {
+          // Show SaveAuth during SSR, will be corrected on client-side
+          if (typeof window === 'undefined') {
+            return <SaveAuth onSave={handleSave} isCollapsed={true} user={user} />;
+          }
+
+          const isEmbedded = window.location.hostname === 'archgen-ecru.vercel.app' || 
+                            window.location.pathname === '/embed' ||
+                            window.parent !== window; // Detect if inside iframe
+          
+          // Don't show profile button in embedded version
+          if (isEmbedded) {
+            return null;
+          }
+          
+          return <SaveAuth onSave={handleSave} isCollapsed={true} user={user} />;
+        })()}
       </div>
 
       {/* Connection status indicator - HIDDEN */}
@@ -2302,8 +3302,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           </div>
         )}
         
-        {/* Comprehensive Dev Panel - Contains all developer tools */}
-        {showDev && (
+        {/* Comprehensive Dev Panel - Contains all developer tools - Hidden in public mode */}
+        {showDev && !isPublicMode && (
           <div className="absolute top-16 right-4 z-50 w-80 max-h-[calc(100vh-80px)]">
             <div className="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden h-full flex flex-col">
               {/* Panel Header */}
@@ -2327,7 +3327,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                   onClick={() => {
                     console.log('Loading default architecture...');
                     setRawGraph(DEFAULT_ARCHITECTURE);
-                    setShouldAutoFit(true); // Enable auto-fit when loading default architecture
                   }}
                   className="w-full px-3 py-2 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700 transition-colors"
                 >
@@ -2460,6 +3459,368 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           }}
         />
       </div>
+      
+      {/* Share Overlay for Embedded Version */}
+      {shareOverlay.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" onClick={() => setShareOverlay({ show: false, url: '' })}>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {shareOverlay.error ? 'Share Failed' : 'Share Architecture'}
+              </h3>
+              <button
+                onClick={() => setShareOverlay({ show: false, url: '' })}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {shareOverlay.error ? (
+              <div className="text-red-600 text-center py-4">
+                {shareOverlay.error}
+              </div>
+            ) : (
+              <div>
+                <p className="text-gray-600 mb-4">
+                  {shareOverlay.copied ? 
+                    'Link copied to clipboard! Share this link with others:' : 
+                    'Copy this link to share your architecture:'
+                  }
+                </p>
+                <div className="relative mb-4">
+                  <div className="bg-gray-50 border rounded-lg p-3 pr-12">
+                    <code className="text-sm text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis block">
+                      {shareOverlay.url}
+                    </code>
+                  </div>
+                  <button
+                    onClick={() => {
+                      // Manual copy fallback for embedded version
+                      const textArea = document.createElement('textarea');
+                      textArea.value = shareOverlay.url;
+                      document.body.appendChild(textArea);
+                      textArea.select();
+                      try {
+                        document.execCommand('copy');
+                        // Show brief success feedback
+                        const btn = document.activeElement as HTMLButtonElement;
+                        const originalInner = btn.innerHTML;
+                        btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
+                        setTimeout(() => {
+                          btn.innerHTML = originalInner;
+                        }, 1000);
+                      } catch (err) {
+                        console.error('Manual copy failed:', err);
+                      }
+                      document.body.removeChild(textArea);
+                    }}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-500 hover:text-gray-700 transition-colors"
+                    title="Copy to clipboard"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      setCopyButtonState('copying');
+                      
+                      try {
+                        let copySuccess = false;
+                        
+                        // Detect if we're in embedded context
+                        const isEmbedded = window.location.hostname === 'archgen-ecru.vercel.app' || 
+                                          window.location.pathname === '/embed' ||
+                                          window.parent !== window;
+                        
+                        // For embedded contexts, ONLY use execCommand to avoid clipboard API errors
+                        if (isEmbedded) {
+                          console.log('🔒 Embedded context detected, using execCommand only');
+                          
+                          // Create invisible textarea for copy operation
+                          const textArea = document.createElement('textarea');
+                          textArea.value = shareOverlay.url;
+                          textArea.style.position = 'fixed';
+                          textArea.style.top = '0';
+                          textArea.style.left = '0';
+                          textArea.style.width = '2em';
+                          textArea.style.height = '2em';
+                          textArea.style.padding = '0';
+                          textArea.style.border = 'none';
+                          textArea.style.outline = 'none';
+                          textArea.style.boxShadow = 'none';
+                          textArea.style.background = 'transparent';
+                          textArea.style.opacity = '0';
+                          textArea.style.pointerEvents = 'none';
+                          document.body.appendChild(textArea);
+                          textArea.focus();
+                          textArea.select();
+                          
+                          copySuccess = document.execCommand('copy');
+                          document.body.removeChild(textArea);
+                          
+                          console.log(copySuccess ? '✅ execCommand copy succeeded' : '❌ execCommand copy failed');
+                        } else {
+                          // For non-embedded contexts, try modern clipboard API first
+                          try {
+                            if (navigator.clipboard && window.isSecureContext) {
+                              await navigator.clipboard.writeText(shareOverlay.url);
+                              copySuccess = true;
+                              console.log('✅ Modern clipboard API succeeded');
+                            }
+                          } catch (clipboardError) {
+                            console.log('Modern clipboard API failed, trying execCommand fallback:', clipboardError);
+                            
+                            // Fallback to execCommand
+                            const textArea = document.createElement('textarea');
+                            textArea.value = shareOverlay.url;
+                            textArea.style.position = 'fixed';
+                            textArea.style.top = '0';
+                            textArea.style.left = '0';
+                            textArea.style.width = '2em';
+                            textArea.style.height = '2em';
+                            textArea.style.padding = '0';
+                            textArea.style.border = 'none';
+                            textArea.style.outline = 'none';
+                            textArea.style.boxShadow = 'none';
+                            textArea.style.background = 'transparent';
+                            textArea.style.opacity = '0';
+                            textArea.style.pointerEvents = 'none';
+                            document.body.appendChild(textArea);
+                            textArea.focus();
+                            textArea.select();
+                            
+                            copySuccess = document.execCommand('copy');
+                            document.body.removeChild(textArea);
+                            
+                            console.log(copySuccess ? '✅ execCommand fallback succeeded' : '❌ execCommand fallback failed');
+                          }
+                        }
+                        
+                        if (copySuccess) {
+                          // Show success animation
+                          setCopyButtonState('success');
+                          setTimeout(() => {
+                            setCopyButtonState('idle');
+                          }, 1500);
+                        } else {
+                          throw new Error('All copy methods failed');
+                        }
+                      } catch (err) {
+                        console.error('Copy failed:', err);
+                        setCopyButtonState('idle');
+                        // Show user-friendly error message
+                        showNotification('error', 'Copy Failed', 'Unable to copy link. Please manually select and copy the URL above.');
+                      }
+                    }}
+                    className={`flex-1 px-4 py-2 rounded-full font-medium transition-all duration-200 flex items-center justify-center gap-2
+                      ${copyButtonState === 'idle' ? 'bg-black text-white hover:bg-gray-800' : ''}
+                      ${copyButtonState === 'copying' ? 'bg-gray-600 text-white scale-95' : ''}
+                      ${copyButtonState === 'success' ? 'bg-white text-green-700 border-2 border-green-500 border-opacity-60 scale-105' : ''}
+                    `}
+                    disabled={copyButtonState !== 'idle'}
+                  >
+                    {copyButtonState === 'idle' && (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        Copy Link
+                      </>
+                    )}
+                    {copyButtonState === 'copying' && (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Copying...
+                      </>
+                    )}
+                    {copyButtonState === 'success' && (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Copied!
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setShareOverlay({ show: false, url: '' })}
+                    className="px-4 py-2 border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Input Overlay for Rename */}
+      {inputOverlay.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" onClick={inputOverlay.onCancel}>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {inputOverlay.title}
+              </h3>
+              <button
+                onClick={inputOverlay.onCancel}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              const value = formData.get('inputValue') as string;
+              if (value?.trim()) {
+                inputOverlay.onConfirm(value.trim());
+              }
+            }}>
+              <div className="mb-4">
+                <input
+                  type="text"
+                  name="inputValue"
+                  defaultValue={inputOverlay.defaultValue}
+                  placeholder={inputOverlay.placeholder}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 bg-black text-white px-4 py-2 rounded-full hover:bg-gray-800 transition-colors font-medium"
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  onClick={inputOverlay.onCancel}
+                  className="px-4 py-2 border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Overlay */}
+      {deleteOverlay.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" onClick={deleteOverlay.onCancel}>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {deleteOverlay.title}
+              </h3>
+              <button
+                onClick={deleteOverlay.onCancel}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-gray-600">
+                {deleteOverlay.message}
+              </p>
+            </div>
+            
+            <div className="flex gap-2">
+              <button
+                onClick={deleteOverlay.onConfirm}
+                className="flex-1 bg-black text-white px-4 py-2 rounded-full hover:bg-gray-800 transition-colors font-medium"
+              >
+                Delete
+              </button>
+              <button
+                onClick={deleteOverlay.onCancel}
+                className="px-4 py-2 border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Universal Notification Overlay (replaces all alert/confirm popups) */}
+      {notification.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" onClick={() => notification.type !== 'confirm' && hideNotification()}>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-lg font-semibold ${
+                notification.type === 'success' ? 'text-green-600' :
+                notification.type === 'error' ? 'text-red-600' :
+                notification.type === 'confirm' ? 'text-orange-600' :
+                'text-gray-900'
+              }`}>
+                {notification.title}
+              </h3>
+              {notification.type !== 'confirm' && (
+                <button
+                  onClick={hideNotification}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-gray-600 whitespace-pre-line">
+                {notification.message}
+              </p>
+            </div>
+            
+            <div className="flex gap-2 justify-end">
+              {notification.type === 'confirm' ? (
+                <>
+                  <button
+                    onClick={notification.onCancel}
+                    className="px-4 py-2 border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                  >
+                    {notification.cancelText}
+                  </button>
+                  <button
+                    onClick={notification.onConfirm}
+                    className="px-4 py-2 bg-black text-white rounded-full hover:bg-gray-800 transition-colors font-medium"
+                  >
+                    {notification.confirmText}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={hideNotification}
+                  className="px-4 py-2 bg-black text-white rounded-full hover:bg-gray-800 transition-colors font-medium"
+                >
+                  {notification.confirmText}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
       </div>
     </div>
     </ApiEndpointProvider>

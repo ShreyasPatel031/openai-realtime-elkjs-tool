@@ -1,4 +1,5 @@
-import { StreamExecutor } from "../../reasoning/StreamExecutor";
+// DISABLED: StreamExecutor import - using simple agent instead
+// import { StreamExecutor } from "../../reasoning/StreamExecutor";
   import { addReasoningMessage, addFunctionCallingMessage, updateStreamingMessage, addProcessCompleteMessage, makeChatVisible } from "../../utils/chatUtils";
 
 export async function process_user_requirements() {
@@ -88,7 +89,8 @@ ${currentTextInput}`;
      // Function call message tracking  
      const functionCallMessages = new Map<string, { messageId: string; content: string }>();
      
-     // CRITICAL: Create StreamExecutor with all required callbacks
+     // DISABLED: StreamExecutor creation - using simple agent instead
+         /*
          const streamExecutor = new StreamExecutor({
        elkGraph: currentGraph,
        apiEndpoint: undefined, // Use default
@@ -162,16 +164,15 @@ ${currentTextInput}`;
 
       }
     });
+    */
     
     const executorSetupTime = performance.now();
 
     
 
     
-    // Execute the stream
-    console.log('🎯 About to execute StreamExecutor...');
-    await streamExecutor.execute();
-    console.log('✅ StreamExecutor execution completed');
+    // DISABLED: Old broken StreamExecutor - using new simple agent instead
+    // await streamExecutor.execute();
     
 
     

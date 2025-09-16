@@ -1,3 +1,40 @@
+/**
+ * ======================================================================
+ * LOCAL DEVELOPMENT SERVER
+ * ======================================================================
+ * 
+ * IMPORTANT: API ENDPOINT GUIDELINES
+ * 
+ * ⚠️  DO NOT ADD NEW API LOGIC DIRECTLY TO THIS FILE ⚠️
+ * 
+ * When adding new API endpoints:
+ * 
+ * 1. CREATE NEW FILES IN /api/ DIRECTORY
+ *    - Example: /api/myNewEndpoint.ts
+ *    - This ensures Vercel production uses the same logic
+ * 
+ * 2. IMPORT AND USE THE API HANDLER HERE
+ *    - Example: 
+ *      const myHandler = (await import('../api/myNewEndpoint.ts')).default;
+ *      app.post("/api/myNewEndpoint", myHandler);
+ * 
+ * 3. NEVER DUPLICATE LOGIC BETWEEN server.js AND /api/
+ *    - This causes inconsistencies between local and production
+ *    - Always use the /api/ files as the single source of truth
+ * 
+ * EXCEPTIONS (local-only endpoints):
+ * - /token (OpenAI realtime sessions for local dev)
+ * - /api/questionnaire (uses local connection manager)
+ * 
+ * This approach ensures:
+ * ✅ Local and Vercel production behave identically
+ * ✅ Single source of truth for API logic
+ * ✅ Easy testing and maintenance
+ * ✅ No environment-specific bugs
+ * 
+ * ======================================================================
+ */
+
 import express from "express";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
@@ -42,64 +79,29 @@ app.use(cors());
 app.use(express.json());                     // for application/json
 app.use(express.urlencoded({ extended: false })); // for x-www-form-urlencoded
 
-// API routes - Import from the main API directory
+// ============================================================================
+// API ROUTES - Import handlers from /api/ directory (shared with Vercel)
+// ============================================================================
+// REMINDER: Always create new API endpoints in /api/ directory, not here!
+// This ensures local development and Vercel production use identical logic.
+
 import streamHandler from '../api/stream.ts';
 import embedHandler from '../api/embed.ts';
+import simpleAgentHandler from '../api/simple-agent.ts';
 app.post("/api/stream", upload.array('images', 5), streamHandler);
 app.post("/api/embed", embedHandler);
+app.post("/api/simple-agent", simpleAgentHandler);
 
-// Chat naming endpoint with GPT
-app.post("/api/generateChatName", async (req, res) => {
-  try {
-    const { architecture, userPrompt, nodeCount, edgeCount } = req.body;
-    
-    // Use OpenAI to generate intelligent names
-    const OpenAI = (await import('openai')).default;
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    
-    let chatName = 'New Architecture';
-    
-    if (userPrompt) {
-      try {
-        const completion = await openai.chat.completions.create({
-          model: "gpt-3.5-turbo",
-          messages: [
-            { 
-              role: "system", 
-              content: "You are an expert at creating concise, professional names for cloud architecture projects. Generate 2-4 word names that capture the essence of the architecture. Focus on the main technology stack, pattern, or use case. Examples: 'Microservices Platform', 'Data Pipeline', 'Serverless API', 'Multi-Cloud Setup'."
-            },
-            { 
-              role: "user", 
-              content: `Create a professional name for this architecture: "${userPrompt}". The architecture has ${nodeCount} components and ${edgeCount} connections.`
-            }
-          ],
-          max_tokens: 15,
-          temperature: 0.7,
-        });
+// Chat naming - uses same sophisticated AI logic as production
+const generateChatNameHandler = (await import('../api/generateChatName.ts')).default;
+app.post("/api/generateChatName", generateChatNameHandler);
 
-        const generatedName = completion.choices[0].message.content?.trim();
-        if (generatedName) {
-          // Remove quotes from OpenAI response
-          chatName = generatedName.replace(/^["']|["']$/g, '');
-        }
-      } catch (openaiError) {
-        console.warn('OpenAI naming failed, using fallback:', openaiError.message);
-        // Simple fallback
-        if (userPrompt.toLowerCase().includes('microservice')) chatName = 'Microservices Platform';
-        else if (userPrompt.toLowerCase().includes('web')) chatName = 'Web Application';
-        else if (userPrompt.toLowerCase().includes('data')) chatName = 'Data Pipeline';
-        else chatName = 'Cloud Architecture';
-      }
-    }
-    
-    console.log(`🆕 Generated chat name: "${chatName}" for prompt: "${userPrompt}"`);
-    res.json({ name: chatName });
-    
-  } catch (error) {
-    console.error('❌ Error generating chat name:', error);
-    res.status(500).json({ error: 'Failed to generate chat name', name: 'New Architecture' });
-  }
-});
+// ============================================================================
+// LOCAL-ONLY ENDPOINTS (exceptions to the /api/ rule)
+// ============================================================================
+// These endpoints are only needed for local development and use local resources
+// like ConnectionManager that don't exist in the Vercel serverless environment.
+
 app.post("/api/questionnaire", async (req, res) => {
   try {
     console.log("Received questionnaire request:", req.body);
@@ -202,7 +204,8 @@ app.get('/precomputed-icon-embeddings.json', (req, res) => {
 
 app.use(vite.middlewares);
 
-// API route for token generation
+// OpenAI Realtime Session Token - Local development only
+// (Vercel production doesn't need this as it uses different auth patterns)
 app.get("/token", async (req, res) => {
   try {
     const response = await fetch(
@@ -280,6 +283,8 @@ async function findAvailablePort(startPort = 3000) {
     });
   });
 }
+
+
 
 // Start the server on the next available port
 const startPort = process.env.PORT ? parseInt(process.env.PORT) : 3000;

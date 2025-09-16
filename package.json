@@ -17,6 +17,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
     "generate-icons": "tsx client/scripts/generateIconList.ts",
     "generate-dynamic-lists": "node scripts/generateDynamicLists.cjs",
     "preview": "vite preview client"

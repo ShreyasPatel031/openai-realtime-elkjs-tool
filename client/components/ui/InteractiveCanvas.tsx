@@ -7,7 +7,10 @@ import ReactFlow, {
   BackgroundVariant,
   Node,
   Edge,
-  OnConnectStartParams
+  OnConnectStartParams,
+  useReactFlow,
+  getRectOfNodes,
+  getTransformForBounds
 } from "reactflow"
 import "reactflow/dist/style.css"
 import { cn } from "../../lib/utils"
@@ -35,7 +38,7 @@ import ProcessingStatusIcon from "../ProcessingStatusIcon"
 import { auth } from "../../lib/firebase"
 import { onAuthStateChanged, User } from "firebase/auth"
 import { Timestamp } from "firebase/firestore"
-import { Settings, PanelRightOpen, PanelRightClose, Save, Edit, Share } from "lucide-react"
+import { Settings, PanelRightOpen, PanelRightClose, Save, Edit, Share, Download } from "lucide-react"
 import { DEFAULT_ARCHITECTURE as EXTERNAL_DEFAULT_ARCHITECTURE } from "../../data/defaultArchitecture"
 // Removed mock architectures import - only using real user architectures now
 import SaveAuth from "../auth/SaveAuth"
@@ -1315,6 +1318,111 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Debug logging for graph state changes
   useEffect(() => {
   }, [rawGraph, selectedArchitectureId]);
+
+  // Handler for PNG export functionality  
+  const handleExportPNG = useCallback(async () => {
+    if (!nodes.length) {
+      console.warn('⚠️ No architecture to export');
+      return;
+    }
+
+    try {
+      console.log('📸 Starting PNG export...');
+      
+      // Calculate the bounds of all nodes
+      const nodesBounds = getRectOfNodes(nodes);
+      
+      // Add padding around the architecture
+      const padding = 50;
+      const expandedBounds = {
+        x: nodesBounds.x - padding,
+        y: nodesBounds.y - padding,
+        width: nodesBounds.width + 2 * padding,
+        height: nodesBounds.height + 2 * padding
+      };
+      
+      // Calculate transform for the bounds
+      const transform = getTransformForBounds(
+        expandedBounds,
+        expandedBounds.width,
+        expandedBounds.height,
+        0.5, // min zoom
+        2,   // max zoom  
+        0    // padding
+      );
+      
+      // Create a temporary canvas element for high-resolution capture
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      
+      // Set high DPI for crisp output
+      const scale = 3; // 3x resolution for HD quality
+      canvas.width = expandedBounds.width * scale;
+      canvas.height = expandedBounds.height * scale;
+      context?.scale(scale, scale);
+      
+      // Get the ReactFlow viewport element
+      const reactFlowElement = document.querySelector('.react-flow__viewport');
+      if (!reactFlowElement) {
+        throw new Error('ReactFlow viewport not found');
+      }
+      
+      // Use html2canvas to capture the architecture
+      const html2canvas = (await import('html2canvas')).default;
+      
+      const captureCanvas = await html2canvas(reactFlowElement as HTMLElement, {
+        backgroundColor: '#ffffff',
+        scale: scale,
+        useCORS: true,
+        allowTaint: true,
+        width: expandedBounds.width,
+        height: expandedBounds.height,
+        x: expandedBounds.x,
+        y: expandedBounds.y,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: expandedBounds.width,
+        windowHeight: expandedBounds.height
+      });
+      
+      // Convert to blob and download
+      captureCanvas.toBlob((blob) => {
+        if (!blob) {
+          console.error('❌ Failed to create PNG blob');
+          return;
+        }
+        
+        // Create download link
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `architecture-${new Date().toISOString().slice(0, 10)}.png`;
+        
+        // Trigger download
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Cleanup
+        URL.revokeObjectURL(url);
+        
+        console.log('✅ PNG export completed successfully');
+        
+        // Show success notification if available
+        if (typeof showNotification === 'function') {
+          showNotification('success', 'Export Complete', 'Architecture exported as PNG');
+        }
+      }, 'image/png', 1.0); // Max quality
+      
+    } catch (error) {
+      console.error('❌ PNG export failed:', error);
+      
+      // Show error notification if available
+      if (typeof showNotification === 'function') {
+        showNotification('error', 'Export Failed', 'Failed to export PNG. Please try again.');
+      }
+    }
+  }, [nodes]);
 
   // Handler for save functionality
   const handleSave = useCallback(async (user: User) => {
@@ -2960,6 +3068,25 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
         >
           <Share className="w-4 h-4" />
           <span className="text-sm font-medium">Share</span>
+        </button>
+
+        {/* Export Button - Always visible when there's content */}
+        <button
+          onClick={handleExportPNG}
+          disabled={!rawGraph || !rawGraph.children || rawGraph.children.length === 0}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
+            !rawGraph || !rawGraph.children || rawGraph.children.length === 0
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-white text-gray-700 hover:bg-gray-50'
+          }`}
+          title={
+            !rawGraph || !rawGraph.children || rawGraph.children.length === 0
+              ? 'Create some content first to export'
+              : 'Export architecture as high-definition PNG'
+          }
+        >
+          <Download className="w-4 h-4" />
+          <span className="text-sm font-medium">Export</span>
         </button>
         
         {/* Save Button (only show when signed in and not public mode) or Edit Button (when not signed in or public mode) */}

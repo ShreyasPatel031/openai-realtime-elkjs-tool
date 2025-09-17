@@ -39,6 +39,9 @@
     },
     "api/test.ts": {
       "runtime": "nodejs20.x"
+    },
+    "api/test-js.js": {
+      "runtime": "nodejs20.x"
     }
   },
 

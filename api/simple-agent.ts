@@ -222,9 +222,9 @@ ${referenceArchitecture}`
     
     // Try different ways to get the response ID
     console.log('🔍 AGENT: response.id:', response.id);
-    console.log('🔍 AGENT: response.response_id:', response.response_id);
-    console.log('🔍 AGENT: response.conversation_id:', response.conversation_id);
-    const responseId = response.id || response.response_id || response.conversation_id || `resp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log('🔍 AGENT: response.response_id:', (response as any).response_id);
+    console.log('🔍 AGENT: response.conversation_id:', (response as any).conversation_id);
+    const responseId = response.id || (response as any).response_id || (response as any).conversation_id || `resp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     console.log('🔍 AGENT: Final extracted response ID:', responseId);
     console.log('🔍 AGENT: responseId type:', typeof responseId);
     

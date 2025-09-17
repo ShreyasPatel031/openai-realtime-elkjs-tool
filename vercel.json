@@ -36,6 +36,9 @@
     },
     "api/stream.ts": {
       "runtime": "nodejs20.x"
+    },
+    "api/test.ts": {
+      "runtime": "nodejs20.x"
     }
   },
 

@@ -18,7 +18,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const openai = new OpenAI({ 
-      apiKey: process.env.OPENAI_API_KEY 
+      apiKey: process.env.OPENAI_API_KEY?.trim()
     });
 
     const response = await openai.embeddings.create({

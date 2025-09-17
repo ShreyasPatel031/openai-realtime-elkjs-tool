@@ -74,3 +74,4 @@ npm run build
 - `client/` - React frontend with real-time architecture generation
 - `scripts/` - Utility scripts including multi-server manager
 - `logs/` - Server logs (auto-created)
+# Test change

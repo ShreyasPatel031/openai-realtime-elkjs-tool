@@ -42,6 +42,7 @@ export interface InteractiveCanvasProps {
   sendClientEvent?: (message: any) => void;
   events?: any[]; // Add events from the server
   apiEndpoint?: string; // API endpoint for backend calls
+  isPublicMode?: boolean; // Enable public/embedded mode
 }
 
 export interface ElkLabel {

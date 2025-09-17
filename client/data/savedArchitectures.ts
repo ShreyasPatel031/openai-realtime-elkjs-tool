@@ -2,16 +2,11 @@ import { DEFAULT_ARCHITECTURE } from './defaultArchitecture';
 
 // Saved architecture variations for testing
 export const SAVED_ARCHITECTURES = {
-  'default': {
-    id: 'default',
-    name: 'Default GCP Architecture',
-    timestamp: new Date(),
-    rawGraph: DEFAULT_ARCHITECTURE
-  },
+  // REMOVED: Default GCP Architecture - no hardcoded names allowed
 
   'lambda-web-stack': {
     id: 'lambda-web-stack',
-    name: 'Lambda Web Stack',
+    name: 'Test Architecture 1', // REMOVED: Lambda Web Stack - no hardcoded names
     timestamp: new Date(Date.now() - 1000 * 60 * 5),
     rawGraph: {
       "id": "root",
@@ -149,7 +144,7 @@ export const SAVED_ARCHITECTURES = {
 
   'multicloud-replica': {
     id: 'multicloud-replica',
-    name: 'Multi-Cloud Setup',
+    name: 'Test Architecture 2', // REMOVED: Multi-Cloud Setup - no hardcoded names
     timestamp: new Date(Date.now() - 1000 * 60 * 10),
     rawGraph: {
       "id": "root",

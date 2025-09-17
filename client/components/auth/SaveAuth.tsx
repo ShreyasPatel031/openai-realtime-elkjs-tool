@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../../lib/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut, User, onAuthStateChanged, getIdToken } from 'firebase/auth';
-import { Save, LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut, User as UserIcon } from 'lucide-react';
 
 interface SaveAuthProps {
   onSave?: (user: User) => void;
@@ -81,18 +81,14 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
       await signOut(auth);
       console.log('✅ User signed out');
       setShowDropdown(false);
+      
+      // Redirect to canvas after sign out
+      window.location.href = window.location.origin + '/canvas';
     } catch (error) {
       console.error('❌ Error signing out:', error);
     }
   };
 
-  const handleSaveClick = () => {
-    if (user && onSave) {
-      onSave(user);
-    } else if (!user) {
-      handleGoogleSignIn();
-    }
-  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -115,7 +111,7 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
   return (
     <div className={`relative save-auth-dropdown ${className}`}>
       <button
-        onClick={user ? () => setShowDropdown(!showDropdown) : handleSaveClick}
+        onClick={user ? () => setShowDropdown(!showDropdown) : handleGoogleSignIn}
         disabled={isLoading}
         className={`flex items-center gap-3 rounded-lg shadow-lg border border-gray-200 hover:bg-gray-50 hover:shadow-md transition-all duration-200 ${
           isCollapsed ? 'w-10 h-10 justify-center' : 'w-full px-4 py-3 justify-start'
@@ -195,14 +191,6 @@ const SaveAuth: React.FC<SaveAuthProps> = ({ onSave, className = "", isCollapsed
           </div>
           
           <div className="p-2">
-            <button
-              onClick={handleSaveClick}
-              className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
-            >
-              <Save className="w-4 h-4" />
-              <span>Save Current Architecture</span>
-            </button>
-            
             <button
               onClick={handleSignOut}
               className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"

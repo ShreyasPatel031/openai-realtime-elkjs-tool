@@ -28,8 +28,6 @@ export default async function handler(req: any, res: any) {
 
     const embedding = response.data[0].embedding;
     
-    console.log(`✅ Generated embedding for: "${text.substring(0, 50)}..."`);
-    
     return res.json({ embedding });
   } catch (err) {
     console.error('[embed] API error:', err);

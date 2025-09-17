@@ -83,7 +83,7 @@ class IconFallbackService {
     }
 
     try {
-      console.log(`🔍 IconFallback: Searching fallback for "${missingIconName}"`);
+      // Searching fallback silently
       
       // Handle both prefixed (gcp_compute) and non-prefixed (server) icon names
       let provider: string;
@@ -92,12 +92,12 @@ class IconFallbackService {
       const prefixMatch = missingIconName.match(/^(aws|gcp|azure)_(.+)$/);
       if (prefixMatch) {
         [, provider, searchTerm] = prefixMatch;
-        console.log(`🔍 IconFallback: Prefixed name detected - provider: ${provider}, term: ${searchTerm}`);
+        // Prefixed name detected
       } else {
         // For non-prefixed names, search across all providers to find the best semantic match
         provider = 'gcp'; // Default to GCP for result formatting, but we'll search all
         searchTerm = missingIconName;
-        console.log(`🔍 IconFallback: Non-prefixed name detected - will search all providers for: ${searchTerm}`);
+        // Non-prefixed name detected
       }
 
       // Get embedding for search term (only 1 API call)
@@ -116,7 +116,7 @@ class IconFallbackService {
         searchProviders = [provider];
       } else {
         // Non-prefixed names: first search general icons using embeddings, then cloud providers
-        console.log(`🔍 IconFallback: Searching general icons first for "${searchTerm}"`);
+        // Searching general icons first
         
         // Search through all embeddings to find general icons (no provider prefix)
         for (const [iconName, iconEmbedding] of Object.entries(this.precomputedData.embeddings)) {
@@ -130,7 +130,7 @@ class IconFallbackService {
         }
         
         // Always search cloud providers to find the absolute best match across all icons
-        console.log(`🔍 IconFallback: Found general icon match: "${searchTerm}" → "${globalBestMatch?.icon || 'none'}" (similarity: ${globalBestMatch?.similarity.toFixed(3) || 'none'}), also searching cloud providers for better match...`);
+        // Found general icon match, also searching cloud providers
         searchProviders = ['gcp', 'aws', 'azure'];
       }
 
@@ -165,7 +165,7 @@ class IconFallbackService {
         const fallbackIcon = globalBestMatch.provider === 'general' 
           ? globalBestMatch.icon 
           : `${globalBestMatch.provider}_${globalBestMatch.icon}`;
-        console.log(`✅ IconFallback: Found best fallback "${missingIconName}" → "${fallbackIcon}" (similarity: ${globalBestMatch.similarity.toFixed(3)})`);
+        // Found best fallback silently
         this.fallbackCache[missingIconName] = fallbackIcon;
         return fallbackIcon;
       } else {

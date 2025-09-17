@@ -1,4 +1,3 @@
-import { NextApiRequest, NextApiResponse } from 'next';
 import OpenAI from 'openai';
 
 const openai = new OpenAI({
@@ -13,7 +12,7 @@ interface ChatNameRequest {
   services?: string[];         // List of service names
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method Not Allowed' });
   }
@@ -63,12 +62,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (error) {
     console.error('Error generating chat name with OpenAI:', error);
     
-    // Fallback to smart naming based on available data
-    const fallbackName = generateFallbackChatName(req.body);
-    res.status(200).json({ 
-      name: fallbackName,
-      fallback: true 
-    });
+    // NO FALLBACKS - throw the error so the frontend knows it failed
+    throw error;
   }
 }
 
@@ -164,27 +159,4 @@ function buildNamingContext(data: {
   return parts.join('\n');
 }
 
-/**
- * Generate fallback name when OpenAI fails
- */
-function generateFallbackChatName(data: ChatNameRequest): string {
-  const { nodeCount = 0, services = [], userPrompt } = data;
-  
-  // Try to extract key terms from user prompt
-  if (userPrompt) {
-    const prompt = userPrompt.toLowerCase();
-    if (prompt.includes('microservice')) return 'Microservices Architecture';
-    if (prompt.includes('serverless')) return 'Serverless Architecture';
-    if (prompt.includes('web app')) return 'Web Application';
-    if (prompt.includes('api')) return 'API Architecture';
-    if (prompt.includes('data') || prompt.includes('pipeline')) return 'Data Pipeline';
-    if (prompt.includes('ml') || prompt.includes('ai')) return 'AI/ML Platform';
-  }
-  
-  // Fallback based on complexity
-  if (nodeCount > 10) return 'Complex Architecture';
-  if (nodeCount > 5) return 'Multi-Service Setup';
-  if (nodeCount > 0) return 'Cloud Architecture';
-  
-  return 'New Architecture';
-}
+// REMOVED: generateFallbackChatName function - NO FALLBACKS ALLOWED EVER

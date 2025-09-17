@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Framer Embed (Iframe Simulation)</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        iframe {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .test-info {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #e3f2fd;
+            border-radius: 4px;
+        }
+        .expected {
+            color: #2e7d32;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Embed Logic Testing</h1>
+        
+        <div class="test-section">
+            <h2>Test 1: Direct /embed Path (Local Development)</h2>
+            <div class="test-info">
+                <strong>Expected behavior:</strong>
+                <ul class="expected">
+                    <li>✅ No sidebar visible</li>
+                    <li>✅ Buttons: Share, Export, Edit (NOT Save)</li>
+                    <li>✅ Edit button opens main app in new tab</li>
+                    <li>✅ ViewMode: "framer" with isEmbedded: true</li>
+                </ul>
+            </div>
+            <iframe src="http://localhost:3002/embed"></iframe>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 2: Iframe Embed (Simulates Framer Production)</h2>
+            <div class="test-info">
+                <strong>Expected behavior:</strong>
+                <ul class="expected">
+                    <li>✅ Same as Test 1 - no sidebar, Edit button</li>
+                    <li>✅ Should detect iframe context (window.parent !== window)</li>
+                    <li>✅ ViewMode should still be "framer"</li>
+                </ul>
+                <p><strong>Note:</strong> This simulates how Framer embeds the component in production</p>
+            </div>
+            <iframe src="http://localhost:3002/embed"></iframe>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 3: Regular Canvas (Control Test)</h2>
+            <div class="test-info">
+                <strong>Expected behavior:</strong>
+                <ul class="expected">
+                    <li>✅ No sidebar (canvas mode)</li>
+                    <li>✅ Buttons: Share, Export, Edit</li>
+                    <li>✅ ViewMode: "canvas" with isEmbedded: false</li>
+                </ul>
+            </div>
+            <iframe src="http://localhost:3002/canvas"></iframe>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 4: Auth Mode (Control Test)</h2>
+            <div class="test-info">
+                <strong>Expected behavior:</strong>
+                <ul class="expected">
+                    <li>✅ Sidebar visible</li>
+                    <li>✅ Buttons: Share, Export, Save (NOT Edit)</li>
+                    <li>✅ ViewMode: "auth" with isEmbedded: false</li>
+                </ul>
+            </div>
+            <iframe src="http://localhost:3002/auth"></iframe>
+        </div>
+    </div>
+
+    <script>
+        // Log iframe detection for debugging
+        console.log('🔍 Iframe Detection Test:');
+        console.log('window.parent !== window:', window.parent !== window);
+        console.log('Current URL:', window.location.href);
+        
+        // Test the ViewModeContext detection logic
+        function testViewModeLogic() {
+            const testCases = [
+                { path: '/embed', production: true, expected: 'framer' },
+                { path: '/embed', production: false, expected: 'framer' },
+                { path: '/canvas', production: true, expected: 'canvas' },
+                { path: '/auth', production: true, expected: 'auth' },
+            ];
+            
+            console.log('🧪 ViewMode Logic Tests:');
+            testCases.forEach(test => {
+                console.log(`Path: ${test.path}, Production: ${test.production} → Expected: ${test.expected}`);
+            });
+        }
+        
+        testViewModeLogic();
+    </script>
+</body>
+</html>

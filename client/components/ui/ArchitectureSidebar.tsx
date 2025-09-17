@@ -269,8 +269,11 @@ const ArchitectureSidebar: React.FC<ArchitectureSidebarProps> = ({
                             }}
                             onMouseLeave={() => {
                               hoverTimeoutRef.current = setTimeout(() => {
-                                setHoveredArchitecture(null);
-                                setActiveDropdown(null);
+                                // Only clear hover state, not active dropdown
+                                // Active dropdown should only be cleared by clicking outside or on menu items
+                                if (activeDropdown !== architecture.id) {
+                                  setHoveredArchitecture(null);
+                                }
                               }, 100);
                             }}
                           >

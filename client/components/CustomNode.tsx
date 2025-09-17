@@ -101,7 +101,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
       return cachedUrl;
     }
 
-    console.log(`🔄 Loading icon: ${iconName}`);
+    // Loading icon silently
     
     const prefixMatch = iconName.match(/^(aws|gcp|azure)_(.+)$/);
     if (prefixMatch) {
@@ -132,7 +132,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
             
             // Cache the successfully loaded icon
             iconCacheService.cacheIcon(iconName, fullIconUrl);
-            console.log(`✅ Cached icon: ${iconName}`);
+            // Icon cached silently
             return fullIconUrl;
           }
         } catch (error) {
@@ -169,7 +169,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
         
         // Cache the successfully loaded icon
         iconCacheService.cacheIcon(iconName, fullUrl);
-        console.log(`✅ Cached legacy icon: ${iconName}`);
+        // Legacy icon cached silently
         return fullUrl;
       } catch {}
     }

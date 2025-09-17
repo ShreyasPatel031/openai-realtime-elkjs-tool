@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import InteractiveCanvas from './ui/InteractiveCanvas';
 import { ApiEndpointProvider } from '../contexts/ApiEndpointContext';
+import { ViewModeProvider } from '../contexts/ViewModeContext';
 
 interface FramerEmbeddableProps {
   apiEndpoint?: string;
@@ -46,17 +47,20 @@ function FramerEmbeddable({
 
   return (
     <ApiEndpointProvider apiEndpoint={apiEndpoint}>
-    <div style={containerStyle}>
-      <InteractiveCanvas
-        isSessionActive={isSessionActive}
-        startSession={startSession}
-        stopSession={stopSession}
-        sendTextMessage={sendTextMessage}
-        sendClientEvent={sendClientEvent}
-        events={events}
-        apiEndpoint={apiEndpoint}
-      />
-    </div>
+      <ViewModeProvider fallbackMode="framer">
+        <div style={containerStyle}>
+          <InteractiveCanvas
+            isSessionActive={isSessionActive}
+            startSession={startSession}
+            stopSession={stopSession}
+            sendTextMessage={sendTextMessage}
+            sendClientEvent={sendClientEvent}
+            events={events}
+            apiEndpoint={apiEndpoint}
+            isPublicMode={true}
+          />
+        </div>
+      </ViewModeProvider>
     </ApiEndpointProvider>
   );
 }

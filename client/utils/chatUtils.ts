@@ -8,47 +8,57 @@ import { Message } from '../types/chat';
  * Generate chat name from user input and architecture
  */
 export async function generateChatName(userPrompt: string, architecture: any): Promise<string> {
+  console.log('🔧 [generateChatName] Starting with:', { userPrompt, hasArchitecture: !!architecture });
+  
   try {
     const nodeCount = countNodes(architecture);
     const edgeCount = countEdges(architecture);
     
+    console.log('📊 [generateChatName] Architecture stats:', { nodeCount, edgeCount });
+    
+    const requestBody = {
+      architecture,
+      userPrompt,
+      nodeCount,
+      edgeCount
+    };
+    
+    console.log('📤 [generateChatName] Sending request to API:', {
+      url: `${window.location.origin}/api/generateChatName`,
+      body: { ...requestBody, architecture: architecture ? 'present' : 'missing' }
+    });
+    
     const response = await fetch(`${window.location.origin}/api/generateChatName`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        architecture,
-        userPrompt,
-        nodeCount,
-        edgeCount
-      })
+      body: JSON.stringify(requestBody)
     });
+
+    console.log('📥 [generateChatName] API response status:', response.status);
 
     if (response.ok) {
       const data = await response.json();
-      const cleanName = (data.name || getFallbackName(userPrompt)).replace(/^["']|["']$/g, ''); // Remove quotes
+      console.log('📥 [generateChatName] API response data:', data);
+      
+      if (!data.name) {
+        throw new Error('API returned empty name');
+      }
+      
+      const cleanName = data.name.replace(/^["']|["']$/g, ''); // Remove quotes
+      console.log('✅ [generateChatName] Final clean name:', cleanName);
       return cleanName;
+    } else {
+      const errorText = await response.text();
+      console.error('❌ [generateChatName] API error:', response.status, errorText);
+      throw new Error(`API error: ${response.status} - ${errorText}`);
     }
   } catch (error) {
-    console.warn('Chat naming API failed:', error);
+    console.error('❌ [generateChatName] API failed:', error);
+    throw error; // Re-throw the error instead of using fallback
   }
-  
-  return getFallbackName(userPrompt);
 }
 
-/**
- * Simple fallback name generation
- */
-function getFallbackName(userPrompt: string): string {
-  if (!userPrompt) return 'New Architecture';
-  
-  const prompt = userPrompt.toLowerCase();
-  if (prompt.includes('microservice')) return 'Microservices Architecture';
-  if (prompt.includes('web app')) return 'Web Application';
-  if (prompt.includes('api')) return 'API Architecture';
-  if (prompt.includes('data')) return 'Data Architecture';
-  
-  return 'New Architecture';
-}
+// REMOVED: getFallbackName function - NO FALLBACKS ALLOWED
 
 /**
  * Count nodes in architecture

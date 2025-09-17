@@ -78,7 +78,7 @@ export class ArchitectureService {
       
       // Save the complete architecture data including ELK rawGraph
       const completeData = {
-        name: architectureData.name || 'Untitled Architecture',
+        name: architectureData.name, // No fallback - name must be provided
         description: architectureData.description || `Architecture with ${architectureData.nodes?.length || 0} components`,
         userId: architectureData.userId,
         userEmail: architectureData.userEmail,
@@ -138,32 +138,7 @@ export class ArchitectureService {
 
 
 
-  /**
-   * Generate a default name for an architecture based on its content
-   */
-  static generateArchitectureName(nodes: any[], edges: any[]): string {
-    const nodeCount = nodes.length;
-    const edgeCount = edges.length;
-    const timestamp = new Date().toLocaleDateString();
-    
-    // Try to identify the type of architecture based on node names/types
-    const nodeLabels = nodes.map(node => node.data?.label || node.id).join(' ').toLowerCase();
-    
-    let archType = 'Architecture';
-    if (nodeLabels.includes('gcp') || nodeLabels.includes('google')) {
-      archType = 'GCP Architecture';
-    } else if (nodeLabels.includes('aws')) {
-      archType = 'AWS Architecture';
-    } else if (nodeLabels.includes('azure')) {
-      archType = 'Azure Architecture';
-    } else if (nodeLabels.includes('web') || nodeLabels.includes('frontend')) {
-      archType = 'Web Architecture';
-    } else if (nodeLabels.includes('microservice') || nodeLabels.includes('api')) {
-      archType = 'Microservices Architecture';
-    }
-    
-    return `${archType} - ${timestamp}`;
-  }
+  // REMOVED: generateArchitectureName function - all names must be AI-generated via generateChatName API
 
   static async loadUserArchitectures(userId: string): Promise<SavedArchitecture[]> {
     try {

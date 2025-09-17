@@ -23,7 +23,7 @@ import { CANVAS_STYLES, getEdgeStyle, getEdgeZIndex } from "../graph/styles/canv
 import { useElkToReactflowGraphConverter } from "../../hooks/useElkToReactflowGraphConverter"
 import { useChatSession } from '../../hooks/useChatSession'
 import { elkGraphDescription, agentInstruction } from '../../realtime/agentConfig'
-import { addFunctionCallingMessage, updateStreamingMessage } from '../../utils/chatUtils'
+import { addFunctionCallingMessage, updateStreamingMessage, generateChatName } from '../../utils/chatUtils'
 
 // Import extracted components
 import CustomNodeComponent from "../CustomNode"
@@ -38,7 +38,7 @@ import ProcessingStatusIcon from "../ProcessingStatusIcon"
 import { auth } from "../../lib/firebase"
 import { onAuthStateChanged, User } from "firebase/auth"
 import { Timestamp } from "firebase/firestore"
-import { Settings, PanelRightOpen, PanelRightClose, Save, Edit, Share, Download } from "lucide-react"
+import { Settings, PanelRightOpen, PanelRightClose, Save, Edit, Share, Download, X, Menu, Share2, Check } from "lucide-react"
 import { DEFAULT_ARCHITECTURE as EXTERNAL_DEFAULT_ARCHITECTURE } from "../../data/defaultArchitecture"
 // Removed mock architectures import - only using real user architectures now
 import SaveAuth from "../auth/SaveAuth"
@@ -49,7 +49,7 @@ import { architectureSearchService } from "../../utils/architectureSearchService
 import ArchitectureSidebar from "./ArchitectureSidebar"
 import { onElkGraph, dispatchElkGraph } from "../../events/graphEvents"
 import { assertRawGraph } from "../../events/graphSchema"
-import { generateChatName } from "../../utils/chatUtils"
+import { useViewMode } from "../../contexts/ViewModeContext"
 // import toast, { Toaster } from 'react-hot-toast' // Removed toaster
 
 // Relaxed typing to avoid prop mismatch across layers
@@ -177,12 +177,19 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // State for auth flow
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingArchitectures, setIsLoadingArchitectures] = useState(false);
+  const [urlArchitectureProcessed, setUrlArchitectureProcessed] = useState(false);
 
   // Enhanced Firebase sync with cleanup
   const syncWithFirebase = useCallback(async (userId: string) => {
     // Don't load architectures in public mode
     if (isPublicMode) {
       console.log('🔒 Public mode - skipping Firebase sync');
+      return;
+    }
+    
+    // Don't sync if URL architecture has already been processed
+    if (urlArchitectureProcessed) {
+      console.log('🔗 URL architecture already processed - skipping Firebase sync to avoid overriding');
       return;
     }
     
@@ -372,7 +379,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           }
         }
         
-        const allArchs = [newArchTab, ...finalValidArchs];
+        // Only include "New Architecture" tab if user has no existing architectures
+        // OR if we're in a specific state that requires it
+        const allArchs = finalValidArchs.length > 0 ? finalValidArchs : [newArchTab];
         setSavedArchitectures(allArchs);
         
         console.log(`✅ Loaded ${validArchs.length} valid architectures from Firebase`);
@@ -402,24 +411,194 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           return `${index + 1}. ${arch.name} (${arch.id}) - createdAt: ${createdAtStr}, timestamp: ${timestampStr}`;
         }));
         
-        // If current selection is invalid, reset to "New Architecture"
+        // If current selection is invalid, select the first available architecture
         if (selectedArchitectureId && !allArchs.some(arch => arch.id === selectedArchitectureId)) {
-          console.warn(`⚠️ Selected architecture ${selectedArchitectureId} not found, resetting to New Architecture`);
-          setSelectedArchitectureId('new-architecture');
+          console.warn(`⚠️ Selected architecture ${selectedArchitectureId} not found`);
+          if (allArchs.length > 0) {
+            const firstArch = allArchs[0];
+            console.log(`🔄 Selecting first available architecture: ${firstArch.name}`);
+            setSelectedArchitectureId(firstArch.id);
+            setCurrentChatName(firstArch.name);
+          }
         }
         
-        // Check if we should auto-select a priority architecture or stay on New Architecture
+        // Check if we should auto-select a priority architecture or first available architecture
         if (foundPriorityArch) {
           console.log('✅ User signed in - will auto-select transferred architecture after state update:', foundPriorityArch.id, foundPriorityArch.name);
           // Set a flag to select this architecture after the state updates
           setPendingArchitectureSelection(foundPriorityArch.id);
-        } else {
-          console.log('✅ User signed in - staying on New Architecture tab for fresh start');
+        } else if (finalValidArchs.length > 0 && (selectedArchitectureId === 'new-architecture' || !selectedArchitectureId)) {
+          // If user has architectures and is currently on "New Architecture", select the first real architecture
+          const firstArch = finalValidArchs[0];
+          console.log('📋 User has existing architectures - auto-selecting first one:', firstArch.name);
+          console.log('📋 Canvas mode - ensuring user sees their existing work, not New Architecture tab');
+          setSelectedArchitectureId(firstArch.id);
+          setCurrentChatName(firstArch.name);
           
-          // FORCE selection to "New Architecture" to ensure no auto-selection happens
-          if (selectedArchitectureId !== 'new-architecture') {
-            console.log('🔄 Forcing selection back to New Architecture tab after sign-in');
+          // Load the architecture content
+          if (firstArch.rawGraph) {
+            console.log('📂 Loading existing architecture content to replace empty canvas');
+            setRawGraph(firstArch.rawGraph);
+          }
+        } else {
+          // Check if there's a URL architecture parameter - this takes priority
+          const urlArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
+          
+          // Check if there's existing content on the canvas that should be preserved
+          const hasExistingContent = rawGraph && rawGraph.children && rawGraph.children.length > 0;
+          
+          console.log('🔍 [SIGN-IN] Checking for existing content and URL architecture:', {
+            urlArchId,
+            hasRawGraph: !!rawGraph,
+            hasChildren: !!rawGraph?.children,
+            childrenLength: rawGraph?.children?.length || 0,
+            hasExistingContent,
+            rawGraphSample: rawGraph ? { id: rawGraph.id, childrenCount: rawGraph.children?.length } : null,
+            currentSelectedId: selectedArchitectureId,
+            currentChatName: currentChatName,
+            nodesCount: nodes?.length || 0,
+            edgesCount: edges?.length || 0
+          });
+          
+          // If there's existing content on canvas (from URL or manual work), save it
+          if (hasExistingContent) {
+            const contentSource = urlArchId ? 'URL architecture (already loaded)' : 'manually created content';
+            console.log(`💾 User signed in with existing canvas content - preserving and saving as new architecture (${contentSource})`);
+            
+            // Generate a proper name for the architecture
+            const userPrompt = (window as any).originalChatTextInput || (window as any).chatTextInput || '';
+            
+            try {
+              console.log('🤖 [SIGN-IN] Calling generateChatName API with:', { 
+                userPrompt, 
+                rawGraph: rawGraph ? { children: rawGraph.children?.length || 0 } : null,
+                nodeCount: rawGraph?.children?.length || 0
+              });
+              
+              const baseChatName = await generateChatName(userPrompt || 'Canvas Architecture', rawGraph);
+              console.log('🎯 [SIGN-IN] Generated chat name from API:', baseChatName);
+              
+              let finalBaseName = baseChatName;
+              if (!baseChatName || baseChatName === 'New Architecture') {
+                console.warn('⚠️ [SIGN-IN] API returned default name, trying with better prompt');
+                const nodeLabels = rawGraph?.children?.map((node: any) => node.data?.label || node.id).filter(Boolean) || [];
+                const betterPrompt = nodeLabels.length > 0 ? `Architecture with: ${nodeLabels.join(', ')}` : 'Canvas Architecture';
+                const retryName = await generateChatName(betterPrompt, rawGraph);
+                console.log('🔄 [SIGN-IN] Retry generated name:', retryName);
+                finalBaseName = retryName && retryName !== 'New Architecture' ? retryName : baseChatName;
+              }
+              
+              const newChatName = ensureUniqueName(finalBaseName, finalValidArchs);
+              console.log('✅ [SIGN-IN] Final unique name:', newChatName);
+              
+              console.log('🆕 Saving canvas content as new architecture:', newChatName);
+              
+              // Save the current canvas content as a new architecture
+              const now = new Date();
+              const docId = await ArchitectureService.saveArchitecture({
+                name: newChatName,
+                userId: userId,
+                userEmail: user?.email || '',
+                rawGraph: rawGraph,
+                nodes: [], // React Flow nodes will be generated
+                edges: [], // React Flow edges will be generated
+                userPrompt: userPrompt || 'Architecture created from canvas',
+                timestamp: now,
+                createdAt: now,
+                lastModified: now
+              });
+              
+              console.log('✅ Saved canvas content with ID:', docId);
+              
+              // Add the new architecture to the list and select it
+              const newArch = {
+                id: docId,
+                firebaseId: docId,
+                name: newChatName,
+                timestamp: now,
+                createdAt: now,
+                lastModified: now,
+                rawGraph: rawGraph,
+                userPrompt: userPrompt || 'Architecture created from canvas',
+                isFromFirebase: true
+              };
+              
+              console.log('🔄 Adding new architecture to the list:', newArch);
+              
+              // Update the architectures list - put the current work FIRST, then existing architectures
+              setSavedArchitectures(prev => {
+                const otherArchs = finalValidArchs.filter(arch => arch.id !== docId);
+                const updatedArchs = [newArch, ...otherArchs];
+                console.log('📋 Updated architectures list with current work FIRST:', updatedArchs.map(a => ({ id: a.id, name: a.name })));
+                return updatedArchs;
+              });
+              
+              // Select the newly created architecture immediately
+              setSelectedArchitectureId(docId);
+              setPendingArchitectureSelection(null); // Clear any pending selection
+              setCurrentChatName(newChatName);
+              
+              console.log('✅ Selected new architecture and updated tab name:', docId, newChatName);
+              console.log('🏷️ Current chat name set to:', newChatName);
+              console.log('🎯 Sign-in complete - architecture should now be first tab and selected');
+              
+              // Ensure the rawGraph is preserved (it should already be set, but double-check)
+              if (rawGraph && rawGraph.children && rawGraph.children.length > 0) {
+                console.log('✅ Canvas content preserved during sign-in');
+              } else {
+                console.warn('⚠️ Canvas content may have been lost during sign-in');
+              }
+              
+            } catch (error) {
+              console.error('❌ Failed to save canvas content as new architecture:', error);
+              // Don't fallback - throw error to show user that saving failed
+              throw new Error('Failed to save architecture during sign-in. Please try again.');
+            }
+        } else {
+          console.log('🔍 [SIGN-IN] No existing content on canvas. User signed in - checking for URL architecture and existing architectures');
+          console.log('🔍 [SIGN-IN] URL architecture ID:', urlArchId);
+          console.log('🔍 [SIGN-IN] Available architectures:', finalValidArchs.map(a => ({ id: a.id, name: a.name, hasRawGraph: !!a.rawGraph })));
+          
+          // Load existing user architectures
+          if (finalValidArchs.length > 0) {
+            const firstArch = finalValidArchs[0];
+            console.log('📋 User has existing architectures - selecting first one:', firstArch.name);
+            console.log('📋 First architecture details:', {
+              id: firstArch.id,
+              name: firstArch.name,
+              hasRawGraph: !!firstArch.rawGraph,
+              rawGraphChildren: firstArch.rawGraph?.children?.length || 0
+            });
+            
+            setSelectedArchitectureId(firstArch.id);
+            setCurrentChatName(firstArch.name);
+            
+            // Load the architecture content
+            if (firstArch.rawGraph) {
+              console.log('📂 Loading first architecture content into canvas');
+              setRawGraph(firstArch.rawGraph);
+            } else {
+              console.warn('⚠️ First architecture has no rawGraph data');
+            }
+          } else {
+            console.log('📋 User has no existing architectures - will add New Architecture tab');
+            // Only add "New Architecture" tab if user has no existing architectures
+            const newArchTab = {
+              id: 'new-architecture',
+              name: 'New Architecture',
+              timestamp: new Date(),
+              rawGraph: { id: "root", children: [], edges: [] },
+              isNew: true
+            };
+            
+            setSavedArchitectures(prev => {
+              const otherArchs = prev.filter(arch => arch.id !== 'new-architecture');
+              return [newArchTab, ...otherArchs];
+            });
+            
             setSelectedArchitectureId('new-architecture');
+            setCurrentChatName('New Architecture');
+          }
           }
         }
       }
@@ -432,7 +611,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       console.log('🔄 Setting loading state to false');
       setIsLoadingArchitectures(false);
     }
-  }, [selectedArchitectureId, isPublicMode]);
+  }, [selectedArchitectureId, isPublicMode, urlArchitectureProcessed]);
 
   // Track when we just created an architecture to prevent immediate re-sync
   const [justCreatedArchId, setJustCreatedArchId] = useState<string | null>(null);
@@ -523,10 +702,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // const [showStreamViewer, setShowStreamViewer] = useState(false);
   
   // State for current chat name
-  const [currentChatName, setCurrentChatName] = useState<string>('New Chat');
+  const [currentChatName, setCurrentChatName] = useState<string>('New Architecture');
   
   // State for manual save
   const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   
   // State for share overlay (for embedded version when clipboard fails)
   const [shareOverlay, setShareOverlay] = useState<{ show: boolean; url: string; error?: string; copied?: boolean }>({ show: false, url: '' });
@@ -823,47 +1003,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   // Placeholder for handleChatSubmit - will be defined after rawGraph and handleGraphChange are available
 
-  // Listen for auth state changes
-  useEffect(() => {
-    
-    // In public mode, completely skip Firebase auth monitoring and force clean state
-    if (isPublicMode) {
-      setUser(null);
-      setSidebarCollapsed(true);
-      
-      // Check if URL contains a shared anonymous architecture ID
-      const sharedArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
-      if (sharedArchId) {
-        console.log('🔗 Loading shared anonymous architecture:', sharedArchId);
-        loadSharedAnonymousArchitecture(sharedArchId);
-      }
-      
-      return; // Don't set up any Firebase listeners
-    }
-
-    // Only set up auth listener in canvas mode
-    if (auth) {
-      console.log('🔐 CANVAS MODE ACTIVE - setting up Firebase auth listener');
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-        console.log('🔐 Auth state changed:', currentUser ? currentUser.email : 'No user');
-        
-        // On canvas route, use actual auth state
-      setUser(currentUser);
-        
-        // Auto-open sidebar when user signs in, close when they sign out
-      if (currentUser) {
-          console.log('👤 User signed in - opening sidebar');
-          setSidebarCollapsed(false);
-        } else {
-          console.log('👤 User signed out - closing sidebar');
-          setSidebarCollapsed(true);
-      }
-    });
-    return () => unsubscribe();
-    } else {
-      console.log('🚫 Firebase auth not available - authentication disabled');
-    }
-  }, [isPublicMode]);
+  // Auth state listener moved to after config is defined
 
 
 
@@ -1021,16 +1161,153 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     edges: []
   });
 
+  // Get view mode configuration
+  const { config } = useViewMode();
+
+  // Listen for auth state changes (moved here after config is defined)
+  useEffect(() => {
+    
+    // In framer (embed) mode, handle shared architectures but don't set up auth listeners
+    if (config.mode === 'framer') {
+      setUser(null);
+      setSidebarCollapsed(true);
+      
+      // Check if URL contains a shared anonymous architecture ID
+      const sharedArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
+      if (sharedArchId) {
+        loadSharedAnonymousArchitecture(sharedArchId);
+      }
+      
+      return; // Don't set up any Firebase listeners
+    }
+
+    // Set up auth listener based on mode
+    if (auth) {
+      const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+        
+        // Canvas mode: redirect to auth if user signs in, preserving architecture URL parameter
+        if (config.mode === 'canvas' && currentUser) {
+          
+          // Preserve the architecture ID from the current URL
+          const currentParams = new URLSearchParams(window.location.search);
+          const archId = currentParams.get('arch');
+          
+          let authUrl = window.location.origin + '/auth';
+          if (archId) {
+            authUrl += `?arch=${archId}`;
+          }
+          
+          window.location.href = authUrl;
+          return;
+        }
+        
+        // Auth mode: use actual auth state
+        if (config.mode === 'auth') {
+          setUser(currentUser);
+          
+          // Auto-open sidebar when user signs in, close when they sign out
+          if (currentUser) {
+            setSidebarCollapsed(false);
+            
+            // Check if there's a URL architecture that needs to be processed
+            const urlArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
+            if (urlArchId) {
+              // Set flag immediately to prevent Firebase sync
+              setUrlArchitectureProcessed(true);
+              
+              // Process URL architecture immediately
+              (async () => {
+                try {
+                  const urlArch = await anonymousArchitectureService.loadAnonymousArchitectureById(urlArchId);
+                  if (urlArch) {
+                    // Set the architecture content
+                    setRawGraph(urlArch.rawGraph);
+                    
+                    // Generate name and save as user architecture
+                    const userPrompt = (window as any).originalChatTextInput || (window as any).chatTextInput || '';
+                    const baseChatName = await generateChatName(userPrompt || 'Architecture from URL', urlArch.rawGraph);
+                    
+                    // Save as new user architecture
+                    const savedArchId = await ArchitectureService.saveArchitecture({
+                      name: baseChatName,
+                      userId: currentUser.uid,
+                      userEmail: currentUser.email || '',
+                      rawGraph: urlArch.rawGraph,
+                      userPrompt: userPrompt || 'Architecture from URL',
+                      nodes: [],
+                      edges: []
+                    });
+                    
+                    // Load existing user architectures
+                    const firebaseArchs = await ArchitectureService.loadUserArchitectures(currentUser.uid);
+                    const validArchs = firebaseArchs.filter(arch => arch && arch.id && arch.name && arch.rawGraph);
+                    
+                    // Create the new tab for URL architecture
+                    const newUrlArchTab = {
+                      id: savedArchId,
+                      name: baseChatName,
+                      timestamp: new Date(),
+                      rawGraph: urlArch.rawGraph,
+                      firebaseId: savedArchId
+                    };
+                    
+                    // Convert other Firebase architectures to local format
+                    const otherArchs = validArchs.filter(arch => arch.id !== savedArchId).map(arch => ({
+                      id: arch.id,
+                      firebaseId: arch.id,
+                      name: arch.name,
+                      timestamp: arch.timestamp?.toDate ? arch.timestamp.toDate() : new Date(arch.timestamp),
+                      rawGraph: arch.rawGraph,
+                      userPrompt: arch.userPrompt || '',
+                      isFromFirebase: true
+                    }));
+                    
+                    // Set URL architecture FIRST, then existing architectures
+                    const allArchs = [newUrlArchTab, ...otherArchs];
+                    setSavedArchitectures(allArchs);
+                    setSelectedArchitectureId(savedArchId);
+                    setCurrentChatName(baseChatName);
+                  }
+                } catch (error) {
+                  console.error('❌ Failed to process URL architecture:', error);
+                }
+              })();
+            }
+          } else {
+            setSidebarCollapsed(true);
+          }
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, [isPublicMode, config.mode]);
+
     // Real-time sync: Auto-save current canvas to Firebase when state changes
   const [realtimeSyncId, setRealtimeSyncId] = useState<string | null>(null);
   const [isRealtimeSyncing, setIsRealtimeSyncing] = useState(false);
 
-  // EMERGENCY: COMPLETELY DISABLED real-time sync to stop infinite Firebase loop
-  // This was causing thousands of writes per second: 
-  // Graph update → Firebase save → triggers graph change → Firebase save → LOOP!
+  // Auto-save for anonymous architectures (when not signed in)
   useEffect(() => {
-    // TODO: Implement proper auto-save with loop prevention later
-  }, []);
+    // Only auto-save when not signed in and when there's actual content
+    if (!user && rawGraph?.children && rawGraph.children.length > 0) {
+      // Debounce saves to prevent loops
+      const timeoutId = setTimeout(async () => {
+        try {
+          // Always save as new anonymous architecture (they're lightweight)
+          const architectureName = `Architecture ${new Date().toLocaleDateString()}`;
+          const newArchId = await anonymousArchitectureService.saveAnonymousArchitecture(
+            architectureName,
+            rawGraph
+          );
+          // URL is automatically updated by saveAnonymousArchitecture
+        } catch (error) {
+          console.error('❌ Auto-save failed:', error);
+        }
+      }, 2000); // 2 second debounce
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [rawGraph, user]);
 
   // Reset real-time sync when switching away from "New Architecture"
   useEffect(() => {
@@ -1040,32 +1317,29 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     }
   }, [selectedArchitectureId]);
 
-  // Handle shared architecture URLs (works in both public and canvas mode)
+  // Handle shared architecture URLs (works in public, canvas, and auth modes)
   useEffect(() => {
     // Check if URL contains a shared architecture ID
     const sharedArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
     
     if (sharedArchId) {
-      console.log('🔗 Loading shared architecture from URL:', sharedArchId, isPublicMode ? '(public mode)' : '(canvas mode)');
-      
       // Load the shared architecture directly using the service
       (async () => {
         try {
           const sharedArch = await anonymousArchitectureService.loadAnonymousArchitectureById(sharedArchId);
           if (sharedArch) {
-            console.log('✅ Loaded shared architecture from URL:', sharedArch.name);
-            
-            // Anonymous architectures should not have names - users can't see tabs anyway
-            // AI naming happens during sign-in when the architecture becomes a user architecture
-            
+            // Set the architecture content
             setRawGraph(sharedArch.rawGraph);
+            
+            // In auth mode with signed-in user, this will be handled by the auth listener
+            // For public/canvas modes, just load the architecture
           }
         } catch (error) {
           console.error('❌ Failed to load shared architecture from URL:', error);
         }
       })();
     }
-  }, [isPublicMode, setRawGraph]);
+  }, [config.mode, setRawGraph, user]);
 
   // Load shared anonymous architecture from URL
   const loadSharedAnonymousArchitecture = useCallback(async (architectureId: string) => {
@@ -1092,12 +1366,23 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Handler for manual save functionality
   const handleManualSave = useCallback(async () => {
     if (!user) {
-      showNotification('error', 'Sign In Required', 'Please sign in to save your architecture');
+      showNotification('confirm', 'Sign In Required', 'Please sign in to save your architecture', {
+        onConfirm: async () => {
+          // Trigger sign-in by programmatically clicking the SaveAuth button
+          const saveAuthButton = document.querySelector('.save-auth-dropdown button');
+          if (saveAuthButton) {
+            (saveAuthButton as HTMLButtonElement).click();
+          }
+        },
+        onCancel: () => {
+          // Do nothing, just close the modal
+        }
+      });
       return;
     }
 
-    if (!selectedArchitectureId || selectedArchitectureId === 'new-architecture') {
-      showNotification('error', 'No Architecture Selected', 'No architecture selected to save');
+    if (!rawGraph || !rawGraph.children || rawGraph.children.length === 0) {
+      showNotification('error', 'No Content', 'Please create some content first before saving');
       return;
     }
 
@@ -1105,17 +1390,84 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     try {
       console.log('💾 Manual save triggered for:', selectedArchitectureId);
       
-      // Find the current architecture
+      // Handle "New Architecture" case - create a new architecture
+      if (!selectedArchitectureId || selectedArchitectureId === 'new-architecture') {
+        console.log('💾 Saving new architecture...');
+        
+        // Generate a proper name for the architecture using AI
+        const userPrompt = (window as any).originalChatTextInput || (window as any).chatTextInput || '';
+        
+        // Create a descriptive prompt based on the architecture content if no user prompt exists
+        let effectivePrompt = userPrompt;
+        if (!effectivePrompt && rawGraph && rawGraph.children && rawGraph.children.length > 0) {
+          const nodeLabels = rawGraph.children.map((node: any) => node.data?.label || node.id).filter(Boolean);
+          effectivePrompt = `Architecture with components: ${nodeLabels.slice(0, 5).join(', ')}`;
+        }
+        
+        console.log('🤖 Calling generateChatName API for manual save with:', { 
+          userPrompt: effectivePrompt, 
+          rawGraph,
+          nodeCount: rawGraph?.children?.length || 0 
+        });
+        
+        const baseChatName = await generateChatName(effectivePrompt || 'Manual Save Architecture', rawGraph);
+        console.log('🎯 Generated chat name from API for manual save:', baseChatName);
+        const newChatName = ensureUniqueName(baseChatName, savedArchitectures);
+        
+        // Save as new architecture
+        const now = new Date();
+        const docId = await ArchitectureService.saveArchitecture({
+          name: newChatName,
+          userId: user.uid,
+          userEmail: user.email || '',
+          rawGraph: rawGraph,
+          nodes: [], // React Flow nodes will be generated
+          edges: [], // React Flow edges will be generated
+          userPrompt: userPrompt || 'Manually saved architecture',
+          timestamp: now,
+          createdAt: now,
+          lastModified: now
+        });
+        
+        console.log('✅ New architecture saved with ID:', docId);
+        
+        // Add to architectures list and select it
+        const newArch = {
+          id: docId,
+          firebaseId: docId,
+          name: newChatName,
+          timestamp: now,
+          createdAt: now,
+          lastModified: now,
+          rawGraph: rawGraph,
+          userPrompt: userPrompt || 'Manually saved architecture',
+          isFromFirebase: true
+        };
+        
+        // Update architectures list - put newly saved architecture first
+        setSavedArchitectures(prev => {
+          const otherArchs = prev.filter(arch => arch.id !== 'new-architecture' && arch.id !== docId);
+          // Put the newly saved architecture first, then other existing architectures
+          return [newArch, ...otherArchs];
+        });
+        
+        // Select the newly saved architecture
+        setSelectedArchitectureId(docId);
+        setCurrentChatName(newChatName);
+        
+        // Show subtle success indication
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 2000); // Reset after 2 seconds
+        return;
+      }
+      
+      // Handle existing architecture update
       const currentArch = savedArchitectures.find(arch => arch.id === selectedArchitectureId);
       if (!currentArch) {
         throw new Error('Architecture not found');
       }
 
       const firebaseId = currentArch.firebaseId || currentArch.id;
-      
-      if (firebaseId === 'new-architecture') {
-        throw new Error('Cannot save new architecture - generate content first');
-      }
 
       // Update Firebase
       await ArchitectureService.updateArchitecture(firebaseId, {
@@ -1132,6 +1484,31 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       setIsSaving(false);
     }
   }, [user, selectedArchitectureId, savedArchitectures, rawGraph, nodes, edges]);
+
+  // Handler for canvas save - authenticate first, then save
+  const handleCanvasSave = useCallback(async () => {
+    if (!user) {
+      // User not signed in - redirect to auth, preserving architecture URL parameter
+      console.log('💾 Canvas save - user not signed in, redirecting to auth');
+      
+      // Preserve the architecture ID from the current URL
+      const currentParams = new URLSearchParams(window.location.search);
+      const archId = currentParams.get('arch');
+      
+      let authUrl = window.location.origin + '/auth';
+      if (archId) {
+        authUrl += `?arch=${archId}`;
+        console.log('🔗 Preserving architecture ID in save redirect:', archId);
+      }
+      
+      window.location.href = authUrl;
+      return;
+    }
+    
+    // User is signed in - proceed with save
+    console.log('💾 Canvas save - user signed in, proceeding with save');
+    await handleManualSave();
+  }, [user, handleManualSave]);
 
   // Handler for sharing current architecture (works for both signed-in and anonymous users)
   const handleShareCurrent = useCallback(async () => {
@@ -1159,8 +1536,15 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         console.log('📤 Creating shareable anonymous architecture...');
         
         try {
-          // Generate a name for the architecture
-          const architectureName = `Shared Architecture ${new Date().toLocaleDateString()}`;
+          // Generate an AI-powered name for the architecture
+          const userPrompt = (window as any).originalChatTextInput || (window as any).chatTextInput || '';
+          let effectivePrompt = userPrompt;
+          if (!effectivePrompt && rawGraph && rawGraph.children && rawGraph.children.length > 0) {
+            const nodeLabels = rawGraph.children.map((node: any) => node.data?.label || node.id).filter(Boolean);
+            effectivePrompt = `Architecture with components: ${nodeLabels.slice(0, 5).join(', ')}`;
+          }
+          
+          const architectureName = await generateChatName(effectivePrompt || 'Shared Architecture', rawGraph);
           
           // Save as anonymous architecture and get shareable ID
           const anonymousId = await anonymousArchitectureService.saveAnonymousArchitecture(
@@ -1317,6 +1701,12 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   // Debug logging for graph state changes
   useEffect(() => {
+    console.log('🔍 [GRAPH-DEBUG] rawGraph changed:', {
+      hasContent: !!(rawGraph?.children?.length),
+      childrenCount: rawGraph?.children?.length || 0,
+      selectedArchitectureId,
+      timestamp: new Date().toISOString()
+    });
   }, [rawGraph, selectedArchitectureId]);
 
   // Handler for PNG export functionality  
@@ -1328,61 +1718,313 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
     try {
       console.log('📸 Starting PNG export...');
-      
-      // Calculate the bounds of all nodes
-      const nodesBounds = getRectOfNodes(nodes);
-      
-      // Add padding around the architecture
-      const padding = 50;
-      const expandedBounds = {
-        x: nodesBounds.x - padding,
-        y: nodesBounds.y - padding,
-        width: nodesBounds.width + 2 * padding,
-        height: nodesBounds.height + 2 * padding
-      };
-      
-      // Calculate transform for the bounds
-      const transform = getTransformForBounds(
-        expandedBounds,
-        expandedBounds.width,
-        expandedBounds.height,
-        0.5, // min zoom
-        2,   // max zoom  
-        0    // padding
-      );
-      
-      // Create a temporary canvas element for high-resolution capture
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      
-      // Set high DPI for crisp output
-      const scale = 3; // 3x resolution for HD quality
-      canvas.width = expandedBounds.width * scale;
-      canvas.height = expandedBounds.height * scale;
-      context?.scale(scale, scale);
-      
-      // Get the ReactFlow viewport element
-      const reactFlowElement = document.querySelector('.react-flow__viewport');
-      if (!reactFlowElement) {
-        throw new Error('ReactFlow viewport not found');
+      console.log('📊 Export context:', {
+        nodesCount: nodes.length,
+        edgesCount: edges.length,
+        rawGraphChildren: rawGraph?.children?.length || 0,
+        rawGraphEdges: rawGraph?.edges?.length || 0
+      });
+
+      // Get the main ReactFlow container (not viewport)
+      const reactFlowContainer = document.querySelector('.react-flow');
+      if (!reactFlowContainer) {
+        throw new Error('ReactFlow container not found');
       }
+
+      console.log('📐 Capturing entire ReactFlow container');
+      console.log('📐 Container dimensions:', {
+        width: reactFlowContainer.clientWidth,
+        height: reactFlowContainer.clientHeight,
+        scrollWidth: reactFlowContainer.scrollWidth,
+        scrollHeight: reactFlowContainer.scrollHeight
+      });
       
-      // Use html2canvas to capture the architecture
+      // Debug: Check what's in the original ReactFlow container
+      const originalNodes = reactFlowContainer.querySelectorAll('.react-flow__node');
+      const originalEdges = reactFlowContainer.querySelectorAll('.react-flow__edge');
+      const originalImages = reactFlowContainer.querySelectorAll('img');
+      
+      console.log(`🔍 Original container contents:`, {
+        nodes: originalNodes.length,
+        edges: originalEdges.length,
+        images: originalImages.length,
+        totalElements: reactFlowContainer.querySelectorAll('*').length
+      });
+      
+      // Debug nodes in detail
+      originalNodes.forEach((node, index) => {
+        const nodeElement = node as HTMLElement;
+        const nodeText = nodeElement.textContent || nodeElement.innerText || '';
+        const nodeImages = nodeElement.querySelectorAll('img');
+        console.log(`🔍 Original Node ${index + 1}:`, {
+          id: nodeElement.getAttribute('data-id') || 'no-id',
+          text: nodeText.substring(0, 50) + (nodeText.length > 50 ? '...' : ''),
+          classes: nodeElement.className,
+          visible: nodeElement.offsetWidth > 0 && nodeElement.offsetHeight > 0,
+          images: nodeImages.length,
+          imagesSrc: Array.from(nodeImages).map(img => img.src.substring(0, 100)),
+          position: {
+            left: nodeElement.style.left,
+            top: nodeElement.style.top,
+            transform: nodeElement.style.transform
+          },
+          styles: {
+            display: nodeElement.style.display,
+            visibility: nodeElement.style.visibility,
+            opacity: nodeElement.style.opacity
+          }
+        });
+      });
+      
+      // Debug edges in detail
+      originalEdges.forEach((edge, index) => {
+        const edgeElement = edge as HTMLElement;
+        console.log(`🔍 Original Edge ${index + 1}:`, {
+          id: edgeElement.getAttribute('data-id') || 'no-id',
+          classes: edgeElement.className,
+          visible: edgeElement.offsetWidth > 0 && edgeElement.offsetHeight > 0,
+          pathElements: edgeElement.querySelectorAll('path').length,
+          styles: {
+            display: edgeElement.style.display,
+            visibility: edgeElement.style.visibility,
+            opacity: edgeElement.style.opacity
+          }
+        });
+      });
+      
+      // Debug images in detail
+      originalImages.forEach((img, index) => {
+        console.log(`🔍 Original Image ${index + 1}:`, {
+          src: img.src.substring(0, 100) + (img.src.length > 100 ? '...' : ''),
+          alt: img.alt,
+          complete: img.complete,
+          naturalWidth: img.naturalWidth,
+          naturalHeight: img.naturalHeight,
+          width: img.width,
+          height: img.height,
+          visible: img.offsetWidth > 0 && img.offsetHeight > 0,
+          styles: {
+            display: img.style.display,
+            visibility: img.style.visibility,
+            opacity: img.style.opacity
+          }
+        });
+      });
+
+      // Import html2canvas
       const html2canvas = (await import('html2canvas')).default;
       
-      const captureCanvas = await html2canvas(reactFlowElement as HTMLElement, {
+      // Simple approach: capture the entire ReactFlow container
+      const captureCanvas = await html2canvas(reactFlowContainer as HTMLElement, {
         backgroundColor: '#ffffff',
-        scale: scale,
+        scale: 2, // 2x resolution for HD quality
         useCORS: true,
         allowTaint: true,
-        width: expandedBounds.width,
-        height: expandedBounds.height,
-        x: expandedBounds.x,
-        y: expandedBounds.y,
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: expandedBounds.width,
-        windowHeight: expandedBounds.height
+        logging: false, // Disable logging to reduce noise
+        foreignObjectRendering: true, // Support for SVG text
+        imageTimeout: 30000, // 30 second timeout for images to load
+        removeContainer: false, // Keep container structure
+        ignoreElements: (element): boolean => {
+          // Only exclude UI controls and overlays, keep all content
+          return element.classList.contains('react-flow__controls') ||
+                 element.classList.contains('react-flow__minimap') ||
+                 element.classList.contains('react-flow__attribution') ||
+                 element.classList.contains('react-flow__panel') ||
+                 (element.tagName === 'BUTTON' && element.closest('.react-flow__controls') !== null) ||
+                 (element.classList.contains('absolute') && (
+                   element.classList.contains('top-4') || 
+                   element.classList.contains('bottom-4') ||
+                   element.textContent?.includes('Share') ||
+                   element.textContent?.includes('Export') ||
+                   element.textContent?.includes('Save')
+                 ));
+        },
+            onclone: async (clonedDoc) => {
+              console.log('🔧 Processing cloned document for export...');
+              
+              // Debug: Check what ReactFlow elements exist in the cloned document
+              const clonedContainer = clonedDoc.querySelector('.react-flow');
+              const clonedNodes = clonedDoc.querySelectorAll('.react-flow__node');
+              const clonedEdges = clonedDoc.querySelectorAll('.react-flow__edge');
+              const clonedImages = clonedDoc.querySelectorAll('img');
+              
+              console.log(`🔍 Cloned document contents:`, {
+                hasContainer: !!clonedContainer,
+                nodes: clonedNodes.length,
+                edges: clonedEdges.length,
+                images: clonedImages.length,
+                totalElements: clonedDoc.querySelectorAll('*').length
+              });
+              
+              // Debug cloned nodes in detail
+              clonedNodes.forEach((node, index) => {
+                const nodeElement = node as HTMLElement;
+                const nodeText = nodeElement.textContent || nodeElement.innerText || '';
+                const nodeImages = nodeElement.querySelectorAll('img');
+                console.log(`🔍 Cloned Node ${index + 1}:`, {
+                  id: nodeElement.getAttribute('data-id') || 'no-id',
+                  classes: nodeElement.className,
+                  text: nodeText.substring(0, 50) + (nodeText.length > 50 ? '...' : ''),
+                  images: nodeImages.length,
+                  imagesSrc: Array.from(nodeImages).map(img => img.src.substring(0, 100)),
+                  visible: nodeElement.offsetWidth > 0 && nodeElement.offsetHeight > 0,
+                  position: {
+                    left: nodeElement.style.left,
+                    top: nodeElement.style.top,
+                    transform: nodeElement.style.transform
+                  },
+                  innerHTML: nodeElement.innerHTML.substring(0, 200) + (nodeElement.innerHTML.length > 200 ? '...' : '')
+                });
+              });
+              
+              // Debug cloned edges in detail
+              clonedEdges.forEach((edge, index) => {
+                const edgeElement = edge as HTMLElement;
+                console.log(`🔍 Cloned Edge ${index + 1}:`, {
+                  id: edgeElement.getAttribute('data-id') || 'no-id',
+                  classes: edgeElement.className,
+                  visible: edgeElement.offsetWidth > 0 && edgeElement.offsetHeight > 0,
+                  pathElements: edgeElement.querySelectorAll('path').length,
+                  innerHTML: edgeElement.innerHTML.substring(0, 200) + (edgeElement.innerHTML.length > 200 ? '...' : '')
+                });
+              });
+              
+              // Debug cloned images in detail
+              clonedImages.forEach((img, index) => {
+                console.log(`🔍 Cloned Image ${index + 1}:`, {
+                  src: img.src.substring(0, 100) + (img.src.length > 100 ? '...' : ''),
+                  alt: img.alt,
+                  complete: img.complete,
+                  naturalWidth: img.naturalWidth,
+                  naturalHeight: img.naturalHeight,
+                  width: img.width,
+                  height: img.height,
+                  visible: img.offsetWidth > 0 && img.offsetHeight > 0
+                });
+              });
+          
+          // Wait a moment for images to load in cloned document
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+              // Force all images to be visible and loaded
+              const images = clonedDoc.querySelectorAll('img');
+              console.log(`🖼️ Found ${images.length} images to process`);
+              
+              images.forEach((img, index) => {
+                console.log(`🔧 Processing image ${index + 1} BEFORE:`, {
+                  src: img.src.substring(0, 100),
+                  complete: img.complete,
+                  naturalWidth: img.naturalWidth,
+                  naturalHeight: img.naturalHeight,
+                  display: img.style.display,
+                  visibility: img.style.visibility,
+                  opacity: img.style.opacity
+                });
+                
+                // Force image visibility
+                img.style.display = 'block';
+                img.style.visibility = 'visible';
+                img.style.opacity = '1';
+                img.style.maxWidth = 'none';
+                img.style.maxHeight = 'none';
+                
+                // If image has no src or failed to load, try to fix it
+                if (!img.src || img.src.includes('data:') || !img.complete) {
+                  console.log(`🔄 Fixing image ${index + 1}:`, img.src);
+                  
+                  // Try to get the original src from data attributes or parent
+                  const originalSrc = img.getAttribute('data-src') || 
+                                    img.getAttribute('data-original') ||
+                                    img.src;
+                  
+                  if (originalSrc && !originalSrc.includes('data:')) {
+                    img.src = originalSrc;
+                    img.crossOrigin = 'anonymous';
+                  }
+                }
+                
+                console.log(`🔧 Processing image ${index + 1} AFTER:`, {
+                  src: img.src.substring(0, 100),
+                  complete: img.complete,
+                  naturalWidth: img.naturalWidth,
+                  naturalHeight: img.naturalHeight,
+                  display: img.style.display,
+                  visibility: img.style.visibility,
+                  opacity: img.style.opacity
+                });
+              });
+          
+          // Ensure all text is visible and properly styled
+          const textElements = clonedDoc.querySelectorAll('text, span, div, p, h1, h2, h3, h4, h5, h6, label');
+          console.log(`📝 Found ${textElements.length} text elements to process`);
+          
+          textElements.forEach((textEl, index) => {
+            const htmlEl = textEl as HTMLElement;
+            const originalText = htmlEl.textContent || htmlEl.innerText || '';
+            const originalStyles = {
+              visibility: htmlEl.style.visibility,
+              opacity: htmlEl.style.opacity,
+              color: htmlEl.style.color,
+              fontSize: htmlEl.style.fontSize,
+              display: htmlEl.style.display,
+              position: htmlEl.style.position,
+              transform: htmlEl.style.transform
+            };
+            
+            console.log(`📝 Text element ${index + 1}:`, {
+              tagName: htmlEl.tagName,
+              text: originalText.substring(0, 50) + (originalText.length > 50 ? '...' : ''),
+              className: htmlEl.className,
+              originalStyles,
+              computedStyles: window.getComputedStyle ? {
+                visibility: window.getComputedStyle(htmlEl).visibility,
+                opacity: window.getComputedStyle(htmlEl).opacity,
+                color: window.getComputedStyle(htmlEl).color,
+                fontSize: window.getComputedStyle(htmlEl).fontSize
+              } : 'N/A'
+            });
+            
+            if (htmlEl.style) {
+              htmlEl.style.visibility = 'visible';
+              htmlEl.style.opacity = '1';
+              htmlEl.style.color = htmlEl.style.color || '#000000';
+              htmlEl.style.fontSize = htmlEl.style.fontSize || '14px';
+              htmlEl.style.display = htmlEl.style.display || 'block';
+              
+              // Force text to be on top
+              if (htmlEl.style.position === 'absolute' || htmlEl.style.position === 'relative') {
+                htmlEl.style.zIndex = '9999';
+              }
+            }
+          });
+          
+              // Remove any loading spinners or placeholders
+              const loadingElements = clonedDoc.querySelectorAll('.loading, .spinner, .placeholder');
+              loadingElements.forEach(el => el.remove());
+              
+              // Final debug: Check the final state before html2canvas captures
+              const finalNodes = clonedDoc.querySelectorAll('.react-flow__node');
+              const finalEdges = clonedDoc.querySelectorAll('.react-flow__edge');
+              const finalImages = clonedDoc.querySelectorAll('img');
+              
+              console.log('🏁 FINAL STATE before html2canvas:', {
+                nodes: finalNodes.length,
+                edges: finalEdges.length,
+                images: finalImages.length,
+                visibleNodes: Array.from(finalNodes).filter(n => (n as HTMLElement).offsetWidth > 0).length,
+                visibleEdges: Array.from(finalEdges).filter(e => (e as HTMLElement).offsetWidth > 0).length,
+                visibleImages: Array.from(finalImages).filter(i => (i as HTMLElement).offsetWidth > 0).length,
+                loadedImages: Array.from(finalImages).filter(i => (i as HTMLImageElement).complete).length
+              });
+              
+              console.log('✅ Cloned document processing complete');
+        }
+      });
+      
+      console.log('📊 Canvas capture completed:', {
+        width: captureCanvas.width,
+        height: captureCanvas.height,
+        dataURL: captureCanvas.toDataURL().substring(0, 100) + '...'
       });
       
       // Convert to blob and download
@@ -1438,12 +2080,25 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         throw new Error('No architecture data to save');
       }
 
-      // Generate a meaningful name for the architecture
-      const architectureName = ArchitectureService.generateArchitectureName(nodes, edges);
+      // Generate AI-powered name for the architecture using the backend API
+      const userPrompt = (window as any).originalChatTextInput || (window as any).chatTextInput || '';
+      let effectivePrompt = userPrompt;
+      if (!effectivePrompt && rawGraph && rawGraph.children && rawGraph.children.length > 0) {
+        const nodeLabels = rawGraph.children.map((node: any) => node.data?.label || node.id).filter(Boolean);
+        effectivePrompt = `Architecture with components: ${nodeLabels.slice(0, 5).join(', ')}`;
+      }
+      
+      console.log('🤖 Calling generateChatName API for handleSave with:', { 
+        userPrompt: effectivePrompt, 
+        rawGraph,
+        nodeCount: rawGraph?.children?.length || 0 
+      });
+      
+      const architectureName = await generateChatName(effectivePrompt || 'Saved Architecture', rawGraph);
       
       // Prepare the architecture data for saving with validation
       const architectureData = {
-        name: architectureName || 'Untitled Architecture',
+        name: architectureName, // No fallback - must be AI-generated
         description: `Architecture with ${nodes.length} components and ${edges.length} connections`,
         rawGraph: rawGraph || {},
         nodes: nodes || [],
@@ -1477,8 +2132,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       // Save to Firestore
       const savedId = await ArchitectureService.saveArchitecture(architectureData);
       
-      // Show success feedback
-      showNotification('success', 'Architecture Saved', `Architecture saved successfully!\n\nName: ${architectureData.name}\nID: ${savedId}\nNodes: ${architectureData.nodes.length}\nEdges: ${architectureData.edges.length}`);
+      // Show subtle success indication
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000); // Reset after 2 seconds
       
     } catch (error) {
       console.error('❌ Error saving architecture:', error);
@@ -1499,9 +2155,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Sidebar handlers
   const handleNewArchitecture = useCallback(() => {
     // Reset to "New Architecture" tab
-    console.log('🆕 Resetting to New Architecture tab');
+    console.log('🆕 [DEBUG] handleNewArchitecture called - clearing canvas');
+    console.trace('🆕 [DEBUG] Stack trace for handleNewArchitecture');
     setSelectedArchitectureId('new-architecture');
-    setCurrentChatName('New Chat');
+    setCurrentChatName('New Architecture');
     
     // Clear the canvas by setting empty graph
     const emptyGraph = {
@@ -1538,6 +2195,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     if (architecture && architecture.rawGraph) {
       console.log('📂 Loading architecture:', architecture.name);
       
+      // Update the current chat name to match the selected architecture
+      setCurrentChatName(architecture.name);
+      console.log('🏷️ Updated chat name to:', architecture.name);
+      console.log('🏷️ Selected architecture details:', { id: architecture.id, name: architecture.name, hasRawGraph: !!architecture.rawGraph });
+      
       // Use typed event system for architecture loading
       dispatchElkGraph({
         elkGraph: assertRawGraph(architecture.rawGraph, 'ArchitectureSelector'),
@@ -1546,8 +2208,23 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       });
     } else {
       console.warn('⚠️ Architecture not found:', architectureId);
+      console.warn('⚠️ Available architectures:', savedArchitectures.map(arch => ({ id: arch.id, name: arch.name })));
     }
-  }, [savedArchitectures, agentLockedArchitectureId]);
+  }, [savedArchitectures, agentLockedArchitectureId, setCurrentChatName]);
+
+  // Ensure currentChatName stays in sync with selectedArchitectureId
+  useEffect(() => {
+    if (selectedArchitectureId && selectedArchitectureId !== 'new-architecture') {
+      const architecture = savedArchitectures.find(arch => arch.id === selectedArchitectureId);
+      if (architecture && architecture.name && currentChatName !== architecture.name) {
+        console.log('🔄 Syncing tab name with selected architecture:', architecture.name);
+        setCurrentChatName(architecture.name);
+      }
+    } else if (selectedArchitectureId === 'new-architecture' && currentChatName !== 'New Architecture') {
+      console.log('🔄 Syncing tab name to New Architecture');
+      setCurrentChatName('New Architecture');
+    }
+  }, [selectedArchitectureId, savedArchitectures, currentChatName]);
 
   // Handle canvas resize when sidebar state changes
   useEffect(() => {
@@ -1666,8 +2343,15 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           });
           console.log('✅ Anonymous architecture updated');
         } else {
-          // Create new anonymous architecture
-          const architectureName = `Architecture - ${new Date().toLocaleDateString()}`;
+          // Create new anonymous architecture with AI-generated name
+          const userPrompt = (window as any).originalChatTextInput || (window as any).chatTextInput || '';
+          let effectivePrompt = userPrompt;
+          if (!effectivePrompt && newGraph && newGraph.children && newGraph.children.length > 0) {
+            const nodeLabels = newGraph.children.map((node: any) => node.data?.label || node.id).filter(Boolean);
+            effectivePrompt = `Architecture with components: ${nodeLabels.slice(0, 5).join(', ')}`;
+          }
+          
+          const architectureName = await generateChatName(effectivePrompt || 'Anonymous Architecture', newGraph);
           const newArchId = await anonymousArchitectureService.saveAnonymousArchitecture(architectureName, newGraph);
           console.log('✅ New anonymous architecture saved with ID:', newArchId);
         }
@@ -1847,48 +2531,48 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
           continueMessage: result.continueMessage
         });
 
-        if (result.success && result.functionCalls) {
+      if (result.success && result.functionCalls) {
           const turnMessageId = addFunctionCallingMessage(`🔄 Turn ${result.turnNumber} - Processing ${result.count} operations`);
           let batchErrors: string[] = [];
           let toolOutputs: any[] = [];
+        
+        for (const functionCall of result.functionCalls) {
+          const { name, arguments: args, call_id } = functionCall;
+          const messageId = addFunctionCallingMessage(`${name}(${JSON.stringify(args, null, 2)})`);
           
-          for (const functionCall of result.functionCalls) {
-            const { name, arguments: args, call_id } = functionCall;
-            const messageId = addFunctionCallingMessage(`${name}(${JSON.stringify(args, null, 2)})`);
-            
             let executionResult = '';
-            try {
-              switch (name) {
-                case 'add_node':
-                  const nodeName = args.nodename || 'new_node';
-                  const parentId = args.parentId || 'root';
-                  const nodeData = args.data || {};
-                  currentGraph = addNode(nodeName, parentId, currentGraph, {
-                    label: nodeData.label || nodeName,
-                    icon: nodeData.icon || 'api'
-                  });
+          try {
+            switch (name) {
+              case 'add_node':
+                const nodeName = args.nodename || 'new_node';
+                const parentId = args.parentId || 'root';
+                const nodeData = args.data || {};
+                currentGraph = addNode(nodeName, parentId, currentGraph, {
+                  label: nodeData.label || nodeName,
+                  icon: nodeData.icon || 'api'
+                });
                   executionResult = `Successfully created node: ${nodeName}`;
-                  updateStreamingMessage(messageId, `✅ Created node: ${nodeName}`, true, name);
-                  break;
-                case 'add_edge':
+                updateStreamingMessage(messageId, `✅ Created node: ${nodeName}`, true, name);
+                break;
+              case 'add_edge':
                   currentGraph = addEdge(args.edgeId, args.sourceId, args.targetId, currentGraph, args.label);
                   executionResult = `Successfully created edge: ${args.sourceId} → ${args.targetId}`;
                   updateStreamingMessage(messageId, `✅ Created edge: ${args.sourceId} → ${args.targetId}`, true, name);
-                  break;
-                case 'group_nodes':
+                break;
+              case 'group_nodes':
                   currentGraph = groupNodes(args.nodeIds, args.parentId, args.groupId, currentGraph);
                   executionResult = `Successfully grouped nodes: [${args.nodeIds.join(', ')}] → ${args.groupId}`;
                   updateStreamingMessage(messageId, `✅ Grouped nodes: [${args.nodeIds.join(', ')}] → ${args.groupId}`, true, name);
-                  break;
-                case 'batch_update':
+                break;
+              case 'batch_update':
                   currentGraph = batchUpdate(args.operations, currentGraph);
                   executionResult = `Successfully executed batch update: ${args.operations.length} operations`;
                   updateStreamingMessage(messageId, `✅ Batch update: ${args.operations.length} operations`, true, name);
-                  break;
-                default:
+                break;
+              default:
                   executionResult = `Error: Unknown function ${name}`;
-                  updateStreamingMessage(messageId, `❌ Unknown function: ${name}`, true, name);
-                  console.error('❌ Unknown function call:', name);
+                updateStreamingMessage(messageId, `❌ Unknown function: ${name}`, true, name);
+                console.error('❌ Unknown function call:', name);
                   batchErrors.push(`Unknown function: ${name}`);
               }
             } catch (error: any) {
@@ -1928,7 +2612,7 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
           updateStreamingMessage(turnMessageId, `✅ Turn ${result.turnNumber} completed (${result.count} operations)`, true, 'batch_update');
           
           // 🎯 UPDATE UI AFTER EACH TURN - This makes progress visible to user
-          handleGraphChange(currentGraph);
+        handleGraphChange(currentGraph);
           console.log(`🔄 Updated UI with turn ${result.turnNumber} changes`);
           
           // Check for ELK layout errors from the hook
@@ -1993,7 +2677,7 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
           }, 1000);
           
           break;
-        } else {
+      } else {
           console.error('❌ Unexpected response format - stopping');
           break;
         }
@@ -2315,8 +2999,15 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
               });
               console.log('✅ Anonymous architecture updated after AI update');
             } else {
-              // Create new anonymous architecture
-              const architectureName = `Architecture - ${new Date().toLocaleDateString()}`;
+              // Create new anonymous architecture with AI-generated name
+              const userPrompt = (window as any).originalChatTextInput || (window as any).chatTextInput || '';
+              let effectivePrompt = userPrompt;
+              if (!effectivePrompt && elkGraph && elkGraph.children && elkGraph.children.length > 0) {
+                const nodeLabels = elkGraph.children.map((node: any) => node.data?.label || node.id).filter(Boolean);
+                effectivePrompt = `Architecture with components: ${nodeLabels.slice(0, 5).join(', ')}`;
+              }
+              
+              const architectureName = await generateChatName(effectivePrompt || 'AI Generated Architecture', elkGraph);
               const newArchId = await anonymousArchitectureService.saveAnonymousArchitecture(architectureName, elkGraph);
               console.log('✅ New anonymous architecture saved after AI update with ID:', newArchId);
             }
@@ -3008,13 +3699,13 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
   }, [useReactFlow, handleSvgZoom]);
 
   return (
-    <ApiEndpointProvider apiEndpoint={apiEndpoint}>
     <div className="w-full h-full flex overflow-hidden bg-white dark:bg-black">
       
-      {/* Architecture Sidebar - Always show collapsed in public mode */}
+      {/* Architecture Sidebar - Show only when allowed by view mode */}
+      {config.showSidebar && (
       <ArchitectureSidebar
-        isCollapsed={isPublicMode ? true : sidebarCollapsed}
-        onToggleCollapse={!isPublicMode && user ? handleToggleSidebar : undefined}
+          isCollapsed={config.mode === 'framer' ? true : (config.mode === 'canvas' ? true : sidebarCollapsed)}
+          onToggleCollapse={config.mode === 'framer' ? undefined : (config.mode === 'canvas' ? handleToggleSidebar : (user ? handleToggleSidebar : undefined))}
         onNewArchitecture={handleNewArchitecture}
         onSelectArchitecture={handleSelectArchitecture}
         onDeleteArchitecture={handleDeleteArchitecture}
@@ -3026,6 +3717,7 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
         user={user}
         isLoadingArchitectures={isLoadingArchitectures}
       />
+      )}
 
       {/* Main Content Area */}
       <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${sidebarCollapsed ? 'ml-0' : 'ml-0'}`}>
@@ -3069,202 +3761,140 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
           <Share className="w-4 h-4" />
           <span className="text-sm font-medium">Share</span>
         </button>
-
-        {/* Export Button - Always visible when there's content */}
-        <button
-          onClick={handleExportPNG}
-          disabled={!rawGraph || !rawGraph.children || rawGraph.children.length === 0}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
-            !rawGraph || !rawGraph.children || rawGraph.children.length === 0
-              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              : 'bg-white text-gray-700 hover:bg-gray-50'
-          }`}
-          title={
-            !rawGraph || !rawGraph.children || rawGraph.children.length === 0
-              ? 'Create some content first to export'
-              : 'Export architecture as high-definition PNG'
-          }
-        >
-          <Download className="w-4 h-4" />
-          <span className="text-sm font-medium">Export</span>
-        </button>
         
-        {/* Save Button (only show when signed in and not public mode) or Edit Button (when not signed in or public mode) */}
-        {user && !isPublicMode ? (
+        {/* Export Button - Show when allowed by view mode */}
+        {config.allowExporting && (
+          <button
+            onClick={handleExportPNG}
+            disabled={!rawGraph || !rawGraph.children || rawGraph.children.length === 0}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
+              !rawGraph || !rawGraph.children || rawGraph.children.length === 0
+                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+            title={
+              !rawGraph || !rawGraph.children || rawGraph.children.length === 0
+                ? 'Create some content first to export'
+                : 'Export architecture as high-definition PNG'
+            }
+          >
+            <Download className="w-4 h-4" />
+            <span className="text-sm font-medium">Export</span>
+          </button>
+        )}
+        
+        {/* Save Button (when allowed by view mode) or Edit Button (when not signed in or public mode) */}
+        {config.showSaveButton ? (
           <button
             onClick={handleManualSave}
-            disabled={isSaving || selectedArchitectureId === 'new-architecture'}
+            disabled={isSaving || !rawGraph || !rawGraph.children || rawGraph.children.length === 0}
             className={`flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
               isSaving 
                 ? 'bg-blue-100 text-blue-600 cursor-not-allowed' 
-                : selectedArchitectureId === 'new-architecture'
+                : (!rawGraph || !rawGraph.children || rawGraph.children.length === 0)
                   ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                   : 'bg-white text-gray-700 hover:bg-gray-50'
             }`}
             title={
               isSaving ? 'Saving...' 
-              : selectedArchitectureId === 'new-architecture' ? 'Generate content first'
+              : (!rawGraph || !rawGraph.children || rawGraph.children.length === 0) ? 'Create some content first to save'
               : 'Save current architecture'
             }
           >
             {isSaving ? (
               <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            ) : saveSuccess ? (
+              <Check className="w-4 h-4" />
             ) : (
               <Save className="w-4 h-4" />
             )}
             <span className="text-sm font-medium">Save</span>
           </button>
-        ) : (
-          (() => {
-            // Early return with default config during SSR
-            if (typeof window === 'undefined') {
-              return (
-          <button
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:shadow-md transition-all duration-200"
-                  title="Edit in full app"
-                >
-                  <Edit className="w-4 h-4" />
-                  <span className="text-sm font-medium">Edit</span>
-                </button>
-              );
-            }
-
-            // Detect if we're in embedded version vs main site
-            const isEmbedded = window.location.hostname === 'archgen-ecru.vercel.app' || 
-                              window.location.pathname === '/embed' ||
-                              window.parent !== window; // Detect if inside iframe
-            
-            const urlParams = new URLSearchParams(window.location.search);
-            const hasArchitectureId = urlParams.has('arch');
-            const isMainSite = window.location.hostname === 'app.atelier-inc.net' || window.location.hostname === 'localhost';
-            
-            
-            // Button configuration based on context
-            // Show "Save" on main site, "Edit" in embedded version
-            const buttonConfig = isMainSite ? {
-              text: 'Save',
-              icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                    </svg>,
-              action: 'sign-in', // Trigger profile sign-in
-              title: 'Sign in to save'
-            } : {
-              text: 'Edit',
-              icon: <Edit className="w-4 h-4" />,
-              action: 'new-tab', // Open new tab to main site
-              title: 'Edit in full app'
-            };
-            
-            
-            return (
+        ) : config.showEditButton ? (
           <button
             onClick={async () => {
-                  
-                  if (buttonConfig.action === 'new-tab') {
-                    // Embedded version: open main site in new tab
-              const currentState = {
-                elkGraph: rawGraph,
-                timestamp: Date.now()
-              };
-              localStorage.setItem('publicCanvasState', JSON.stringify(currentState));
-                    console.log('🔄 [EMBEDDED] Opening main site in new tab...');
-                    
-                    // Build target URL with architecture ID
-                    let targetUrl = 'https://app.atelier-inc.net/';
-                    let architectureId = null;
-                    
-                    // Check if we already have an architecture ID in the URL
+              try {
+                // Open in new tab for editing (from embedded contexts)
+            const urlParams = new URLSearchParams(window.location.search);
+            const hasArchitectureId = urlParams.has('arch');
+                
+                // Use current origin for development, production URL for production
+                const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+                const hasPort = window.location.port && window.location.port !== '80' && window.location.port !== '443';
+                const isDevelopment = isLocalhost || hasPort;
+                
+                let targetUrl = isDevelopment 
+                  ? `${window.location.origin}/auth`  // Local development
+                  : 'https://app.atelier-inc.net';     // Production
+                
                     if (hasArchitectureId) {
-                      architectureId = urlParams.get('arch');
-                      console.log('🔗 [EMBEDDED] Using existing architecture ID:', architectureId);
-                    } else {
-                      // No existing ID - we need to save the current architecture to get an ID
-                      console.log('💾 [EMBEDDED] Saving current architecture to get shareable ID...');
-                      
-                      try {
-                        // Import the anonymous architecture service
-                        const { anonymousArchitectureService } = await import('../../services/anonymousArchitectureService');
-                        
-                        // Save the current rawGraph as an anonymous architecture
-                        architectureId = await anonymousArchitectureService.saveAnonymousArchitecture(
-                          'Architecture from Embed',
+                  // If there's already an architecture ID, use it
+                  targetUrl += window.location.search;
+                } else if (rawGraph && rawGraph.children && rawGraph.children.length > 0) {
+                  // If there's content but no ID, save as anonymous architecture first
+                  console.log('💾 [EDIT] Saving current architecture to get shareable ID...');
+                  
+                  try {
+                    // Generate AI-powered name for embed architecture
+                    const userPrompt = (window as any).originalChatTextInput || (window as any).chatTextInput || '';
+                    let effectivePrompt = userPrompt;
+                    if (!effectivePrompt && rawGraph && rawGraph.children && rawGraph.children.length > 0) {
+                      const nodeLabels = rawGraph.children.map((node: any) => node.data?.label || node.id).filter(Boolean);
+                      effectivePrompt = `Architecture with components: ${nodeLabels.slice(0, 5).join(', ')}`;
+                    }
+                    
+                    const architectureName = await generateChatName(effectivePrompt || 'Embed Architecture', rawGraph);
+                    const anonymousId = await anonymousArchitectureService.saveAnonymousArchitecture(
+                      architectureName,
                           rawGraph
                         );
-                        console.log('✅ [EMBEDDED] Saved architecture with ID:', architectureId);
+                    console.log('✅ [EDIT] Saved architecture with ID:', anonymousId);
+                    targetUrl += `?arch=${anonymousId}`;
                       } catch (error) {
-                        console.error('❌ [EMBEDDED] Failed to save architecture:', error);
+                    console.error('❌ [EDIT] Failed to save architecture:', error);
                         // Continue without ID if save fails
                       }
                     }
                     
-                    // Add architecture ID to URL if we have one
-                    if (architectureId) {
-                      targetUrl += `?arch=${architectureId}`;
-                    }
-                    
-                    console.log('🔗 [EMBEDDED] Target URL:', targetUrl);
+                console.log('🚀 [EDIT] Opening main app:', targetUrl);
                     window.open(targetUrl, '_blank');
-                  } else {
-                    // Main site: trigger sign-in via profile button
-                    console.log('🔄 [MAIN SITE] Triggering sign-in for save...');
-              const saveAuthButton = document.querySelector('.save-auth-dropdown button');
-              if (saveAuthButton) {
-                      console.log('✅ [MAIN SITE] Found profile button, clicking...');
-                (saveAuthButton as HTMLButtonElement).click();
-                    } else {
-                      console.error('❌ [MAIN SITE] Profile button not found!');
-                    }
+              } catch (error) {
+                console.error('❌ [EDIT] Failed to open main app:', error);
               }
             }}
             className="flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:shadow-md transition-all duration-200"
-                title={buttonConfig.title}
+            title="Edit in full app"
           >
-                {buttonConfig.icon}
-                <span className="text-sm font-medium">{buttonConfig.text}</span>
+            <Edit className="w-4 h-4" />
+            <span className="text-sm font-medium">Edit</span>
           </button>
-            );
-          })()
-        )}
+        ) : null}
         
 
 
-        {/* Profile/Auth - Hidden in embedded version, visible on main site */}
-        {(() => {
-          // Show SaveAuth during SSR, will be corrected on client-side
-          if (typeof window === 'undefined') {
-            return <SaveAuth onSave={handleSave} isCollapsed={true} user={user} />;
-          }
-
-          const isEmbedded = window.location.hostname === 'archgen-ecru.vercel.app' || 
-                            window.location.pathname === '/embed' ||
-                            window.parent !== window; // Detect if inside iframe
-          
-          // Don't show profile button in embedded version
-          if (isEmbedded) {
-            return null;
-          }
-          
-          return <SaveAuth onSave={handleSave} isCollapsed={true} user={user} />;
-        })()}
+        {/* Profile/Auth - Show when allowed by view mode */}
+        {config.showProfileSection && (
+          <SaveAuth 
+            onSave={config.mode === 'canvas' ? () => {
+              // Preserve the architecture ID from the current URL when redirecting to auth
+              const currentParams = new URLSearchParams(window.location.search);
+              const archId = currentParams.get('arch');
+              
+              let authUrl = window.location.origin + '/auth';
+              if (archId) {
+                authUrl += `?arch=${archId}`;
+                console.log('🔗 Preserving architecture ID in profile redirect:', archId);
+              }
+              
+              window.location.href = authUrl;
+            } : handleSave} 
+            isCollapsed={true} 
+            user={user} 
+          />
+        )}
       </div>
 
-      {/* Connection status indicator - HIDDEN */}
-      {/* 
-      <div className="absolute top-4 left-4 z-[101]">
-        <ConnectionStatus 
-          isSessionActive={isSessionActive}
-          isConnecting={isConnecting}
-          isAgentReady={isAgentReady}
-          messageSendStatus={{
-            sending: isSending,
-            retrying: false,
-            retryCount: 0,
-            lastError: undefined
-          }}
-        />
-      </div>
-      */}
-
+      {/* Main Graph Area */}
       <div className="flex-1 relative min-h-0 overflow-hidden">
         {/* ReactFlow container - only show when in ReactFlow mode */}
         {useReactFlow && (
@@ -3307,7 +3937,6 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
               edgesUpdatable={true}
               onConnectStart={handleConnectStart}
               onConnectEnd={handleConnectEnd}
-
               deleteKeyCode="Delete"
               connectOnClick={false}
               elevateNodesOnSelect={false}
@@ -3320,249 +3949,42 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
               />
               <Controls 
                 position="bottom-left" 
-                showInteractive={true}
                 showZoom={true}
                 showFitView={true}
-                style={{ 
-                  backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                  borderRadius: '8px',
-                  padding: '8px',
-                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
-                  color: '#000'
-                }}
+                showInteractive={true}
               />
-
-              {/* <DebugGeometry /> */}
             </ReactFlow>
           </div>
         )}
         
-        {/* SVG Visualization - only show when in SVG mode */}
-        {!useReactFlow && svgContent && (
-          <div className="absolute inset-0 h-full w-full z-0 flex items-center justify-center p-4 bg-gray-50 dark:bg-gray-950 overflow-auto">
-            <div className="relative" ref={svgContainerRef}>
-              {/* Zoom controls */}
-              <div className="absolute bottom-4 right-4 bg-white rounded-md shadow-sm flex gap-1 p-1 z-10">
-                <button 
-                  onClick={() => handleSvgZoom(-0.1)}
-                  className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded"
-                >
-                  <span className="text-xl">−</span>
-                </button>
-                <button
-                  onClick={() => setSvgZoom(1)} 
-                  className="px-2 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded text-sm"
-                >
-                  {Math.round(svgZoom * 100)}%
-                </button>
-                <button 
-                  onClick={() => handleSvgZoom(0.1)}
-                  className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded"
-                >
-                  <span className="text-xl">+</span>
-                </button>
-              </div>
-              
-              {/* SVG content */}
+        {/* SVG container - only show when in SVG mode */}
+        {!useReactFlow && (
+          <div 
+            ref={svgContainerRef}
+            className="absolute inset-0 h-full w-full z-0 overflow-hidden bg-gray-50"
+            style={{
+              transform: `scale(${svgZoom}) translate(${svgPan.x}px, ${svgPan.y}px)`,
+              transformOrigin: 'center center'
+            }}
+          >
+            {svgContent ? (
               <div 
-                className="svg-container shadow-lg rounded-lg bg-white transform origin-center transition-transform"
-                style={{ transform: `scale(${svgZoom})` }}
+                className="w-full h-full flex items-center justify-center"
                 dangerouslySetInnerHTML={{ __html: svgContent }}
               />
-            </div>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-gray-500">
+                Generating SVG...
+          </div>
+        )}
           </div>
         )}
         
-        {/* Show a message when SVG mode is selected but no SVG is generated */}
-        {!useReactFlow && !svgContent && (
-          <div className="absolute inset-0 h-full w-full z-0 flex items-center justify-center p-4 bg-gray-50 dark:bg-gray-950">
-            <div className="text-center p-6 bg-white rounded-lg shadow-lg">
-              <p className="text-lg font-medium text-gray-700">No SVG visualization available</p>
-              <p className="text-sm text-gray-500 mt-2">Click "Generate SVG" in the Dev Panel to create a visualization</p>
-            </div>
-          </div>
-        )}
-        
-        {/* Chat overlay - HIDDEN */}
-        {/* <div className="absolute top-10 left-4 z-10 max-w-md pointer-events-none">
-          <div className="pointer-events-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow-lg overflow-auto max-h-[calc(100vh - 200px)]">
-            <ChatWindow messages={messages} isMinimized={true} />
-          </div>
-        </div> */}
-
-        {/* Single Dev Panel Toggle - Replace all 5 buttons with one sleek toggle */}
-        {/* This is now replaced by the EditButton */}
-        
-        {/* StreamViewer - moved outside the button group */}
-        <StreamViewer 
-          elkGraph={rawGraph} 
-          setElkGraph={setRawGraph} 
-          apiEndpoint={apiEndpoint}
-        />
-        
-        {/* Debug panel to show structural ELK data */}
-        {showElkDebug && (
-          <div className="absolute top-24 right-4 z-50 max-w-lg max-h-[calc(100vh-200px)] overflow-auto bg-white rounded-md shadow-lg border border-gray-200 p-4">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="text-lg font-semibold">ELK Structural Data</h3>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => copyStructuralDataToClipboard(getStructuralData(layoutGraph))}
-                  className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 border border-blue-200 rounded hover:bg-blue-50"
-                >
-                  📋 Copy
-                </button>
-                <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">
-                  Auto-copied
-                </span>
-                <button 
-                  onClick={() => setShowElkDebug(false)}
-                  className="p-1 rounded hover:bg-gray-100"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-            <pre className="text-xs bg-gray-50 p-4 rounded-md overflow-auto max-h-[calc(100vh-300px)]">
-              {JSON.stringify(getStructuralData(layoutGraph), null, 2)}
-            </pre>
-          </div>
-        )}
-        
-        {/* Comprehensive Dev Panel - Contains all developer tools - Hidden in public mode */}
-        {showDev && !isPublicMode && (
-          <div className="absolute top-16 right-4 z-50 w-80 max-h-[calc(100vh-80px)]">
-            <div className="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden h-full flex flex-col">
-              {/* Panel Header */}
-              <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex-shrink-0">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-gray-900">Developer Panel</h3>
-                  <button 
-                    onClick={() => setShowDev(false)}
-                    className="p-1 rounded hover:bg-gray-200 text-gray-500 hover:text-gray-700"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              
-              {/* Load Default Architecture Button - Top Priority */}
-              <div className="px-4 py-3 border-b border-gray-200 bg-green-50 flex-shrink-0">
-                <button
-                  onClick={() => {
-                    console.log('Loading default architecture...');
-                    setRawGraph(DEFAULT_ARCHITECTURE);
-                  }}
-                  className="w-full px-3 py-2 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700 transition-colors"
-                >
-                  🏗️ Load Default GCP Architecture
-                </button>
-              </div>
-              
-              {/* Panel Content - Scrollable */}
-              <div className="p-4 space-y-4 overflow-y-auto flex-1">
-                {/* Streaming Controls - removed toggle as StreamViewer is always shown */}
-                {/* <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">AI Streaming</label>
-                  <button
-                    onClick={() => setShowStreamViewer((p) => !p)}
-                    className={`w-full px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      showStreamViewer 
-                        ? 'bg-blue-100 text-blue-700 border border-blue-200' 
-                        : 'bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200'
-                    }`}
-                  >
-                    {showStreamViewer ? 'Hide AI Stream' : 'Show AI Stream'}
-                  </button>
-                </div> */}
-                
-                {/* Visualization Mode */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">Visualization Mode</label>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                    <span className="text-sm text-gray-600">
-                      {useReactFlow ? 'Interactive (ReactFlow)' : 'Static (SVG)'}
-                    </span>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="sr-only peer"
-                        checked={useReactFlow}
-                        onChange={() => handleToggleVisMode(!useReactFlow)}
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                  </div>
-                </div>
-                
-                {/* Graph Operations */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">Graph Operations</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={handleGraphSync}
-                      disabled={isSyncing}
-                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        isSyncing 
-                          ? 'bg-gray-200 text-gray-500 cursor-not-allowed' 
-                          : 'bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-200'
-                      }`}
-                    >
-                      {isSyncing ? 'Syncing...' : 'Sync Graph'}
-                    </button>
-                    
-                    <button
-                      onClick={handleElkDebugToggle}
-                      className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                        showElkDebug 
-                          ? 'bg-green-100 text-green-700 border border-green-200' 
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
-                      }`}
-                    >
-                      {showElkDebug ? 'Hide Debug' : 'ELK Debug'}
-                    </button>
-                  </div>
-                </div>
-                
-                {/* Test Functions */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">Test Functions</label>
-                  <button
-                    onClick={() => {
-                      // Store test input
-                      (window as any).chatTextInput = 'Create a simple web application with frontend and backend';
-                      // Trigger processing
-                      import("../graph/userRequirements").then(module => {
-                        module.process_user_requirements();
-                      });
-                    }}
-                    className="w-full px-3 py-2 rounded-md text-sm font-medium bg-yellow-100 text-yellow-700 hover:bg-yellow-200 border border-yellow-200 transition-colors"
-                  >
-                    🧪 Test Function Calls
-                  </button>
-                </div>
-                
-                {/* Original Dev Panel Content */}
-                <div className="border-t pt-4">
-            <DevPanel 
-              elkGraph={rawGraph} 
-              onGraphChange={handleGraphChange}
-              onToggleVisMode={handleToggleVisMode}
-              useReactFlow={useReactFlow}
-              onSvgGenerated={handleSvgGenerated}
-            />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
       
       {/* ChatBox at the bottom */}
       <div className="flex-none min-h-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 shadow-lg z-10">
-        <ChatBox 
+        <Chatbox 
           onSubmit={handleChatSubmit}
           onProcessStart={() => {
             console.log('🔄 Starting operation for architecture:', selectedArchitectureId);
@@ -3586,6 +4008,25 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
           }}
         />
       </div>
+      
+      {/* Connection status indicator - HIDDEN */}
+      {/* 
+      <div className="absolute top-4 left-4 z-[101]">
+        <ConnectionStatus />
+      </div>
+      */}
+
+
+      {/* Dev Panel */}
+      {showDev && (
+            <DevPanel 
+          onClose={() => setShowDev(false)}
+          rawGraph={rawGraph}
+          setRawGraph={setRawGraph}
+          isSessionActive={isSessionActive}
+          sendTextMessage={sendTextMessage}
+        />
+      )}
       
       {/* Share Overlay for Embedded Version */}
       {shareOverlay.show && (
@@ -3748,7 +4189,7 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
                     className={`flex-1 px-4 py-2 rounded-full font-medium transition-all duration-200 flex items-center justify-center gap-2
                       ${copyButtonState === 'idle' ? 'bg-black text-white hover:bg-gray-800' : ''}
                       ${copyButtonState === 'copying' ? 'bg-gray-600 text-white scale-95' : ''}
-                      ${copyButtonState === 'success' ? 'bg-white text-green-700 border-2 border-green-500 border-opacity-60 scale-105' : ''}
+                      ${copyButtonState === 'success' ? 'bg-gray-100 text-gray-900 border-2 border-gray-300 scale-105' : ''}
                     `}
                     disabled={copyButtonState !== 'idle'}
                   >
@@ -3790,14 +4231,12 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
         </div>
       )}
 
-      {/* Input Overlay for Rename */}
+      {/* Input Overlay - Matching Share Dialog Design */}
       {inputOverlay.show && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" onClick={inputOverlay.onCancel}>
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {inputOverlay.title}
-              </h3>
+              <h3 className="text-lg font-semibold text-gray-900">{inputOverlay.title}</h3>
               <button
                 onClick={inputOverlay.onCancel}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -3808,52 +4247,50 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
               </button>
             </div>
             
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              const value = formData.get('inputValue') as string;
-              if (value?.trim()) {
-                inputOverlay.onConfirm(value.trim());
-              }
-            }}>
-              <div className="mb-4">
+            <div>
                 <input
                   type="text"
-                  name="inputValue"
-                  defaultValue={inputOverlay.defaultValue}
                   placeholder={inputOverlay.placeholder}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                defaultValue={inputOverlay.defaultValue}
+                className="w-full p-3 bg-gray-50 border rounded-lg text-sm text-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    inputOverlay.onConfirm((e.target as HTMLInputElement).value);
+                  } else if (e.key === 'Escape') {
+                    inputOverlay.onCancel();
+                  }
+                }}
                   autoFocus
                 />
-              </div>
-              <div className="flex gap-2">
+              
+              <div className="flex gap-2 mt-4">
                 <button
-                  type="submit"
-                  className="flex-1 bg-black text-white px-4 py-2 rounded-full hover:bg-gray-800 transition-colors font-medium"
-                >
-                  Confirm
-                </button>
-                <button
-                  type="button"
                   onClick={inputOverlay.onCancel}
-                  className="px-4 py-2 border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors text-center"
                 >
                   Cancel
                 </button>
+                <button
+                  onClick={() => {
+                    const input = document.querySelector('input[placeholder="' + inputOverlay.placeholder + '"]') as HTMLInputElement;
+                    inputOverlay.onConfirm(input?.value || '');
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-center"
+                >
+                  Confirm
+                </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Delete Confirmation Overlay */}
+      {/* Delete Overlay - Matching Share Dialog Design */}
       {deleteOverlay.show && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" onClick={deleteOverlay.onCancel}>
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {deleteOverlay.title}
-              </h3>
+              <h3 className="text-lg font-semibold text-gray-900">{deleteOverlay.title}</h3>
               <button
                 onClick={deleteOverlay.onCancel}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -3864,85 +4301,80 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
               </button>
             </div>
             
-            <div className="mb-6">
-              <p className="text-gray-600">
-                {deleteOverlay.message}
-              </p>
-            </div>
+            <div>
+              <p className="text-gray-600 mb-4">{deleteOverlay.message}</p>
             
             <div className="flex gap-2">
               <button
-                onClick={deleteOverlay.onConfirm}
-                className="flex-1 bg-black text-white px-4 py-2 rounded-full hover:bg-gray-800 transition-colors font-medium"
+                  onClick={deleteOverlay.onCancel}
+                  className="flex-1 px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors text-center"
               >
-                Delete
+                  Cancel
               </button>
               <button
-                onClick={deleteOverlay.onCancel}
-                className="px-4 py-2 border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
+                  onClick={deleteOverlay.onConfirm}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-center"
               >
-                Cancel
+                  Delete
               </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Universal Notification Overlay (replaces all alert/confirm popups) */}
+      {/* Notification Overlay - Matching Share Dialog Design */}
       {notification.show && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" onClick={() => notification.type !== 'confirm' && hideNotification()}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" onClick={() => setNotification(prev => ({ ...prev, show: false }))}>
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className={`text-lg font-semibold ${
-                notification.type === 'success' ? 'text-green-600' :
-                notification.type === 'error' ? 'text-red-600' :
-                notification.type === 'confirm' ? 'text-orange-600' :
-                'text-gray-900'
-              }`}>
+              <h3 className="text-lg font-semibold text-gray-900">
                 {notification.title}
               </h3>
-              {notification.type !== 'confirm' && (
                 <button
-                  onClick={hideNotification}
+                onClick={() => setNotification(prev => ({ ...prev, show: false }))}
                   className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
-              )}
             </div>
             
-            <div className="mb-6">
-              <p className="text-gray-600 whitespace-pre-line">
-                {notification.message}
-              </p>
-            </div>
-            
-            <div className="flex gap-2 justify-end">
+            <div>
+              <p className="text-gray-600 mb-4 whitespace-pre-line">{notification.message}</p>
+              
+              <div className="flex gap-2">
               {notification.type === 'confirm' ? (
                 <>
                   <button
-                    onClick={notification.onCancel}
-                    className="px-4 py-2 border border-gray-300 rounded-full hover:bg-gray-50 transition-colors"
-                  >
-                    {notification.cancelText}
+                      onClick={() => {
+                        setNotification(prev => ({ ...prev, show: false }));
+                        notification.onCancel?.();
+                      }}
+                      className="flex-1 px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors text-center"
+                    >
+                      Cancel
                   </button>
                   <button
-                    onClick={notification.onConfirm}
-                    className="px-4 py-2 bg-black text-white rounded-full hover:bg-gray-800 transition-colors font-medium"
-                  >
-                    {notification.confirmText}
+                      onClick={() => {
+                        setNotification(prev => ({ ...prev, show: false }));
+                        notification.onConfirm?.();
+                      }}
+                      className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-center"
+                    >
+                      Confirm
                   </button>
                 </>
               ) : (
                 <button
-                  onClick={hideNotification}
-                  className="px-4 py-2 bg-black text-white rounded-full hover:bg-gray-800 transition-colors font-medium"
+                    onClick={() => setNotification(prev => ({ ...prev, show: false }))}
+                    className="w-full px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-center"
                 >
-                  {notification.confirmText}
+                    OK
                 </button>
               )}
+              </div>
             </div>
           </div>
         </div>
@@ -3950,8 +4382,7 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
       
       </div>
     </div>
-    </ApiEndpointProvider>
-  )
-}
+  );
+};
 
-export default InteractiveCanvas 
+export default InteractiveCanvas;

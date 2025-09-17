@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import ErrorBoundary from "./console/ErrorBoundary";
 import InteractiveCanvas from "./ui/InteractiveCanvas";
+import { ViewModeProvider } from "../contexts/ViewModeContext";
 import { elkGraphDescription, agentInstruction } from "../realtime/agentConfig";
 import { RtcClient } from "../realtime/RtcClient";
 // Import test functions to make them available in console
@@ -118,16 +119,18 @@ export default function App() {
     <div className="h-screen w-screen overflow-hidden">
       {/* Full-screen modern interface */}
       <ErrorBoundary>
-        <InteractiveCanvas
-          isSessionActive={isSessionActive}
-          isConnecting={isConnecting}
-          isAgentReady={isAgentReady}
-          startSession={startSession}
-          stopSession={stopSession}
-          sendTextMessage={sendTextMessage}
-          sendClientEvent={sendClientEvent}
-          events={events}
-        />
+        <ViewModeProvider fallbackMode="auth">
+          <InteractiveCanvas
+            isSessionActive={isSessionActive}
+            isConnecting={isConnecting}
+            isAgentReady={isAgentReady}
+            startSession={startSession}
+            stopSession={stopSession}
+            sendTextMessage={sendTextMessage}
+            sendClientEvent={sendClientEvent}
+            events={events}
+          />
+        </ViewModeProvider>
       </ErrorBoundary>
     </div>
   );

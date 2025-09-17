@@ -262,7 +262,7 @@ class AnonymousArchitectureService {
             rawGraph: arch.rawGraph,
             nodes: nodes,
             edges: edges,
-            userPrompt: `Transferred from anonymous session on ${arch.timestamp.toDate().toLocaleDateString()}`
+            userPrompt: `Architecture transferred from anonymous session`
           });
 
           console.log(`✅ Transferred anonymous architecture "${arch.name}" → "${architectureName}" to user architecture:`, newArchId);

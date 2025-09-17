@@ -4,12 +4,12 @@ import {
   agentInstruction, 
   modelConfigs, 
   timeoutConfigs 
-} from './agentConfig.js';
+} from './agentConfig';
 import { 
   availableGroupIcons, 
   groupIconInstructions,
   availableIconsComprehensive
-} from './generated/dynamicAgentResources.js';
+} from './generated/dynamicAgentResources';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {

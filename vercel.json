@@ -24,27 +24,6 @@
     }
   ],
 
-  "functions": {
-    "api/simple-agent.ts": {
-      "runtime": "nodejs20.x"
-    },
-    "api/generateChatName.ts": {
-      "runtime": "nodejs20.x"
-    },
-    "api/embed.ts": {
-      "runtime": "nodejs20.x"
-    },
-    "api/stream.ts": {
-      "runtime": "nodejs20.x"
-    },
-    "api/test.ts": {
-      "runtime": "nodejs20.x"
-    },
-    "api/test-js.js": {
-      "runtime": "nodejs20.x"
-    }
-  },
-
   "rewrites": [
     {
       "source": "/((?!api).*)",

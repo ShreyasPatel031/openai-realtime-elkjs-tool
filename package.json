@@ -18,6 +18,8 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:e2e": "playwright test",
+    "test:icon-fallback": "node scripts/test-icon-fallback.js",
+    "test:comprehensive": "npm run test:icon-fallback && npm run test:e2e",
     "test:e2e:headed": "playwright test --headed",
     "generate-icons": "tsx client/scripts/generateIconList.ts",
     "generate-dynamic-lists": "node scripts/generateDynamicLists.cjs",

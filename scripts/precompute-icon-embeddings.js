@@ -246,8 +246,27 @@ async function precomputeIconEmbeddings() {
     };
     
     fs.writeFileSync(OUTPUT_PATH, JSON.stringify(output, null, 2));
+    
+    // Also copy to public directory for local development
+    const publicPath = 'public/precomputed-icon-embeddings.json';
+    const publicDir = path.dirname(publicPath);
+    if (!fs.existsSync(publicDir)) {
+      fs.mkdirSync(publicDir, { recursive: true });
+    }
+    fs.writeFileSync(publicPath, JSON.stringify(output, null, 2));
+    
+    // Also copy to dist directory for Vercel deployment
+    const distPath = 'dist/precomputed-icon-embeddings.json';
+    const distDir = path.dirname(distPath);
+    if (!fs.existsSync(distDir)) {
+      fs.mkdirSync(distDir, { recursive: true });
+    }
+    fs.writeFileSync(distPath, JSON.stringify(output, null, 2));
+    
     console.log(`✅ Pre-computed ${Object.keys(embeddings).length} icon embeddings and similarities`);
     console.log(`📁 Saved to ${OUTPUT_PATH}`);
+    console.log(`📁 Also saved to ${publicPath} for local development`);
+    console.log(`📁 Also saved to ${distPath} for Vercel deployment`);
     
   } catch (error) {
     console.error('❌ Failed to pre-compute icon embeddings:', error);

@@ -4,12 +4,12 @@ import {
   agentInstruction, 
   modelConfigs, 
   timeoutConfigs 
-} from './agentConfig';
+} from './agentConfig.js';
 import { 
   availableGroupIcons, 
   groupIconInstructions,
   availableIconsComprehensive
-} from './generated/dynamicAgentResources';
+} from './generated/dynamicAgentResources.js';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
@@ -44,7 +44,7 @@ export default async function handler(req: any, res: any) {
   }
 
   const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY?.trim(),
+    apiKey: process.env.OPENAI_API_KEY,
     timeout: timeoutConfigs.requestTimeout,
   });
 

@@ -26,16 +26,16 @@
 
   "functions": {
     "api/simple-agent.ts": {
-      "runtime": "nodejs18.x"
+      "runtime": "nodejs20.x"
     },
     "api/generateChatName.ts": {
-      "runtime": "nodejs18.x"
+      "runtime": "nodejs20.x"
     },
     "api/embed.ts": {
-      "runtime": "nodejs18.x"
+      "runtime": "nodejs20.x"
     },
     "api/stream.ts": {
-      "runtime": "nodejs18.x"
+      "runtime": "nodejs20.x"
     }
   },
 

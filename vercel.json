@@ -24,9 +24,24 @@
     }
   ],
 
+  "functions": {
+    "api/simple-agent.ts": {
+      "runtime": "nodejs18.x"
+    },
+    "api/generateChatName.ts": {
+      "runtime": "nodejs18.x"
+    },
+    "api/embed.ts": {
+      "runtime": "nodejs18.x"
+    },
+    "api/stream.ts": {
+      "runtime": "nodejs18.x"
+    }
+  },
+
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api).*)",
       "destination": "/index.html"
     }
   ]

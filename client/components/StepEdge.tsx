@@ -108,7 +108,11 @@ const StepEdge: React.FC<EdgeProps> = ({
               zIndex: 5000
             }}
           >
-            {edgeLabel}
+{edgeLabel.split('\n').map((line: string, index: number) => (
+              <div key={index} style={{ lineHeight: '1.2' }}>
+                {line}
+              </div>
+            ))}
           </div>
         </EdgeLabelRenderer>
       )}

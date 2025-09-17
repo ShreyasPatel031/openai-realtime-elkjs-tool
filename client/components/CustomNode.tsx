@@ -68,6 +68,7 @@ interface CustomNodeProps {
     topHandles?: string[];
     bottomHandles?: string[];
     isEditing?: boolean; // Added isEditing prop
+    dropHover?: boolean; // Added dropHover prop for drag-and-drop highlighting
   };
   id: string;
   selected?: boolean;
@@ -102,7 +103,6 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
       return cachedUrl;
     }
 
-    console.log(`🔄 Loading icon: ${iconName}`);
     
     const prefixMatch = iconName.match(/^(aws|gcp|azure)_(.+)$/);
     if (prefixMatch) {
@@ -120,7 +120,6 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
         
         // Cache the successfully loaded icon
         iconCacheService.cacheIcon(iconName, fullIconUrl);
-        console.log(`✅ Cached icon: ${iconName}`);
         return fullIconUrl;
       }
     }
@@ -142,7 +141,6 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
         
         // Cache the successfully loaded icon
         iconCacheService.cacheIcon(iconName, fullUrl);
-        console.log(`✅ Cached legacy icon: ${iconName}`);
         return fullUrl;
       } catch {}
     }
@@ -284,7 +282,11 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
 
   const nodeStyle = {
     background: selected ? '#f8f9fa' : 'white',
-    border: selected ? '2px solid #6c757d' : '1px solid #ccc',
+    border: data.dropHover 
+      ? '2px solid #3B82F6' // Blue highlight when being hovered during drag
+      : selected 
+        ? '2px solid #6c757d' 
+        : '1px solid #ccc',
     borderRadius: '4px',
     padding: '0px', // Remove padding to center content properly
     width: data.width || 80,
@@ -296,7 +298,8 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
     boxShadow: selected ? '0 0 5px rgba(0, 0, 0, 0.3)' : '0 1px 4px rgba(0, 0, 0, 0.1)',
     position: 'relative' as const,
     zIndex: selected ? 100 : 50,
-    pointerEvents: 'all' as const
+    pointerEvents: 'all' as const,
+    transition: 'border-color 0.2s ease-in-out' // Smooth transition for hover effect
   };
 
   return (
@@ -311,7 +314,9 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
             style={{ 
               ...baseHandleStyle,
               position: 'absolute',
-              top: yPos
+              top: yPos,
+              left: -16, // Push outward by OFFSET to match visual circles
+              transform: 'translate(-50%, -50%)' // Center the handle
             }}
           />
           <Handle
@@ -322,6 +327,8 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
               ...baseHandleStyle,
               position: 'absolute',
               top: yPos,
+              left: -16, // Push outward by OFFSET to match visual circles
+              transform: 'translate(-50%, -50%)', // Center the handle
               opacity: 0 // Make it invisible but functional
             }}
           />
@@ -337,7 +344,10 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
             id={`right-${index}-source`}
             style={{ 
               ...baseHandleStyle,
-              top: yPos
+              position: 'absolute',
+              top: yPos,
+              right: -16, // Push outward by OFFSET to match visual circles
+              transform: 'translate(50%, -50%)' // Center the handle
             }}
           />
           <Handle
@@ -346,7 +356,10 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
             id={`right-${index}-target`}
             style={{ 
               ...baseHandleStyle,
+              position: 'absolute',
               top: yPos,
+              right: -16, // Push outward by OFFSET to match visual circles
+              transform: 'translate(50%, -50%)', // Center the handle
               opacity: 0 // Make it invisible but functional
             }}
           />
@@ -362,7 +375,10 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
             id={`top-${index}-source`}
             style={{ 
               ...baseHandleStyle,
-              left: xPos
+              position: 'absolute',
+              left: xPos,
+              top: -16, // Push outward by OFFSET to match visual circles
+              transform: 'translate(-50%, -50%)' // Center the handle
             }}
           />
           <Handle
@@ -371,7 +387,10 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
             id={`top-${index}-target`}
             style={{ 
               ...baseHandleStyle,
+              position: 'absolute',
               left: xPos,
+              top: -16, // Push outward by OFFSET to match visual circles
+              transform: 'translate(-50%, -50%)', // Center the handle
               opacity: 0 // Make it invisible but functional
             }}
           />
@@ -387,7 +406,10 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
             id={`bottom-${index}-target`}
             style={{ 
               ...baseHandleStyle,
-              left: xPos
+              position: 'absolute',
+              left: xPos,
+              bottom: -16, // Push outward by OFFSET to match visual circles
+              transform: 'translate(-50%, 50%)' // Center the handle
             }}
           />
           <Handle
@@ -396,10 +418,28 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
             id={`bottom-${index}-source`}
             style={{ 
               ...baseHandleStyle,
+              position: 'absolute',
               left: xPos,
+              bottom: -16, // Push outward by OFFSET to match visual circles
+              transform: 'translate(-50%, 50%)', // Center the handle
               opacity: 0 // Make it invisible but functional
             }}
           />
+          {/* 🔎 DEBUG — tiny dev-only dot on bottom-left to see where ReactFlow is placing the handle */}
+          {index === 0 && (
+            <div
+              style={{
+                position: 'absolute',
+                left: xPos,
+                bottom: -16,
+                transform: 'translate(-50%, 50%)',
+                width: 6, height: 6, borderRadius: 3,
+                background: 'magenta',
+                pointerEvents: 'none',
+                zIndex: 99999,
+              }}
+            />
+          )}
         </React.Fragment>
       ))}
       

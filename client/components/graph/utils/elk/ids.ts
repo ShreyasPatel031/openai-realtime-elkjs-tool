@@ -49,7 +49,6 @@ export function ensureIds(root: any): any {
         const labelText = node.labels[0].text;
         const dimensions = calculateNodeDimensions(labelText);
         node.height ??= dimensions.height;
-        console.log(`🎨 ELK Options: Dynamic height for "${labelText}": ${dimensions.height}px`);
       } else {
         // Container node or leaf without label - use fallback height
         node.height ??= 100; // Fallback for containers

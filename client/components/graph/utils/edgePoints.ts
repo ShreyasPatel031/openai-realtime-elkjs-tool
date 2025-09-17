@@ -13,6 +13,7 @@ export type EdgePointMap = Record<string, NodeEdgePoints>;
 
 /** Determines which side of the node a point is closest to */
 function determineConnectionSide(nodePosition: {x: number, y: number}, nodeWidth: number, nodeHeight: number, connectionPoint: {x: number, y: number}) {
+  
   // Calculate the center of the node
   const centerX = nodePosition.x + nodeWidth / 2;
   const centerY = nodePosition.y + nodeHeight / 2;
@@ -26,14 +27,87 @@ function determineConnectionSide(nodePosition: {x: number, y: number}, nodeWidth
   // Find the minimum distance
   const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
   
-  // Return the side with the minimum distance
-  if (minDist === distToLeft) return "left";
-  if (minDist === distToRight) return "right";
-  if (minDist === distToTop) return "top";
-  if (minDist === distToBottom) return "bottom";
+  // After computing minDist, if two sides tie, prefer the one with the larger delta
+  // toward the outside (e.g., bottom over right for points below center on BR).
+  const tiedSides = [];
+  if (minDist === distToLeft) tiedSides.push("left");
+  if (minDist === distToRight) tiedSides.push("right");
+  if (minDist === distToTop) tiedSides.push("top");
+  if (minDist === distToBottom) tiedSides.push("bottom");
   
-  // Fallback - should never happen
-  return "right";
+  // If only one side, return it
+  if (tiedSides.length === 1) {
+    return tiedSides[0];
+  }
+  
+  // Handle ties by preferring the side that's more "outward" from center
+  const deltaX = connectionPoint.x - centerX;
+  const deltaY = connectionPoint.y - centerY;
+  
+  // 🔎 DEBUG: side decision (filters to bottom corners to avoid noise)
+  const nearBottom = Math.abs(connectionPoint.y - (nodePosition.y + nodeHeight)) <= 12;
+  const nearRight  = Math.abs(connectionPoint.x - (nodePosition.x + nodeWidth)) <= 12;
+  const nearLeft   = Math.abs(connectionPoint.x - nodePosition.x) <= 12;
+
+  if (nearBottom && (nearRight || nearLeft)) {
+    console.warn('[SIDE-DECISION]', {
+      nodePos: { ...nodePosition, width: nodeWidth, height: nodeHeight },
+      connectionPoint,
+      dists: {
+        left: Math.abs(connectionPoint.x - nodePosition.x),
+        right: Math.abs(connectionPoint.x - (nodePosition.x + nodeWidth)),
+        top: Math.abs(connectionPoint.y - nodePosition.y),
+        bottom: Math.abs(connectionPoint.y - (nodePosition.y + nodeHeight)),
+      },
+      tiedSides,
+      deltaFromCenter: { x: deltaX, y: deltaY },
+    });
+  }
+
+  // Dev-only sanity: if we are closer/equal to bottom than right/left, prefer bottom.
+  const bottomCloserOrEqual = distToBottom <= Math.min(distToLeft, distToRight, distToTop);
+  if (nearBottom && bottomCloserOrEqual && tiedSides.includes('right')) {
+    console.warn('[SIDE-ASSERT] Picked RIGHT near bottom; likely tie-break issue', { connectionPoint, nodePosition, nodeWidth, nodeHeight });
+  }
+  if (nearBottom && bottomCloserOrEqual && tiedSides.includes('left')) {
+    console.warn('[SIDE-ASSERT] Picked LEFT near bottom; likely tie-break issue', { connectionPoint, nodePosition, nodeWidth, nodeHeight });
+  }
+  
+  // For corner ties, prefer the side that aligns with the larger offset from center
+  if (tiedSides.includes("bottom") && tiedSides.includes("right") && deltaY > 0 && deltaX > 0) {
+    return Math.abs(deltaY) > Math.abs(deltaX) ? "bottom" : "right";
+  }
+  if (tiedSides.includes("bottom") && tiedSides.includes("left") && deltaY > 0 && deltaX < 0) {
+    return Math.abs(deltaY) > Math.abs(deltaX) ? "bottom" : "left";
+  }
+  if (tiedSides.includes("top") && tiedSides.includes("right") && deltaY < 0 && deltaX > 0) {
+    return Math.abs(deltaY) > Math.abs(deltaX) ? "top" : "right";
+  }
+  if (tiedSides.includes("top") && tiedSides.includes("left") && deltaY < 0 && deltaX < 0) {
+    return Math.abs(deltaY) > Math.abs(deltaX) ? "top" : "left";
+  }
+  
+  // 🔎 DEBUG — log distances to see tie-breaking behavior
+  console.warn('🎯 [determineConnectionSide]', {
+    nodePos: nodePosition,
+    nodeWidth,
+    nodeHeight,
+    connectionPoint,
+    dists: {
+      left: distToLeft,
+      right: distToRight,
+      top: distToTop,
+      bottom: distToBottom,
+    },
+    minDist,
+    chosen: (minDist === distToLeft && 'left')
+         || (minDist === distToRight && 'right')
+         || (minDist === distToTop && 'top')
+         || (minDist === distToBottom && 'bottom'),
+  });
+
+  // Return the first tied side as fallback
+  return tiedSides[0];
 }
 
 /** Gathers connection + bend points using absolute positions. */
@@ -48,21 +122,27 @@ export function buildNodeEdgePoints(graph: any, abs: AbsMap): EdgePointMap {
     map[nodeId][side].push(entry);
   };
 
-  // First pass: collect all nodes with their dimensions
+  // First pass: collect all nodes with their dimensions (use real sizes)
   const nodeDimensions = new Map();
   const collectNodeDimensions = (node: any) => {
-    nodeDimensions.set(node.id, {
-      width: node.width || 80,
-      height: node.height || 40
-    });
+    const dimensions = {
+      width:  node.width  ?? node.measuredWidth  ?? node.layout?.width  ?? node.size?.width  ?? 80,
+      height: node.height ?? node.measuredHeight ?? node.layout?.height ?? node.size?.height ?? 40,
+    };
+    
+    
+    nodeDimensions.set(node.id, dimensions);
     (node.children || []).forEach(collectNodeDimensions);
   };
   collectNodeDimensions(graph);
 
   const visitContainerEdges = (container: any) => {
-    (container.edges || []).forEach((e: any) => {
+        (container.edges || []).forEach((e: any) => {
       const sec = e.sections?.[0];
-      if (!sec) return;
+      if (!sec) {
+        console.warn('❌ [buildNodeEdgePoints] No sections[0] for edge:', e.id);
+        return;
+      }
 
       const { x: ox, y: oy } = abs[container.id] ?? { x: 0, y: 0 };
 
@@ -73,6 +153,7 @@ export function buildNodeEdgePoints(graph: any, abs: AbsMap): EdgePointMap {
         const sourceNodePos = abs[sourceNodeId] || { x: 0, y: 0 };
         const sourceNodeDim = nodeDimensions.get(sourceNodeId) || { width: 80, height: 40 };
         
+        
         // Determine which side of the source node the connection is coming from
         const sourceSide = determineConnectionSide(
           sourceNodePos,
@@ -81,10 +162,7 @@ export function buildNodeEdgePoints(graph: any, abs: AbsMap): EdgePointMap {
           { x: startPointX, y: startPointY }
         );
         
-        // Keep debug for load balancer edges only (main problem pattern)
-        if (e.id && e.id.includes('lb_app')) {
-          console.log(`🔗 Edge ${e.id} at container ${container.id}: coords ${startPointX},${startPointY} -> node ${sourceNodePos.x},${sourceNodePos.y}`);
-        }
+        
         
         add(sourceNodeId, sourceSide, {
           edgeId: e.id,
@@ -102,6 +180,7 @@ export function buildNodeEdgePoints(graph: any, abs: AbsMap): EdgePointMap {
         const endPointY = oy + sec.endPoint.y;
         const targetNodePos = abs[targetNodeId] || { x: 0, y: 0 };
         const targetNodeDim = nodeDimensions.get(targetNodeId) || { width: 80, height: 40 };
+        
         
         // Determine which side of the target node the connection is going to
         const targetSide = determineConnectionSide(

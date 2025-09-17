@@ -57,11 +57,9 @@ export function onElkGraph(
   };
   
   window.addEventListener(ELK_GRAPH_SET, wrapped);
-  console.log('🔗 Registered elkGraph:set listener');
   
   return () => {
     window.removeEventListener(ELK_GRAPH_SET, wrapped);
-    console.log('🗑️ Unregistered elkGraph:set listener');
   };
 }
 

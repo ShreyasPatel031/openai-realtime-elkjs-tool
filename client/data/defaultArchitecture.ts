@@ -313,6 +313,36 @@ export const DEFAULT_ARCHITECTURE = {
       "sources": ["external_client"],
       "targets": ["cloud_lb"],
       "labels": [{ "text": "requests" }]
+    },
+    {
+      "id": "edge_test_short",
+      "sources": ["external_client"],
+      "targets": ["cloud_armor"],
+      "labels": [{ "text": "short" }]
+    },
+    {
+      "id": "edge_test_long_word",
+      "sources": ["external_client"],
+      "targets": ["cloud_cdn"],
+      "labels": [{ "text": "supercalifragilisticexpialidocious" }]
+    },
+    {
+      "id": "edge_test_multi_word",
+      "sources": ["web_client"],
+      "targets": ["api_gw"],
+      "labels": [{ "text": "sends auth request" }]
+    },
+    {
+      "id": "edge_test_very_long",
+      "sources": ["mobile_client"],
+      "targets": ["iap"],
+      "labels": [{ "text": "establishes secure connection through layers" }]
+    },
+    {
+      "id": "edge_test_medium",
+      "sources": ["root_gcp"],
+      "targets": ["users"],
+      "labels": [{ "text": "provides services to" }]
     }
   ]
 };

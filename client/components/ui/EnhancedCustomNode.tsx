@@ -147,6 +147,8 @@ const EnhancedCustomNode: React.FC<EnhancedCustomNodeProps> = ({
       isSelected={selected}
       onGraphChange={onGraphChange}
       rawGraph={rawGraph}
+      nodeWidth={data.width}
+      nodeHeight={data.height}
     >
       {customNodeComponent}
     </DragDropEdgeHandler>

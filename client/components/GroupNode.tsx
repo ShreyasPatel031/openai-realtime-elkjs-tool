@@ -60,7 +60,6 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
       return cachedUrl;
     }
 
-    console.log(`🔄 Loading icon: ${iconName}`);
     
     // Check if icon has provider prefix (e.g., 'gcp_cloud_monitoring')
     const prefixMatch = iconName.match(/^(aws|gcp|azure)_(.+)$/);
@@ -84,7 +83,6 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
 
           // Cache the successfully loaded icon
           iconCacheService.cacheIcon(iconName, fullIconUrl);
-          console.log(`✅ Cached icon: ${iconName}`);
           return fullIconUrl;
         } catch (error) {
           // Fall through to legacy paths
@@ -439,9 +437,10 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
           <span style={{ 
             overflow: 'hidden', 
             textOverflow: 'ellipsis',
-            maxWidth: '100%'
+            maxWidth: '200px', // Limit width to prevent very long labels
+            whiteSpace: 'nowrap' // Prevent wrapping, use ellipsis instead
           }}>
-            {data.label}
+            {data.label.length > 25 ? `${data.label.substring(0, 25)}...` : data.label}
           </span>
         </div>
       )}

@@ -147,6 +147,8 @@ const EnhancedGroupNode: React.FC<EnhancedGroupNodeProps> = ({
       isSelected={selected}
       onGraphChange={onGraphChange}
       rawGraph={rawGraph}
+      nodeWidth={data.width}
+      nodeHeight={data.height}
     >
       {groupNodeComponent}
     </DragDropEdgeHandler>

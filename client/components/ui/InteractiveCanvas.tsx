@@ -172,7 +172,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     // If agent is locked to an architecture, use that; otherwise use selected
     const targetArchitectureId = agentLockedArchitectureId || selectedArchitectureId;
     (window as any).currentArchitectureId = targetArchitectureId;
-    console.log('🎯 Agent targeting architecture:', targetArchitectureId, agentLockedArchitectureId ? '(LOCKED)' : '(following selection)');
   }, [selectedArchitectureId, agentLockedArchitectureId]);
   
   // State for auth flow
@@ -442,7 +441,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   // Sync Firebase architectures ONLY when user changes (not when tabs change)
   useEffect(() => {
-    console.log('🔄 useEffect triggered - user:', user?.uid, 'justCreatedArchId:', justCreatedArchId, 'hasInitialSync:', hasInitialSync);
     if (user?.uid && !hasInitialSync) {
       // Don't sync immediately after creating an architecture
       if (!justCreatedArchId) {
@@ -841,7 +839,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   // Listen for auth state changes
   useEffect(() => {
-    console.log('🌐 Current URL:', window.location.href, 'isPublicMode:', isPublicMode);
     
     // In public mode, completely skip Firebase auth monitoring and force clean state
     if (isPublicMode) {
@@ -1821,35 +1818,35 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       const top = p.clientY - wrapperRect.top - offsetY;
       setGhost((g) => g.active ? { ...g, left, top } : g);
 
-      // Group hover detection - find the most specific (smallest) group containing the cursor
-      const groupNodes = nodes.filter(n => n.type === 'group');
+      // Drop target detection - find the smallest (most specific) node under cursor
+      const allNodes = nodes.filter(n => n.type === 'group' || n.type === 'custom');
       let hovering: string | null = null;
       let smallestArea = Infinity;
-      const groupsUnderCursor: Array<{id: string, area: number}> = [];
+      const nodesUnderCursor: Array<{id: string, area: number, type: string}> = [];
       
-      for (const g of groupNodes) {
-        const gel = document.querySelector(`.react-flow__node[data-id="${g.id}"]`) as HTMLElement | null;
-        if (!gel) continue;
-        const r = gel.getBoundingClientRect();
+      for (const node of allNodes) {
+        const nodeEl = document.querySelector(`.react-flow__node[data-id="${node.id}"]`) as HTMLElement | null;
+        if (!nodeEl) continue;
+        const r = nodeEl.getBoundingClientRect();
         if (p.clientX >= r.left && p.clientX <= r.right && p.clientY >= r.top && p.clientY <= r.bottom) {
           const area = r.width * r.height;
-          groupsUnderCursor.push({id: g.id, area});
+          nodesUnderCursor.push({id: node.id, area, type: node.type || 'unknown'});
           
-          // Select the smallest group (most specific), but prefer non-root groups
-          if (g.id !== 'root' && area < smallestArea) {
+          // Select the smallest area (most specific/highest level) node, prefer non-root
+          if (node.id !== 'root' && area < smallestArea) {
             smallestArea = area;
-            hovering = g.id;
-          } else if (hovering === null && g.id === 'root') {
-            // Only set root if no other group is found
-            hovering = g.id;
+            hovering = node.id;
+          } else if (hovering === null && node.id === 'root') {
+            // Only use root if no other node found
+            hovering = node.id;
           }
         }
       }
       
-      // Debug log groups under cursor
-      if (groupsUnderCursor.length > 0) {
-        console.log(`🎯 Groups under cursor:`, groupsUnderCursor.map(g => `${g.id}(${g.area})`).join(', '));
-        console.log(`🎯 Selected highest group: ${hovering}`);
+      // Debug log nodes under cursor
+      if (nodesUnderCursor.length > 0) {
+        console.log(`🎯 Nodes under cursor:`, nodesUnderCursor.map(n => `${n.id}(${n.type},${n.area})`).join(', '));
+        console.log(`🎯 Selected drop target: ${hovering}`);
       }
       setDropHoverGroup(hovering);
     };
@@ -1863,35 +1860,51 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       window.removeEventListener('touchend', onUp);
 
       setGhost({ active: false });
+      setDropHoverGroup(null); // Clear hover state
 
       const p = e.changedTouches ? e.changedTouches[0] : e;
-      const groupNodes = nodes.filter(n => n.type === 'group');
-      let targetGroup: string | null = null;
+      const allNodes = nodes.filter(n => n.type === 'group' || n.type === 'custom');
+      let targetNode: string | null = null;
       let smallestArea = Infinity;
       
-      for (const g of groupNodes) {
-        const gel = document.querySelector(`.react-flow__node[data-id="${g.id}"]`) as HTMLElement | null;
-        if (!gel) continue;
-        const r = gel.getBoundingClientRect();
+      // Find the smallest (most specific/highest level) node under cursor
+      for (const node of allNodes) {
+        const nodeEl = document.querySelector(`.react-flow__node[data-id="${node.id}"]`) as HTMLElement | null;
+        if (!nodeEl) continue;
+        const r = nodeEl.getBoundingClientRect();
         if (p.clientX >= r.left && p.clientX <= r.right && p.clientY >= r.top && p.clientY <= r.bottom) {
           const area = r.width * r.height;
-          // Select the smallest group (most specific), but prefer non-root groups
-          if (g.id !== 'root' && area < smallestArea) {
+          // Select the smallest area (most specific/highest level) node, prefer non-root
+          if (node.id !== 'root' && area < smallestArea) {
             smallestArea = area;
-            targetGroup = g.id;
-          } else if (targetGroup === null && g.id === 'root') {
-            // Only set root if no other group is found
-            targetGroup = g.id;
+            targetNode = node.id;
+          } else if (targetNode === null && node.id === 'root') {
+            targetNode = node.id;
           }
         }
       }
       
-      // If no group found at all, default to root
-      if (!targetGroup) {
-        targetGroup = 'root';
+      // If no node found, default to root
+      if (!targetNode) {
+        targetNode = 'root';
       }
 
-                  if (targetGroup && targetGroup !== fromGroupId) {
+      // Get the target group: if target is a group, use it; if target is individual node, use its parent
+      const targetNodeData = nodes.find(n => n.id === targetNode);
+      let targetGroup: string;
+      
+      if (targetNodeData?.type === 'group') {
+        // Dropped on a group - use the group as target
+        targetGroup = targetNode;
+      } else {
+        // Dropped on an individual node - use that node as the target parent
+        targetGroup = targetNode;
+      }
+      
+      console.log(`🎯 Dropped on ${targetNodeData?.type || 'unknown'} node: ${targetNode}, target group: ${targetGroup}`);
+
+      // Always trigger move operation (provides visual feedback even if same group)
+      if (targetGroup) {
         console.log(`🔄 Moving node ${nodeId} from ${fromGroupId} to ${targetGroup}`);
         try {
           setIsUserOperation(true);
@@ -2105,7 +2118,16 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const nodesWithGhostDrag = useMemo(() => {
     return nodes.map(node => 
       node.type === 'custom' 
-        ? { ...node, data: { ...node.data, startGhostDrag } }
+        ? { 
+            ...node, 
+            data: { 
+              ...node.data, 
+              startGhostDrag,
+              dropHover: dropHoverGroup === node.id,
+              ghostActive: ghost.active,
+              currentDropHover: dropHoverGroup
+            } 
+          }
         : node.type === 'group'
         ? { 
             ...node, 
@@ -2219,6 +2241,151 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const moveHandlerRef = useRef<((ev: any) => void) | null>(null);
   const [connectionLine, setConnectionLine] = useState<{x1: number, y1: number, x2: number, y2: number} | null>(null);
+  const [copiedGroup, setCopiedGroup] = useState<string | null>(null);
+
+  // Debug: Log current state
+  useEffect(() => {
+    console.log('🔍 Current state:', {
+      copiedGroup,
+      selectedArchitectureId,
+      savedArchitecturesCount: savedArchitectures.length,
+      nodesCount: nodes.length,
+      selectedNodes: nodes.filter(node => node.selected).map(node => ({ id: node.id, type: node.type }))
+    });
+  }, [copiedGroup, selectedArchitectureId, savedArchitectures.length, nodes.length, nodes]);
+
+  // Copy-paste functionality for groups and nodes
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      console.log('🎹 Key pressed:', event.key, 'Ctrl:', event.ctrlKey);
+      
+      // Check if Ctrl+C is pressed
+      if (event.ctrlKey && event.key === 'c') {
+        const selectedNodes = nodes.filter(node => node.selected);
+        console.log('📋 Ctrl+C pressed, selected nodes:', selectedNodes);
+        
+        if (selectedNodes.length === 1) {
+          event.preventDefault();
+          setCopiedGroup(selectedNodes[0].id);
+          console.log(`📋 Copied ${selectedNodes[0].type}: ${selectedNodes[0].id}`);
+        } else if (selectedNodes.length === 0) {
+          console.log('📋 No nodes selected for copying');
+        } else {
+          console.log('📋 Multiple nodes selected, only copying first one');
+          event.preventDefault();
+          setCopiedGroup(selectedNodes[0].id);
+          console.log(`📋 Copied ${selectedNodes[0].type}: ${selectedNodes[0].id}`);
+        }
+      }
+      
+      // Check if Ctrl+V is pressed
+      if (event.ctrlKey && event.key === 'v' && copiedGroup) {
+        console.log('📋 Ctrl+V pressed, pasting:', copiedGroup);
+        event.preventDefault();
+        handlePasteNodeOrGroup();
+      } else if (event.ctrlKey && event.key === 'v' && !copiedGroup) {
+        console.log('📋 Ctrl+V pressed but nothing copied');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [copiedGroup, nodes]);
+
+  const handlePasteNodeOrGroup = useCallback(() => {
+    if (!copiedGroup) {
+      console.log('❌ No copied group to paste');
+      return;
+    }
+    
+    console.log(`📋 Starting paste operation for: ${copiedGroup}`);
+    
+    // Get the current architecture from savedArchitectures
+    const currentArchitecture = savedArchitectures.find(arch => arch.id === selectedArchitectureId);
+    console.log('📋 Current architecture:', currentArchitecture ? 'found' : 'not found');
+    console.log('📋 Selected architecture ID:', selectedArchitectureId);
+    console.log('📋 Saved architectures count:', savedArchitectures.length);
+    
+    if (!currentArchitecture) {
+      console.error('❌ No current architecture found');
+      return;
+    }
+    
+    // Deep copy the raw graph
+    const updatedGraph = JSON.parse(JSON.stringify(currentArchitecture.rawGraph));
+    console.log('📋 Raw graph copied, looking for node:', copiedGroup);
+    
+    try {
+      // Find the node/group to copy
+      const nodeToCopy = findNodeById(updatedGraph, copiedGroup);
+      console.log('📋 Node to copy found:', nodeToCopy ? 'yes' : 'no');
+      
+      if (!nodeToCopy) {
+        console.error(`❌ Node/Group ${copiedGroup} not found`);
+        return;
+      }
+      
+      // Get the parent of the copied node/group
+      const parentId = getCurrentParentId(copiedGroup);
+      console.log('📋 Parent ID:', parentId);
+      
+      const parent = findNodeById(updatedGraph, parentId);
+      console.log('📋 Parent found:', parent ? 'yes' : 'no');
+      
+      if (!parent) {
+        console.error(`❌ Parent ${parentId} not found`);
+        return;
+      }
+      
+      // Generate a unique ID for the new node/group
+      const timestamp = Date.now();
+      const newNodeId = `${copiedGroup}_copy_${timestamp}`;
+      console.log('📋 New node ID:', newNodeId);
+      
+      // Deep clone the node/group
+      const clonedNode = JSON.parse(JSON.stringify(nodeToCopy));
+      clonedNode.id = newNodeId;
+      console.log('📋 Node cloned successfully');
+      
+      // If it's a group, update all child IDs to be unique
+      if (clonedNode.children) {
+        console.log('📋 Updating child IDs for group with', clonedNode.children.length, 'children');
+        const updateChildIds = (node: any) => {
+          if (node.children) {
+            node.children.forEach((child: any) => {
+              child.id = `${child.id}_copy_${timestamp}`;
+              updateChildIds(child);
+            });
+          }
+        };
+        updateChildIds(clonedNode);
+        console.log('📋 Child IDs updated');
+      }
+      
+      // Add the cloned node/group to the parent
+      if (!parent.children) parent.children = [];
+      parent.children.push(clonedNode);
+      console.log('📋 Node added to parent, parent now has', parent.children.length, 'children');
+      
+      // Update the architecture
+      const updatedArchitecture = {
+        ...currentArchitecture,
+        rawGraph: updatedGraph
+      };
+      console.log('📋 Architecture updated');
+      
+      // Update savedArchitectures
+      setSavedArchitectures(prev => 
+        prev.map(arch => arch.id === selectedArchitectureId ? updatedArchitecture : arch)
+      );
+      console.log('📋 SavedArchitectures updated');
+      
+      console.log(`✅ Successfully pasted: ${newNodeId}`);
+      
+    } catch (error) {
+      console.error('❌ Error pasting node/group:', error);
+    }
+  }, [copiedGroup, savedArchitectures, selectedArchitectureId, getCurrentParentId]);
 
   const handleConnectStart = useCallback((_e: any, params: OnConnectStartParams) => {
     console.log('🔗 CONNECTION START TRIGGERED!', params);
@@ -3399,6 +3566,21 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         
 
 
+        {/* Copy-Paste Status Indicator */}
+        {copiedGroup && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-blue-200 bg-blue-50 text-blue-700">
+            <span className="text-sm font-medium">📋 Copied: {copiedGroup}</span>
+            <button
+              onClick={() => setCopiedGroup(null)}
+              className="text-blue-500 hover:text-blue-700 text-xs"
+              title="Clear copied item"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+
         {/* Settings/Dev Panel Button - Always visible */}
         <button
           onClick={() => setShowDev(!showDev)}
@@ -3468,11 +3650,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               onConnectEnd={handleConnectEnd}
               onSelectionChange={onSelectionChange}
               connectOnClick={false}
-              connectionLineType="smoothstep"
+              connectionLineType="step"
               connectionLineStyle={{
-                strokeWidth: 3,
-                stroke: '#ff0000',
-                strokeDasharray: '5,5',
+                ...CANVAS_STYLES.edges.default,
                 zIndex: 999999
               }}
 
@@ -3482,6 +3662,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 // Disable fitView completely
                 instance.fitView = () => {
                   console.log('🚫 fitView disabled');
+                  return false;
                 };
               }}
               nodeTypes={memoizedNodeTypes}
@@ -3509,11 +3690,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               disableKeyboardA11y={false}
               edgesFocusable={true}
               edgesUpdatable={true}
-              onConnectStart={handleConnectStart}
-              onConnectEnd={handleConnectEnd}
-
               deleteKeyCode="Delete"
-              connectOnClick={false}
               elevateNodesOnSelect={false}
             >
               <Background 
@@ -3555,14 +3732,13 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 <defs>
                   <marker id="connectionArrowhead" markerWidth="10" markerHeight="7" 
                           refX="9" refY="3.5" orient="auto">
-                    <polygon points="0 0, 10 3.5, 0 7" fill="#0066cc" />
+                    <polygon points="0 0, 10 3.5, 0 7" fill={CANVAS_STYLES.edges.marker.color} />
                   </marker>
                 </defs>
                 <path 
                   d={`M ${connectionLine.x1} ${connectionLine.y1} L ${connectionLine.x1} ${(connectionLine.y1 + connectionLine.y2) / 2} L ${connectionLine.x2} ${(connectionLine.y1 + connectionLine.y2) / 2} L ${connectionLine.x2} ${connectionLine.y2}`}
-                  stroke="#0066cc"
-                  strokeWidth="2"
-                  strokeDasharray="5,5"
+                  stroke={CANVAS_STYLES.edges.default.stroke}
+                  strokeWidth={CANVAS_STYLES.edges.default.strokeWidth}
                   fill="none"
                   markerEnd="url(#connectionArrowhead)"
                 />

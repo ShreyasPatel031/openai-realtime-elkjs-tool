@@ -4,6 +4,51 @@ import { computeAbsolutePositions } from "./elk/absPositions";
 import { buildNodeEdgePoints } from "./edgePoints";
 import { CANVAS_STYLES } from "../styles/canvasStyles";
 
+// Truncate edge labels to prevent them from being too long
+function truncateEdgeLabel(text: string): string {
+  if (!text) return text;
+  
+  // Split by spaces to handle word boundaries
+  const words = text.split(' ');
+  
+  // If single word is too long, truncate with ellipsis
+  if (words.length === 1 && text.length > 20) {
+    return text.substring(0, 17) + '...';
+  }
+  
+  // For multiple words, limit to 2 lines of ~12 chars each for better readability
+  let result = '';
+  let currentLine = '';
+  let lineCount = 0;
+  const maxLines = 2;
+  const maxLineLength = 12;
+  
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    
+    if (testLine.length <= maxLineLength) {
+      currentLine = testLine;
+    } else {
+      // Start new line
+      if (lineCount >= maxLines - 1) {
+        // Too many lines, truncate
+        result += currentLine + '...';
+        break;
+      }
+      result += currentLine + '\n';
+      currentLine = word;
+      lineCount++;
+    }
+  }
+  
+  // Add remaining text if not truncated
+  if (lineCount < maxLines && currentLine) {
+    result += currentLine;
+  }
+  
+  return result;
+}
+
 interface NodeDimensions {
   width: number;
   height: number;
@@ -13,6 +58,7 @@ interface NodeDimensions {
 }
 
 export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) {
+  
   // Calculate absolute positions for all nodes in the graph
   const absolutePositions = computeAbsolutePositions(elkGraph);
   
@@ -66,6 +112,7 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
         }),
         position: { x: absPos.x, y: absPos.y }
       },
+      
       style: isGroupNode ? {
         width: node.width || dimensions.groupWidth,
         height: node.height || dimensions.groupHeight,
@@ -145,7 +192,9 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
         if (sourceHandle && targetHandle) {
           /* ─────── turn label position into ABSOLUTE coordinates ─────── */
           const elkLbl      = edge.labels?.[0];
-          const labelTxt    = elkLbl?.text ?? "";
+          // Truncate edge label if too long
+          const rawLabelTxt = elkLbl?.text ?? "";
+          const labelTxt = truncateEdgeLabel(rawLabelTxt);
           const labelPosAbs = elkLbl
             ? { x: elkLbl.x + containerAbs.x, y: elkLbl.y + containerAbs.y }
             : undefined;
@@ -160,7 +209,6 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
             zIndex: CANVAS_STYLES.zIndex.edges,
             sourceHandle: sourceHandle,
             targetHandle: targetHandle,
-            selectable: true,
             focusable: true,
             style: CANVAS_STYLES.edges.default,
             markerEnd: {

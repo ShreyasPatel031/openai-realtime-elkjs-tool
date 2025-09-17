@@ -133,10 +133,6 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
     const newHash = structuralHash(rawGraph);
     const oldHash = hashRef.current;
     
-    console.log(`🔄 [ELK Converter] Received rawGraph change - ${timestamp}`);
-    console.log(`🔄 [ELK Converter] rawGraph has ${rawGraph.children?.length || 0} children`);
-    console.log(`🔄 [ELK Converter] Hash check: ${oldHash} → ${newHash}`);
-    console.log(`🔄 [ELK Converter] Hash changed: ${oldHash !== newHash}`);
     
     /* cancel any in-flight run */
     abortRef.current?.abort();
@@ -164,7 +160,6 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
         const rawEdgeCount = countEdges(rawGraph);
         const preparedEdgeCount = countEdges(prepared);
         
-        console.log(`🔍 [ELK Pipeline] rawGraph edges: ${rawEdgeCount}, prepared edges: ${preparedEdgeCount}`);
         
         if (rawEdgeCount !== preparedEdgeCount) {
           console.error(`❌ [ELK Pipeline] Edge count mismatch! ${rawEdgeCount} → ${preparedEdgeCount}`);
@@ -192,14 +187,11 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
           });
         
         const timestamp = new Date().toISOString();
-        console.log(`✅ [ELK Converter] Layout complete, updating visual nodes - ${timestamp}`);
-        console.log(`✅ [ELK Converter] Setting ${rfNodes.length} nodes and ${rfEdges.length} edges`);
         
         setNodes(rfNodes);
         setEdges(rfEdges);
         incLayoutVersion(v => v + 1);
         
-        console.log(`✅ [ELK Converter] Visual update complete - layout version incremented`);
       } catch (e: any) {
         if (e.name !== "AbortError")
           console.error("[ELK] layout failed", e);

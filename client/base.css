@@ -16,6 +16,37 @@ body {
   }
 }
 
+/* Ensure arrow handles always stay on top and maintain position */
+.arrow-handles-container {
+  z-index: 99999999 !important;
+  position: absolute !important;
+}
+
+.arrow-handles-container .react-flow__handle {
+  z-index: 99999999 !important;
+  position: absolute !important;
+}
+
+/* Prevent arrow handles from being affected by node z-index changes */
+.react-flow__node .arrow-handles-container,
+.react-flow__node.selected .arrow-handles-container,
+.react-flow__node:hover .arrow-handles-container {
+  z-index: 99999999 !important;
+}
+
+/* Ensure handles are always rendered above everything else */
+.react-flow__handle[id*="-top"],
+.react-flow__handle[id*="-right"], 
+.react-flow__handle[id*="-bottom"],
+.react-flow__handle[id*="-left"] {
+  z-index: 99999999 !important;
+}
+
+/* Make arrow icons more visible */
+.arrow-handles-container div {
+  z-index: 99999999 !important;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

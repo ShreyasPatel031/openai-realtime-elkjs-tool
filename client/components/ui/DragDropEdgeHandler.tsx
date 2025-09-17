@@ -1,8 +1,9 @@
 "use client"
 
-import React, { useCallback, useRef, useState, useEffect } from "react"
-import { Handle, Position, useReactFlow, Node } from "reactflow"
-import { batchUpdate } from "../graph/mutations"
+import React from "react"
+import { Handle, Position } from "reactflow"
+
+type Corner = "top-left" | "top-right" | "bottom-right" | "bottom-left"
 
 interface DragDropEdgeHandlerProps {
   children: React.ReactNode
@@ -10,255 +11,142 @@ interface DragDropEdgeHandlerProps {
   isSelected: boolean
   onGraphChange: (newGraph: any) => void
   rawGraph: any
+  nodeWidth?: number
+  nodeHeight?: number
 }
 
-interface DragState {
-  nodeId: string
-  handleId?: string
-  position: Position
+const CIRCLE = 32        // px, diameter
+const OFFSET = 16        // how far outside the node we sit (radius)
+
+const cornerStyle = (corner: Corner, nodeWidth: number, nodeHeight: number) => {
+  // anchor the circle's CENTER exactly at the node's corner
+  // then push it out by OFFSET and center with translate(±50%, ±50%)
+  switch (corner) {
+    case "top-left":
+      return { top: -OFFSET, left: -OFFSET, transform: "translate(-50%, -50%)" }
+    case "top-right":
+      return { top: -OFFSET, left: nodeWidth + OFFSET, transform: "translate(-50%, -50%)" }
+    case "bottom-right":
+      return { top: nodeHeight + OFFSET, left: nodeWidth + OFFSET, transform: "translate(-50%, -50%)" }
+    case "bottom-left":
+      return { top: nodeHeight + OFFSET, left: -OFFSET, transform: "translate(-50%, -50%)" }
+  }
 }
 
-/**
- * Enhanced node wrapper that adds drag-to-connect functionality
- * Displays four directional arrows when node is selected
- * Provides hover highlighting and edge creation
- */
+const cornerArrowRotate = (corner: Corner) => {
+  // rotate the ➜ so it points outward from the node, but keep the same center
+  switch (corner) {
+    case "top-left":
+      return "rotate(-135deg)"
+    case "top-right":
+      return "rotate(-45deg)"
+    case "bottom-right":
+      return "rotate(45deg)"
+    case "bottom-left":
+      return "rotate(135deg)"
+  }
+}
+
+// Map each visual corner to a Handle side. This is just a semantic choice;
+// we keep the DOM position 100% controlled by our own absolute styles.
+const cornerHandleSide: Record<Corner, Position> = {
+  "top-left": Position.Top,
+  "top-right": Position.Right,
+  "bottom-right": Position.Bottom,
+  "bottom-left": Position.Left,
+}
+
 export const DragDropEdgeHandler: React.FC<DragDropEdgeHandlerProps> = ({
   children,
   nodeId,
   isSelected,
-  onGraphChange,
-  rawGraph
+  nodeWidth = 100,
+  nodeHeight = 100,
 }) => {
-  // Note: Connection handling is managed by the parent InteractiveCanvas
-  // This component only provides the visual arrow handles
-  
-  if (isSelected) {
-  
+  const renderCorner = (corner: Corner) => {
+    const base = cornerStyle(corner, nodeWidth, nodeHeight)
+    const rotate = cornerArrowRotate(corner)
+    const handleSide = cornerHandleSide[corner]
+
+    const commonCircleStyle: React.CSSProperties = {
+      position: "absolute",
+      width: CIRCLE,
+      height: CIRCLE,
+      borderRadius: "50%",
+      background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
+      border: "2px solid #d1d5db",
+      boxShadow: "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)",
+      backdropFilter: "blur(10px)",
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      transition: "transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out",
+      pointerEvents: "all",
+      zIndex: 99999999,
+      ...base,
+    }
+
+    const arrowStyle: React.CSSProperties = {
+      position: "absolute",
+      width: CIRCLE,
+      height: CIRCLE,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 20,
+      color: "#6b7280",
+      fontWeight: 900,
+      textShadow: "0 1px 2px rgba(255,255,255,0.9)",
+      pointerEvents: "none",
+      zIndex: 99999999,
+      background: "rgba(255,255,255,0.9)",
+      borderRadius: "50%",
+      transform: `${base.transform} ${rotate}`,
+      top: base.top,
+      left: base.left,
+    }
+
+    return (
+      <React.Fragment key={corner}>
+        <Handle
+          type="source"
+          position={handleSide}
+          id={`${nodeId}-${corner}`}
+          isConnectable
+          style={commonCircleStyle}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = commonCircleStyle.transform! + " scale(1.1)"
+            e.currentTarget.style.boxShadow = "0 12px 35px rgba(0,0,0,0.2), 0 6px 15px rgba(0,0,0,0.15)"
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = commonCircleStyle.transform as string
+            e.currentTarget.style.boxShadow = "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)"
+          }}
+        />
+        <div style={arrowStyle}>➜</div>
+      </React.Fragment>
+    )
   }
 
   return (
     <div style={{ position: "relative" }}>
       {children}
-      
-      {/* Directional arrow handles - only show when selected */}
+
       {isSelected && (
-        <>
-          {/* Top Arrow */}
-          <Handle 
-            type="source" 
-            position={Position.Top} 
-            id={`${nodeId}-top`}
-            isConnectable={true}
-            style={{
-              position: "absolute",
-              top: -32,
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              width: 32,
-              height: 32,
-              borderRadius: "50%",
-              background: "transparent",
-              border: "none",
-              cursor: "crosshair",
-              zIndex: "100001 !important",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = e.currentTarget.style.transform.replace(')', ' scale(1.1))');
-              e.currentTarget.style.boxShadow = "0 12px 35px rgba(0,0,0,0.2), 0 6px 15px rgba(0,0,0,0.15)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = e.currentTarget.style.transform.replace(' scale(1.1)', '');
-              e.currentTarget.style.boxShadow = "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)";
-            }}
-          />
-          <div 
-            style={{
-              position: "absolute",
-              top: -32,
-              left: "50%",
-              transform: "translate(-50%, -50%) rotate(-90deg)",
-              width: 32,
-              height: 32,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 18,
-              color: "#374151",
-              fontWeight: "bold",
-              textShadow: "0 1px 2px rgba(0,0,0,0.1)",
-              pointerEvents: "none",
-              zIndex: "100000 !important"
-            }}
-          >
-            ➜
-          </div>
-
-          {/* Right Arrow */}
-          <Handle 
-            type="source" 
-            position={Position.Right} 
-            id={`${nodeId}-right`}
-            style={{
-              position: "absolute",
-              right: -32,
-              top: "50%",
-              transform: "translate(50%, -50%)",
-              width: 32,
-              height: 32,
-              borderRadius: "50%",
-              background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
-              border: "2px solid #d1d5db",
-              boxShadow: "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)",
-              backdropFilter: "blur(10px)",
-              cursor: "crosshair",
-              zIndex: "99999 !important",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s ease-in-out",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = e.currentTarget.style.transform.replace(')', ' scale(1.1))');
-              e.currentTarget.style.boxShadow = "0 12px 35px rgba(0,0,0,0.2), 0 6px 15px rgba(0,0,0,0.15)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = e.currentTarget.style.transform.replace(' scale(1.1)', '');
-              e.currentTarget.style.boxShadow = "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)";
-            }}
-          />
-          <div 
-            style={{
-              position: "absolute",
-              right: -32,
-              top: "50%",
-              transform: "translate(50%, -50%) rotate(0deg)",
-              width: 32,
-              height: 32,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 18,
-              color: "#374151",
-              fontWeight: "bold",
-              textShadow: "0 1px 2px rgba(0,0,0,0.1)",
-              pointerEvents: "none",
-              zIndex: "100000 !important"
-            }}
-          >
-            ➜
-          </div>
-
-          {/* Bottom Arrow */}
-          <Handle 
-            type="source" 
-            position={Position.Bottom} 
-            id={`${nodeId}-bottom`}
-            style={{
-              position: "absolute",
-              bottom: -32,
-              left: "50%",
-              transform: "translate(-50%, 50%)",
-              width: 32,
-              height: 32,
-              borderRadius: "50%",
-              background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
-              border: "2px solid #d1d5db",
-              boxShadow: "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)",
-              backdropFilter: "blur(10px)",
-              cursor: "crosshair",
-              zIndex: "99999 !important",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s ease-in-out",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = e.currentTarget.style.transform.replace(')', ' scale(1.1))');
-              e.currentTarget.style.boxShadow = "0 12px 35px rgba(0,0,0,0.2), 0 6px 15px rgba(0,0,0,0.15)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = e.currentTarget.style.transform.replace(' scale(1.1)', '');
-              e.currentTarget.style.boxShadow = "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)";
-            }}
-          />
-          <div 
-            style={{
-              position: "absolute",
-              bottom: -32,
-              left: "50%",
-              transform: "translate(-50%, 50%) rotate(90deg)",
-              width: 32,
-              height: 32,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 18,
-              color: "#374151",
-              fontWeight: "bold",
-              textShadow: "0 1px 2px rgba(0,0,0,0.1)",
-              pointerEvents: "none",
-              zIndex: "100000 !important"
-            }}
-          >
-            ➜
-          </div>
-
-          {/* Left Arrow */}
-          <Handle 
-            type="source" 
-            position={Position.Left} 
-            id={`${nodeId}-left`}
-            style={{
-              position: "absolute",
-              left: -32,
-              top: "50%",
-              transform: "translate(-50%, -50%)",
-              width: 32,
-              height: 32,
-              borderRadius: "50%",
-              background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
-              border: "2px solid #d1d5db",
-              boxShadow: "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)",
-              backdropFilter: "blur(10px)",
-              cursor: "crosshair",
-              zIndex: "99999 !important",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.2s ease-in-out",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = e.currentTarget.style.transform.replace(')', ' scale(1.1))');
-              e.currentTarget.style.boxShadow = "0 12px 35px rgba(0,0,0,0.2), 0 6px 15px rgba(0,0,0,0.15)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = e.currentTarget.style.transform.replace(' scale(1.1)', '');
-              e.currentTarget.style.boxShadow = "0 8px 25px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.1)";
-            }}
-          />
-          <div 
-            style={{
-              position: "absolute",
-              left: -32,
-              top: "50%",
-              transform: "translate(-50%, -50%) rotate(180deg)",
-              width: 32,
-              height: 32,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 18,
-              color: "#374151",
-              fontWeight: "bold",
-              textShadow: "0 1px 2px rgba(0,0,0,0.1)",
-              pointerEvents: "none",
-              zIndex: "100000 !important"
-            }}
-          >
-            ➜
-          </div>
-        </>
+        <div
+          className="arrow-handles-container"
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none", // only the circles/handles get events
+            zIndex: 9999999,
+          }}
+        >
+          {["top-left", "top-right", "bottom-right", "bottom-left"].map((c) =>
+            renderCorner(c as Corner)
+          )}
+        </div>
       )}
     </div>
   )

@@ -136,9 +136,8 @@ class VercelPreviewTester {
     info('Testing static assets...');
     
     const assets = [
-      '/precomputed-icon-embeddings.json',
-      '/assets/canvas/cloud.svg', // Test fallback icon system
-      '/assets/canvas/cloud.png'  // Test fallback icon system
+      '/precomputed-icon-embeddings.json'
+      // Note: No longer testing hardcoded fallback assets - semantic fallback handles missing icons
     ];
     
     for (const asset of assets) {

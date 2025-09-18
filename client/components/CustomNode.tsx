@@ -143,37 +143,9 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
         console.log(`❌ Icon not in database: ${iconName} (${provider})`);
       }
     }
-    const actualIconName = iconName.replace(/^(aws|gcp|azure)_/, '');
-    const legacyPaths = [
-      `/assets/canvas/${actualIconName}.svg`,
-      `/assets/canvas/${actualIconName}.png`,
-      `/assets/canvas/${actualIconName}.jpeg`
-    ];
-    for (const legacyPath of legacyPaths) {
-      const fullUrl = buildAssetUrl(legacyPath, apiEndpoint);
-      try {
-        // Check content type for legacy paths too
-        const response = await fetch(fullUrl);
-        const contentType = response.headers.get('content-type') || '';
-        
-        if (contentType.includes('text/html')) {
-          continue; // Skip HTML responses
-        }
-        
-        const img = new Image();
-        await new Promise((resolve, reject) => {
-          img.onload = resolve;
-          img.onerror = reject;
-          img.src = fullUrl;
-        });
-        
-        // Cache the successfully loaded icon
-        iconCacheService.cacheIcon(iconName, fullUrl);
-        // Legacy icon cached silently
-        return fullUrl;
-      } catch {}
-    }
-    throw new Error(`Icon not found: ${iconName}`);
+    
+    // Icon not found in main database - let semantic fallback handle it
+    throw new Error(`Icon not found in database: ${iconName}`);
   };
 
   useEffect(() => {

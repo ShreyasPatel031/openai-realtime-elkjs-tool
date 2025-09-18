@@ -137,7 +137,8 @@ class VercelPreviewTester {
     
     const assets = [
       '/precomputed-icon-embeddings.json',
-      '/assets/openai-logomark-BYAVnBCX.svg' // This might change, but testing pattern
+      '/assets/canvas/cloud.svg', // Test fallback icon system
+      '/assets/canvas/cloud.png'  // Test fallback icon system
     ];
     
     for (const asset of assets) {

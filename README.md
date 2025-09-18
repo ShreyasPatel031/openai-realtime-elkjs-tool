@@ -75,3 +75,4 @@ npm run build
 - `scripts/` - Utility scripts including multi-server manager
 - `logs/` - Server logs (auto-created)
 # Test change
+# Update Firebase auth domain

@@ -2419,6 +2419,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Chat submission handler - PROPER OPENAI RESPONSES API CHAINING
   const handleChatSubmit = useCallback(async (message: string) => {
     
+    // Fire processing start events for status indicators
+    console.log('🔄 Firing userRequirementsStart event for processing indicators');
+    window.dispatchEvent(new CustomEvent('userRequirementsStart'));
+    
     setArchitectureOperationState(selectedArchitectureId, true);
     try {
       let conversationHistory: any[] = [];
@@ -2532,6 +2536,10 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
         });
 
       if (result.success && result.functionCalls) {
+          // Fire function call start event for status indicators
+          console.log('🔧 Firing functionCallStart event for processing indicators');
+          window.dispatchEvent(new CustomEvent('functionCallStart'));
+          
           const turnMessageId = addFunctionCallingMessage(`🔄 Turn ${result.turnNumber} - Processing ${result.count} operations`);
           let batchErrors: string[] = [];
           let toolOutputs: any[] = [];
@@ -2704,6 +2712,14 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
       setArchitectureOperationState(selectedArchitectureId, false);
     }
   }, [selectedArchitectureId, setArchitectureOperationState, rawGraph, handleGraphChange]);
+
+  // Make handleChatSubmit available globally for chat agent integration
+  useEffect(() => {
+    (window as any).handleChatSubmit = handleChatSubmit;
+    return () => {
+      delete (window as any).handleChatSubmit;
+    };
+  }, [handleChatSubmit]);
 
   const handleAddNodeToGroup = useCallback((groupId: string) => {
     const nodeName = `new_node_${Date.now()}`;
@@ -3742,7 +3758,7 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
 
 
       {/* Save/Edit and Settings buttons - top-right */}
-      <div className="absolute top-4 right-[340px] z-[100] flex gap-2">
+      <div className="absolute top-4 right-[436px] z-[100] flex gap-2">
         {/* Share Button - Always visible for all users */}
         <button
           onClick={handleShareCurrent}

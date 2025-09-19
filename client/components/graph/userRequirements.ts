@@ -40,34 +40,40 @@ export async function process_user_requirements() {
     (window as any).chatTextInput = currentTextInput;
     
     const dataCollectionTime = performance.now();
+    console.log('⏱️ Data collection time recorded:', dataCollectionTime);
 
     
     // Update the reasoning message to show progress
+    console.log('📝 Calling updateStreamingMessage...');
     updateStreamingMessage(
       null, // messageId will be found automatically
       "🔍 Analyzing your requirements...", 
       true, // isStreaming
       null // currentFunction
     );
+    console.log('✅ updateStreamingMessage called successfully');
     
     // Get images from global state
     const storedImages = (window as any).selectedImages || [];
+    console.log('🖼️ Retrieved stored images:', storedImages.length, 'images');
 
           
     // Build conversationData as formatted string
     const conversationData = `USER: ${currentTextInput}
 
 ${currentTextInput}`;
+    console.log('💬 Built conversation data:', conversationData.length, 'characters');
     
     const conversationPrepTime = performance.now();
 
     
     // Store globally for StreamExecutor
     (window as any).chatConversationData = conversationData;
-    
+    console.log('💾 Stored conversation data globally');
 
     
     // Notify that we're moving to architecture generation
+    console.log('🏗️ Updating message to "Generating architecture..."');
     updateStreamingMessage(
       null, // messageId will be found automatically
       "🏗️ Generating architecture...", 
@@ -76,6 +82,7 @@ ${currentTextInput}`;
     );
     
     const setupCompleteTime = performance.now();
+    console.log('⏱️ Setup complete time:', setupCompleteTime);
 
     
          // Get current graph state

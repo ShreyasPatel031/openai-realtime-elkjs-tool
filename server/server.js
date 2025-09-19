@@ -88,9 +88,11 @@ app.use(express.urlencoded({ extended: false })); // for x-www-form-urlencoded
 import streamHandler from '../api/stream.ts';
 import embedHandler from '../api/embed.ts';
 import simpleAgentHandler from '../api/simple-agent.ts';
+import chatHandler from '../api/chat.js';
 app.post("/api/stream", upload.array('images', 5), streamHandler);
 app.post("/api/embed", embedHandler);
 app.post("/api/simple-agent", simpleAgentHandler);
+app.post("/api/chat", chatHandler);
 
 // Chat naming - uses same sophisticated AI logic as production
 const generateChatNameHandler = (await import('../api/generateChatName.ts')).default;

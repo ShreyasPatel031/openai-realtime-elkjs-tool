@@ -12,11 +12,6 @@ import { RtcClient } from "../realtime/RtcClient";
 import "../utils/testIconFallback";
 import "../utils/testArchitectureSearch";
 
-// Model configuration
-const MODEL_CONFIG = {
-  name: "gpt-4o-realtime-preview-2024-12-17",
-  apiEndpoint: "https://api.openai.com/v1/realtime"
-};
 
 export default function App() {
   // State management
@@ -116,22 +111,34 @@ export default function App() {
   }, []);
 
   return (
-    <div className="h-screen w-screen overflow-hidden">
-      {/* Full-screen modern interface */}
-      <ErrorBoundary>
-        <ViewModeProvider fallbackMode="auth">
-          <InteractiveCanvas
-            isSessionActive={isSessionActive}
-            isConnecting={isConnecting}
-            isAgentReady={isAgentReady}
-            startSession={startSession}
-            stopSession={stopSession}
-            sendTextMessage={sendTextMessage}
-            sendClientEvent={sendClientEvent}
-            events={events}
-          />
-        </ViewModeProvider>
-      </ErrorBoundary>
+    <div className="h-screen w-screen overflow-hidden flex">
+      {/* Main Canvas Area */}
+      <div className="flex-1 overflow-hidden">
+        <ErrorBoundary>
+          <ViewModeProvider fallbackMode="auth">
+            <InteractiveCanvas
+              isSessionActive={isSessionActive}
+              isConnecting={isConnecting}
+              isAgentReady={isAgentReady}
+              startSession={startSession}
+              stopSession={stopSession}
+              sendTextMessage={sendTextMessage}
+              sendClientEvent={sendClientEvent}
+              events={events}
+            />
+          </ViewModeProvider>
+        </ErrorBoundary>
+      </div>
+      
+      {/* Right Panel */}
+      <div className="w-80 h-full bg-gray-100 border-l border-gray-300 flex flex-col">
+        <div className="p-4 border-b border-gray-300 bg-white">
+          <h3 className="font-semibold text-gray-800">Right Panel</h3>
+        </div>
+        <div className="flex-1 p-4">
+          <p className="text-gray-600">Right panel content</p>
+        </div>
+      </div>
     </div>
   );
 }

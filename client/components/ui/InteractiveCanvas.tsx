@@ -3742,7 +3742,7 @@ Use this ${matchedArch.group} reference pattern as inspiration for your architec
 
 
       {/* Save/Edit and Settings buttons - top-right */}
-      <div className="absolute top-4 right-4 z-[100] flex gap-2">
+      <div className="absolute top-4 right-[340px] z-[100] flex gap-2">
         {/* Share Button - Always visible for all users */}
         <button
           onClick={handleShareCurrent}

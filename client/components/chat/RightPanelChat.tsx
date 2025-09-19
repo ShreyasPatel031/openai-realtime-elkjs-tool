@@ -367,7 +367,7 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({ className }) => {
                       </div>
 
                       {message.role === 'user' && (
-                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                        <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
                           {getMessageIcon(message.role)}
                         </div>
                       )}

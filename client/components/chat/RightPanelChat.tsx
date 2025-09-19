@@ -346,7 +346,7 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({ className }) => {
                         className={cn(
                           "max-w-[80%] rounded-lg px-3 py-2",
                           message.role === 'user'
-                            ? "bg-blue-600 text-white"
+                            ? "bg-gray-900 text-white"
                             : "bg-gray-100 text-gray-900"
                         )}
                       >
@@ -360,7 +360,7 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({ className }) => {
                         )}
                         <p className={cn(
                           "text-xs mt-1",
-                          message.role === 'user' ? "text-blue-100" : "text-gray-500"
+                          message.role === 'user' ? "text-gray-300" : "text-gray-500"
                         )}>
                           {formatTime(message.timestamp)}
                         </p>
@@ -398,7 +398,7 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({ className }) => {
           
           {/* Input Area */}
           <div className="p-4">
-            <form onSubmit={handleSendMessage} className="flex gap-2">
+            <form onSubmit={handleSendMessage} className="flex items-center gap-3 bg-white rounded-xl border border-gray-200 shadow-sm p-3 hover:shadow-md transition-shadow">
               <Input
                 ref={inputRef}
                 value={inputValue}
@@ -406,15 +406,15 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({ className }) => {
                 onKeyPress={handleKeyPress}
                 placeholder="Type your message..."
                 disabled={isLoading}
-                className="flex-1"
+                className="flex-1 border-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-base placeholder:text-gray-400"
               />
               <button
                 type="submit"
                 disabled={!inputValue.trim() || isLoading}
-                className={`flex items-center justify-center px-3 py-2 rounded-lg shadow-lg border border-gray-200 hover:shadow-md transition-all duration-200 ${
+                className={`flex items-center justify-center w-10 h-10 rounded-lg flex-shrink-0 transition-all duration-200 ${
                   !inputValue.trim() || isLoading
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-gray-900 hover:bg-gray-800 text-white'
                 }`}
                 title={isLoading ? "Sending..." : "Send message"}
               >

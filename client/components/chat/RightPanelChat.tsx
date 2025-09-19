@@ -337,7 +337,7 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({ className }) => {
                       )}
                     >
                       {message.role !== 'user' && (
-                        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                        <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
                           {getMessageIcon(message.role)}
                         </div>
                       )}
@@ -376,7 +376,7 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({ className }) => {
                   
                   {isLoading && (
                     <div className="flex gap-3 justify-start">
-                      <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                      <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
                         <Bot className="w-4 h-4" />
                       </div>
                       <div className="bg-gray-100 rounded-lg px-3 py-2">

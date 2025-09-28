@@ -178,10 +178,20 @@ ${currentTextInput}`;
     
 
     
-    // DISABLED: Old broken StreamExecutor - using new simple agent instead
-    // await streamExecutor.execute();
-    
-
+    // Call the global handleChatSubmit function from InteractiveCanvas
+    const handleChatSubmit = (window as any).handleChatSubmit;
+    if (handleChatSubmit && typeof handleChatSubmit === 'function') {
+      console.log('🚀 Calling handleChatSubmit from process_user_requirements');
+      await handleChatSubmit(currentTextInput);
+    } else {
+      console.error('❌ handleChatSubmit not available - InteractiveCanvas may not be loaded');
+      updateStreamingMessage(
+        null,
+        `❌ Error: Canvas not ready - please refresh the page`,
+        false,
+        null
+      );
+    }
     
   } catch (error) {
     console.error('❌ Error in process_user_requirements:', error);

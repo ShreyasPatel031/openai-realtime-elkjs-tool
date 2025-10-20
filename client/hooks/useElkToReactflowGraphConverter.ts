@@ -48,8 +48,23 @@ const elk = new ELK();
 /* 🔹 2.  hook                                         */
 /* -------------------------------------------------- */
 export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
-  /* 1) raw‐graph state */
-  const [rawGraph, setRawGraph] = useState<RawGraph>(initialRaw);
+  /* 1) raw‐graph state
+   *    Load from localStorage if available so the canvas persists
+   *    between session restarts. Fallback to the provided initial graph.
+   */
+  const [rawGraph, setRawGraph] = useState<RawGraph>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('elkGraph');
+      if (stored) {
+        try {
+          return JSON.parse(stored) as RawGraph;
+        } catch (e) {
+          console.warn('Failed to parse stored graph, using initialRaw');
+        }
+      }
+    }
+    return initialRaw;
+  });
   
   /* 2) layouted‐graph state */
   const [layoutGraph, setLayoutGraph] = useState<LayoutGraph|null>(null);
@@ -78,6 +93,19 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
       return next;                                  // triggers useEffect
     });
   }, []);
+
+  /* Persist rawGraph to localStorage whenever it changes so that
+   * the latest graph is restored on the next session start.
+   */
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('elkGraph', JSON.stringify(rawGraph));
+      } catch (e) {
+        console.warn('Failed to store graph in localStorage');
+      }
+    }
+  }, [rawGraph]);
   
   /* -------------------------------------------------- */
   /* 🔹 4.  exposed handlers                            */

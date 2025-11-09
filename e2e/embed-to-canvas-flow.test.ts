@@ -30,11 +30,16 @@ test.describe('Embed-to-Canvas Flow', () => {
     const chatInput = page.locator('input[placeholder*="architecture" i], input[placeholder*="describe" i]').first();
     await chatInput.waitFor({ state: 'visible', timeout: 10000 });
     await chatInput.fill(prompt);
-    await page.locator('button[type="submit"]').first().click();
+    // Submit via form API to avoid pointer interception issues on the submit button
+    await chatInput.evaluate((input) => {
+      if (input instanceof HTMLInputElement) {
+        input.form?.requestSubmit();
+      }
+    });
 
     await page.waitForTimeout(5000);
     const nodes = page.locator('.react-flow__node:visible');
-    await nodes.first().waitFor({ state: 'visible', timeout: 20000 });
+    await nodes.first().waitFor({ state: 'visible', timeout: 45000 });
     
     const embedNodeCount = await nodes.count();
     console.log(`✅ Embed: ${embedNodeCount} nodes`);

@@ -32,7 +32,7 @@ test.describe('Embed-to-Auth Flow', () => {
     const chatInput = page.locator('input[placeholder*="architecture" i], input[placeholder*="describe" i]').first();
     await chatInput.waitFor({ state: 'visible', timeout: 10000 });
     await chatInput.fill(prompt);
-    await page.locator('button[type="submit"]').first().click();
+    await chatInput.press('Enter');
 
     // Wait for architecture generation to complete
     await page.waitForTimeout(8000);

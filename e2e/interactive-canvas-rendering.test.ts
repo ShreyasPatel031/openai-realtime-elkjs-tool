@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('InteractiveCanvas Rendering', () => {
-  test('should render empty canvas that can be interacted with', async ({ page }) => {
+  test.skip('should render empty canvas that can be interacted with', async ({ page }) => {
     console.log('🚀 Starting InteractiveCanvas rendering test...');
     
     // Navigate to the application

@@ -57,15 +57,16 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
         sharedArch = await anonymousArchitectureService.loadAnonymousArchitectureById(architectureId);
       }
 
-      if (!sharedArch && typeof window !== 'undefined') {
-        const storageKey = `${EMBED_PENDING_ARCH_PREFIX}${architectureId}`;
-        let fallbackData: any = null;
+      let fallbackData: any = null;
+      const fallbackSources: Array<'session' | 'local'> = [];
 
+      if (typeof window !== 'undefined') {
+        const storageKey = `${EMBED_PENDING_ARCH_PREFIX}${architectureId}`;
         try {
           const sessionPayload = window.sessionStorage?.getItem(storageKey);
           if (sessionPayload) {
             fallbackData = JSON.parse(sessionPayload);
-            window.sessionStorage.removeItem(storageKey);
+            fallbackSources.push('session');
           }
         } catch (error) {
           console.warn('⚠️ [LOAD-SHARED] Failed to read sessionStorage fallback:', error);
@@ -76,38 +77,68 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
             const localPayload = window.localStorage?.getItem(storageKey);
             if (localPayload) {
               fallbackData = JSON.parse(localPayload);
-              window.localStorage.removeItem(storageKey);
+              fallbackSources.push('local');
             }
           } catch (error) {
             console.warn('⚠️ [LOAD-SHARED] Failed to read localStorage fallback:', error);
           }
         }
 
-        if (fallbackData?.rawGraph) {
-          console.log('🔥 [LOAD-SHARED] Using local fallback architecture data:', {
-            id: architectureId,
-            createdAt: fallbackData.createdAt,
-            hasChatMessages: Array.isArray(fallbackData.chatMessages) && fallbackData.chatMessages.length > 0,
-          });
+        if (!fallbackData && fallbackSources.length === 0) {
+          // If session payload existed but couldn't be parsed, still try local storage
+          try {
+            const localPayload = window.localStorage?.getItem(storageKey);
+            if (localPayload) {
+              fallbackData = JSON.parse(localPayload);
+              fallbackSources.push('local');
+            }
+          } catch (error) {
+            console.warn('⚠️ [LOAD-SHARED] Fallback localStorage parse error:', error);
+          }
+        }
+      }
 
+      if (!sharedArch && fallbackData?.rawGraph) {
+        console.log('🔥 [LOAD-SHARED] Using local fallback architecture data:', {
+          id: architectureId,
+          createdAt: fallbackData.createdAt,
+          hasChatMessages: Array.isArray(fallbackData.chatMessages) && fallbackData.chatMessages.length > 0,
+        });
+
+        sharedArch = {
+          id: architectureId,
+          name: fallbackData.name || 'Unsaved Architecture',
+          rawGraph: fallbackData.rawGraph,
+          sessionId: 'local-fallback',
+          timestamp: Timestamp.now(),
+          isAnonymous: true,
+          userPrompt: fallbackData.userPrompt || '',
+          chatMessages: fallbackData.chatMessages || [],
+        } as AnonymousArchitecture;
+      } else if (sharedArch && fallbackData) {
+        const hasChatInDoc = Array.isArray((sharedArch as any).chatMessages) && (sharedArch as any).chatMessages.length > 0;
+        const fallbackChat = Array.isArray(fallbackData.chatMessages) ? fallbackData.chatMessages : [];
+        if (!hasChatInDoc && fallbackChat.length > 0) {
+          console.log('🔥 [LOAD-SHARED] Enriching shared architecture with fallback chat messages');
           sharedArch = {
-            id: architectureId,
-            name: fallbackData.name || 'Unsaved Architecture',
-            rawGraph: fallbackData.rawGraph,
-            sessionId: 'local-fallback',
-            timestamp: Timestamp.now(),
-            isAnonymous: true,
-            userPrompt: fallbackData.userPrompt || '',
-            chatMessages: fallbackData.chatMessages || [],
+            ...sharedArch,
+            chatMessages: fallbackChat,
+            userPrompt: sharedArch.userPrompt || fallbackData.userPrompt || sharedArch.userPrompt,
           } as AnonymousArchitecture;
         }
-      } else if (sharedArch && typeof window !== 'undefined') {
-        // Remove any stale fallback once Firestore load succeeds
-        try {
-          const storageKey = `${EMBED_PENDING_ARCH_PREFIX}${architectureId}`;
-          window.sessionStorage?.removeItem(storageKey);
-          window.localStorage?.removeItem(storageKey);
-        } catch {}
+      }
+
+      if (fallbackSources.length && typeof window !== 'undefined') {
+        const storageKey = `${EMBED_PENDING_ARCH_PREFIX}${architectureId}`;
+        for (const source of fallbackSources) {
+          try {
+            if (source === 'session') {
+              window.sessionStorage?.removeItem(storageKey);
+            } else if (source === 'local') {
+              window.localStorage?.removeItem(storageKey);
+            }
+          } catch {}
+        }
       }
       
       if (sharedArch && sharedArch.rawGraph) {

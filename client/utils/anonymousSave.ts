@@ -40,6 +40,18 @@ export async function ensureAnonymousSaved({
 
   try {
     const id = existingId ?? anonymousService.getArchitectureIdFromUrl();
+    let chatMessages: Array<{ id: string; content: string; timestamp: number; sender: 'user' | 'assistant' }> | undefined;
+    if (typeof window !== 'undefined') {
+      try {
+        const { getCurrentConversation } = await import('./chatPersistence');
+        const messages = getCurrentConversation();
+        if (Array.isArray(messages) && messages.length > 0) {
+          chatMessages = messages;
+        }
+      } catch (error) {
+        console.warn('⚠️ ensureAnonymousSaved: failed to load chat conversation for persistence', error);
+      }
+    }
     
     if (id) {
       // Update existing anonymous architecture
@@ -50,6 +62,14 @@ export async function ensureAnonymousSaved({
         timestamp: Timestamp.now(),
         ...metadata
       };
+      
+      if (userPrompt) {
+        updatePayload.userPrompt = userPrompt;
+      }
+      
+      if (chatMessages && chatMessages.length > 0) {
+        updatePayload.chatMessages = chatMessages;
+      }
       
       await anonymousService.updateAnonymousArchitecture(id, updatePayload);
       console.log('✅ Anonymous architecture updated successfully');

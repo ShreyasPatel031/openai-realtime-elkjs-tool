@@ -150,6 +150,47 @@ const ViewControls: React.FC<ViewControlsProps> = ({
         return;
       }
 
+      if (hasGraphContent && typeof window !== 'undefined') {
+        try {
+          const storageKey = `${EMBED_PENDING_ARCH_PREFIX}${finalArchId}`;
+          const chatMessagesRaw = localStorage.getItem('atelier_current_conversation');
+          let chatMessages: any[] = [];
+          if (chatMessagesRaw) {
+            try {
+              const parsed = JSON.parse(chatMessagesRaw);
+              if (Array.isArray(parsed)) {
+                chatMessages = parsed;
+              }
+            } catch {
+              chatMessages = [];
+            }
+          }
+          const fallbackName = getUserPrompt() || 'Unsaved Architecture';
+          const payload = {
+            rawGraph,
+            userPrompt: getUserPrompt(),
+            chatMessages,
+            createdAt: Date.now(),
+            name: fallbackName,
+          };
+          const serialized = JSON.stringify(payload);
+          try {
+            sessionStorage.setItem(storageKey, serialized);
+            console.log('✅ [EDIT] Stored fallback payload in sessionStorage:', storageKey, 'chatCount:', chatMessages.length);
+          } catch (error) {
+            console.warn('⚠️ [EDIT] Failed to persist fallback architecture to sessionStorage:', error);
+          }
+          try {
+            localStorage.setItem(storageKey, serialized);
+            console.log('✅ [EDIT] Stored fallback payload in localStorage:', storageKey, 'chatCount:', chatMessages.length);
+          } catch (error) {
+            console.warn('⚠️ [EDIT] Failed to persist fallback architecture to localStorage:', error);
+          }
+        } catch (error) {
+          console.warn('⚠️ [EDIT] Unexpected error while preparing fallback payload:', error);
+        }
+      }
+
       const separator = targetUrl.includes('?') ? '&' : '?';
       targetUrl += `${separator}arch=${finalArchId}`;
       

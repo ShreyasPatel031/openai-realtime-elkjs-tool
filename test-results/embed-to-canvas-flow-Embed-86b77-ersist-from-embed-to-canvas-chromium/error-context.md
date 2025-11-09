@@ -1,0 +1,98 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e5]:
+  - generic [ref=e6]:
+    - generic [ref=e8]:
+      - generic:
+        - button "Atelier":
+          - img "Atelier"
+    - button "Sign in" [ref=e12] [cursor=pointer]:
+      - img [ref=e13] [cursor=pointer]
+  - generic [ref=e16]:
+    - generic [ref=e17]:
+      - generic [ref=e19]:
+        - button "Select (V)" [ref=e20] [cursor=pointer]:
+          - img [ref=e22] [cursor=pointer]
+        - button "Add box (R)" [ref=e25] [cursor=pointer]:
+          - img [ref=e27] [cursor=pointer]
+        - button "Add connector (C)" [ref=e29] [cursor=pointer]:
+          - img [ref=e31] [cursor=pointer]
+        - button "Create group (G)" [ref=e35] [cursor=pointer]:
+          - img [ref=e37] [cursor=pointer]
+      - generic [ref=e43]:
+        - generic [ref=e45]:
+          - generic:
+            - img:
+              - button "Edge from elk-test-bottom to elk-test-top" [ref=e46] [cursor=pointer]
+            - generic:
+              - button "Bottom":
+                - generic:
+                  - generic: Bottom
+              - button "Top":
+                - generic:
+                  - generic: Top
+        - img [ref=e53]
+        - generic [ref=e55]:
+          - button "zoom in" [ref=e56] [cursor=pointer]:
+            - img [ref=e57] [cursor=pointer]
+          - button "zoom out" [ref=e59] [cursor=pointer]:
+            - img [ref=e60] [cursor=pointer]
+          - button "fit view" [ref=e62] [cursor=pointer]:
+            - img [ref=e63] [cursor=pointer]
+          - button "toggle interactivity" [ref=e65] [cursor=pointer]:
+            - img [ref=e66] [cursor=pointer]
+        - link "React Flow attribution" [ref=e69] [cursor=pointer]:
+          - /url: https://reactflow.dev
+          - text: React Flow
+    - generic [ref=e72]:
+      - generic [ref=e73]:
+        - button "GCP microservices with Kubernetes" [ref=e74] [cursor=pointer]
+        - button "AWS serverless web application" [ref=e75] [cursor=pointer]
+        - button "Multi-cloud data pipeline" [ref=e76] [cursor=pointer]
+      - generic [ref=e78]:
+        - textbox "Describe your architecture requirements" [ref=e79]
+        - button [ref=e80] [cursor=pointer]:
+          - img [ref=e81] [cursor=pointer]
+  - generic [ref=e84]:
+    - button "Share" [ref=e85] [cursor=pointer]:
+      - img [ref=e86] [cursor=pointer]
+      - generic [ref=e89] [cursor=pointer]: Share
+    - generic [ref=e90]:
+      - button "Export" [ref=e91] [cursor=pointer]:
+        - img [ref=e92] [cursor=pointer]
+        - generic [ref=e95] [cursor=pointer]: Export
+      - button "Edit" [active] [ref=e96] [cursor=pointer]:
+        - img [ref=e97] [cursor=pointer]
+        - generic [ref=e100] [cursor=pointer]: Edit
+  - generic [ref=e101]:
+    - generic [ref=e102]:
+      - heading "Debug Viewer" [level=3] [ref=e103]
+      - button "×" [ref=e104] [cursor=pointer]
+    - generic [ref=e105]:
+      - generic [ref=e106]:
+        - button "ReactFlow (Live)" [ref=e107] [cursor=pointer]
+        - button "ELK Layout" [ref=e108] [cursor=pointer]
+      - button "📋 Export State" [ref=e109] [cursor=pointer]
+    - generic [ref=e111]:
+      - generic [ref=e112]:
+        - heading "Visualization:" [level=4] [ref=e113]
+        - img [ref=e114]:
+          - generic [ref=e115]:
+            - generic [ref=e119]: "1"
+            - generic [ref=e122]: "2"
+          - generic [ref=e125]:
+            - generic [ref=e127]: Bottom
+            - generic [ref=e128]: (elk-test)
+          - generic [ref=e129]:
+            - generic [ref=e131]: Top
+            - generic [ref=e132]: (elk-test)
+      - generic [ref=e133]:
+        - generic [ref=e134]:
+          - strong [ref=e135]: "Nodes:"
+          - text: "2"
+        - generic [ref=e136]:
+          - strong [ref=e137]: "Edges:"
+          - text: "1"
+        - generic [ref=e138]: 🔄 Live - Updates as you drag nodes
+```

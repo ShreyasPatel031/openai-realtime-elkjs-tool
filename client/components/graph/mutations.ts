@@ -34,7 +34,7 @@ const isDescendantOf = (root: ElkGraphNode, maybeDesc: ElkGraphNode): boolean =>
   collectNodeIds(root).has(maybeDesc.id);
 
 /** True if any edge id matches. */
-const edgeIdExists = (g: ElkGraphNode, eid: EdgeID): boolean =>
+export const edgeIdExists = (g: ElkGraphNode, eid: EdgeID): boolean =>
   collectEdges(g).some(({ edgeArr }) => edgeArr.some(e => e.id === eid));
 
 /** Remove every edge whose *any* endpoint is found in `victimIds`. */
@@ -211,20 +211,29 @@ export const addNode = (
   graph: RawGraph,
   data?: { label?: string; icon?: string; style?: any }
 ): RawGraph => {
-  // console.group(`[mutation] addNode '${nodeName}' → parent '${parentId}'`);
-  // console.time("addNode");
+  
+  // Clone the graph to ensure React detects the state change
+  const clonedGraph = structuredClone(graph);
 
   // Check for duplicate ID using normalized name
   const normalizedId = createNodeID(nodeName);
-  if (findNodeById(graph, normalizedId)) {
+  if (findNodeById(clonedGraph, normalizedId)) {
     throw new Error(`duplicate node id '${normalizedId}'`);
   }
   
-  const parentNode = findNodeById(graph, parentId);
-  if (!parentNode) {
-    notFound("node", parentId);
-    throw new Error(`Parent node '${parentId}' not found`);
+  // Special case: when parentId is 'root', use the cloned graph itself as the parent
+  let parentNode: ElkGraphNode;
+  if (parentId === 'root') {
+    parentNode = clonedGraph as ElkGraphNode; // The cloned graph IS the root node
+  } else {
+    const foundParent = findNodeById(clonedGraph, parentId);
+    if (!foundParent) {
+      notFound("node", parentId);
+      throw new Error(`Parent node '${parentId}' not found`);
+    }
+    parentNode = foundParent;
   }
+
   
   // Ensure parent has a children array
   if (!parentNode.children) {
@@ -257,17 +266,13 @@ export const addNode = (
   // Add to parent
   parentNode.children.push(newNode);
   
-  // console.timeEnd("addNode");
-  // console.groupEnd();
-  return graph;
+  return clonedGraph;
 };
 
 /**
  * Delete a node and all its related edges
  */
 export const deleteNode = (nodeId: NodeID, graph: RawGraph): RawGraph => {
-  console.group(`[mutation] deleteNode '${nodeId}'`);
-  console.time("deleteNode");
   
   // First, find and remove the node from its parent
   const parent = findParentOfNode(graph, nodeId);
@@ -285,8 +290,6 @@ export const deleteNode = (nodeId: NodeID, graph: RawGraph): RawGraph => {
   // 3. purge every edge that pointed to it or descendants
   purgeEdgesReferencing(graph, collectNodeIds(doomed));
   
-  console.timeEnd("deleteNode");
-  console.groupEnd();
   return graph;
 };
 
@@ -294,8 +297,6 @@ export const deleteNode = (nodeId: NodeID, graph: RawGraph): RawGraph => {
  * Move a node to a new parent and correctly update all edges.
  */
 export const moveNode = (nodeId: NodeID, newParentId: NodeID, graph: RawGraph): RawGraph => {
-  console.group(`[mutation] moveNode '${nodeId}' → new parent '${newParentId}'`);
-  console.time("moveNode");
   
   const node = findNodeById(graph, nodeId);
   const newParent = findNodeById(graph, newParentId);
@@ -336,8 +337,6 @@ export const moveNode = (nodeId: NodeID, newParentId: NodeID, graph: RawGraph): 
   // const updatedGraph = updateEdgesForNode(nodeId, graph);
   reattachEdgesForSubtree(node, graph);
   
-  console.timeEnd("moveNode");
-  console.groupEnd();
   return graph;
 };
 
@@ -356,7 +355,7 @@ export const addEdge = (edgeId: EdgeID, sourceId: NodeID, targetId: NodeID, labe
     const actualGraph = labelOrGraph as RawGraph;
     const actualLabel = sourceHandle as string | undefined; // Shifted params
     const actualSourceHandle = targetHandle;
-    const actualTargetHandle = graph as string | undefined;
+    const actualTargetHandle = graph as unknown as string | undefined;
     return addEdgeInternal(edgeId, sourceId, targetId, actualGraph, actualLabel, actualSourceHandle, actualTargetHandle);
   }
   // New signature: graph is last parameter (from mutate function)
@@ -372,32 +371,34 @@ export const addEdge = (edgeId: EdgeID, sourceId: NodeID, targetId: NodeID, labe
  * Internal implementation of addEdge
  */
 const addEdgeInternal = (edgeId: EdgeID, sourceId: NodeID, targetId: NodeID, graph: RawGraph, label?: string, sourceHandle?: string, targetHandle?: string): RawGraph => {
-  // Use unique timer name to avoid conflicts
-  const timerName = `addEdge-${edgeId}`;
-  console.group(`[mutation] addEdge '${edgeId}' (${sourceId} → ${targetId})${label ? ` with label "${label}"` : ''}`);
-  console.time(timerName);
+  console.log('🔧 [addEdgeInternal] Called:', { edgeId, sourceId, targetId, label, sourceHandle, targetHandle });
+  
+  // Clone the graph to ensure React detects the state change
+  const clonedGraph = structuredClone(graph);
+  console.log('✅ [addEdgeInternal] Cloned graph, original edges:', graph.edges?.length || 0, 'cloned edges:', clonedGraph.edges?.length || 0);
   
   // duplicate-ID check
-  if (edgeIdExists(graph, edgeId)) {
-    console.timeEnd(timerName);
-    console.groupEnd();
+  if (edgeIdExists(clonedGraph, edgeId)) {
+    console.error('❌ [addEdgeInternal] Edge ID already exists:', edgeId);
     throw new Error(`Edge id '${edgeId}' already exists`);
   }
+  console.log('✅ [addEdgeInternal] Edge ID does not exist, proceeding');
+  
   // self-loop guard
   if (sourceId === targetId) {
-    console.timeEnd(timerName);
-    console.groupEnd();
+    console.error('❌ [addEdgeInternal] Self-loop detected:', sourceId);
     throw new Error(`Self-loop edges are not supported (source === target '${sourceId}')`);
   }
   
   // Find the common ancestor for edge placement
-  let commonAncestor = findCommonAncestor(graph, sourceId, targetId);
+  let commonAncestor = findCommonAncestor(clonedGraph, sourceId, targetId);
+  console.log('🔍 [addEdgeInternal] Common ancestor:', commonAncestor ? { id: commonAncestor.id, hasEdges: !!commonAncestor.edges } : 'null');
   
   // If no common ancestor found, or it's null, default to root
   if (!commonAncestor) {
-    console.warn(`Common ancestor not found for nodes: ${sourceId}, ${targetId}. Attaching edge to root.`);
+    console.log('⚠️ [addEdgeInternal] No common ancestor found, attaching to root');
     // No common ancestor found, attach to root node instead
-    const root = graph;
+    const root = clonedGraph;
     
     // Create the edge
     const newEdge: ElkGraphEdge = {
@@ -412,6 +413,7 @@ const addEdgeInternal = (edgeId: EdgeID, sourceId: NodeID, targetId: NodeID, gra
         sourceHandle,
         targetHandle
       };
+      console.log('✅ [addEdgeInternal] Added handle IDs to edge:', { sourceHandle, targetHandle });
     }
     
     // Add label if provided
@@ -422,14 +424,14 @@ const addEdgeInternal = (edgeId: EdgeID, sourceId: NodeID, targetId: NodeID, gra
     // Ensure the root has edges array
     if (!root.edges) {
       root.edges = [];
+      console.log('📝 [addEdgeInternal] Created edges array on root');
     }
     
     // Add the edge to the root
     root.edges.push(newEdge);
+    console.log('✅ [addEdgeInternal] Added edge to root, root now has', root.edges.length, 'edges');
     
-    console.timeEnd(timerName);
-    console.groupEnd();
-    return graph;
+    return clonedGraph;
   }
   
   // Create the edge
@@ -445,6 +447,7 @@ const addEdgeInternal = (edgeId: EdgeID, sourceId: NodeID, targetId: NodeID, gra
       sourceHandle,
       targetHandle
     };
+    console.log('✅ [addEdgeInternal] Added handle IDs to edge:', { sourceHandle, targetHandle });
   }
   
   // Add label if provided
@@ -455,22 +458,20 @@ const addEdgeInternal = (edgeId: EdgeID, sourceId: NodeID, targetId: NodeID, gra
   // Ensure the common ancestor has edges array
   if (!commonAncestor.edges) {
     commonAncestor.edges = [];
+    console.log('📝 [addEdgeInternal] Created edges array on common ancestor');
   }
   
   // Add the edge to the common ancestor
   commonAncestor.edges.push(newEdge);
+  console.log('✅ [addEdgeInternal] Added edge to common ancestor, ancestor now has', commonAncestor.edges.length, 'edges');
   
-  console.timeEnd(timerName);
-  console.groupEnd();
-  return graph;
+  return clonedGraph;
 };
 
 /**
  * Delete an edge from the layout.
  */
 export const deleteEdge = (edgeId: EdgeID, graph: RawGraph): RawGraph => {
-  console.group(`[mutation] deleteEdge '${edgeId}'`);
-  console.time("deleteEdge");
   
   let edgeFound = false;
   
@@ -547,7 +548,15 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
     groupNode.data = {
       ...groupNode.data,
       label: groupId,
-      style: resolvedStyle
+      style: resolvedStyle,
+      isGroup: true,
+    };
+  } else {
+    // Default data with group icon
+    groupNode.data = {
+      label: groupId,
+      groupIcon: 'gcp_system', // Default group icon
+      isGroup: true,
     };
   }
   
@@ -578,16 +587,12 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
     movedNodeIds.push(nodeId);
   }
   
-  // Only add the group if it has children
-  if (groupNode.children && groupNode.children.length > 0) {
-    parent.children.push(groupNode);
-    
-    // Update edges for all moved nodes and their descendants
+  parent.children.push(groupNode);
+
+  if (movedNodeIds.length > 0) {
     movedNodeIds
       .map(id => findNodeById(graph, id)!)
       .forEach(subRoot => reattachEdgesForSubtree(subRoot, graph));
-  } else {
-    console.warn(`No nodes were moved to group ${groupId}`);
   }
   
   

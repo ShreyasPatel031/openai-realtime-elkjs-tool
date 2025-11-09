@@ -1,7 +1,6 @@
 import React from "react";
 import * as Lucide from "lucide-react";
-
-type Tool = "select" | "box" | "connector" | "group";
+import { Tool } from '../../hooks/useToolSelection';
 
 export interface CanvasToolbarProps {
   selectedTool: Tool;
@@ -29,7 +28,15 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ selectedTool, onSelect, c
       type="button"
       aria-label={title}
       title={title}
-      onClick={() => onSelect(tool)}
+      onMouseDown={(e) => {
+        // Fire tool switch ASAP (before ReactFlow mouseup/select handlers)
+        e.stopPropagation();
+        e.preventDefault();
+        onSelect(tool);
+      }}
+      onClick={(e) => {
+        onSelect(tool);
+      }}
       className={`${baseBtn} ${selectedTool === tool ? selected : unselected}`}
       style={selectedTool === tool ? { backgroundColor: BLUE_HEX } : undefined}
     >
@@ -40,7 +47,8 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ selectedTool, onSelect, c
   );
 
   // Icon mappings with graceful fallbacks across lucide versions
-  const SelectIcon = (Lucide as any).MousePointer2 || (Lucide as any).MousePointer;
+  const ArrowIcon = (Lucide as any).MousePointer2 || (Lucide as any).MousePointer;
+  const HandIcon = (Lucide as any).Hand || (Lucide as any).HandIcon || (Lucide as any).HandPalm;
   const BoxIcon = (Lucide as any).Square || (Lucide as any).RectangleHorizontal || (Lucide as any).RectangleVertical;
   // Use Spline per Figma selection; keep BezierCurve only as fallback if Spline missing
   const ConnectorIcon = (Lucide as any).Spline || (Lucide as any).BezierCurve;
@@ -50,30 +58,36 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ selectedTool, onSelect, c
   return (
     <div
       className={`flex items-center bg-white/90 backdrop-blur-sm rounded-lg border border-gray-200 shadow-sm ${className || ""}`}
-      style={{ height: BAR_HEIGHT, width: 160, paddingLeft: 16, paddingRight: 16, gap: 8 }}
+      style={{ height: BAR_HEIGHT, width: 200, paddingLeft: 16, paddingRight: 16, gap: 8 }}
     >
-      {/* Select tool (left group) */}
-      <Btn tool="select" title="Select (V)">
-        {SelectIcon ? <SelectIcon className="w-5 h-5" /> : null}
-      </Btn>
+      {/* Arrow / Hand tools (navigation group) */}
+      <div className="flex items-center gap-2">
+        <Btn tool="arrow" title="Arrow (V)">
+          {ArrowIcon ? <ArrowIcon className="w-5 h-5" /> : null}
+        </Btn>
+        <Btn tool="hand" title="Hand (H)">
+          {HandIcon ? <HandIcon className="w-5 h-5" /> : null}
+        </Btn>
+      </div>
 
-      {/* Divider between select and the other three */}
-      {/* Divider between select and the other three (width 0, height 24, 1px left border) */}
+      {/* Divider between navigation and creation tools */}
       <div
         className="h-6"
         style={{ width: 0, borderLeft: '1px solid #e5e7eb' }}
       />
 
-      {/* Box / Connector / Group (right items) */}
-      <Btn tool="box" title="Add box (R)">
-        {BoxIcon ? <BoxIcon className="w-full h-full" /> : null}
-      </Btn>
-      <Btn tool="connector" title="Add connector (C)">
-        {ConnectorIcon ? <ConnectorIcon className="w-full h-full" /> : null}
-      </Btn>
-      <Btn tool="group" title="Create group (G)">
-        {GroupIcon ? <GroupIcon className="w-full h-full" /> : null}
-      </Btn>
+      {/* Box / Connector / Group (creation tools) */}
+      <div className="flex items-center gap-2">
+        <Btn tool="box" title="Add box (R)">
+          {BoxIcon ? <BoxIcon className="w-full h-full" /> : null}
+        </Btn>
+        <Btn tool="connector" title="Add connector (C)">
+          {ConnectorIcon ? <ConnectorIcon className="w-full h-full" /> : null}
+        </Btn>
+        <Btn tool="group" title="Create group (G)">
+          {GroupIcon ? <GroupIcon className="w-full h-full" /> : null}
+        </Btn>
+      </div>
     </div>
   );
 };

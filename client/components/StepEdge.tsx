@@ -1,5 +1,5 @@
 import React from 'react';
-import { BaseEdge, EdgeLabelRenderer, EdgeProps } from 'reactflow';
+import { BaseEdge, EdgeLabelRenderer, EdgeProps, Position } from 'reactflow';
 import { getEdgeStyle, CANVAS_STYLES } from './graph/styles/canvasStyles';
 
 const StepEdge: React.FC<EdgeProps> = ({ 
@@ -8,6 +8,8 @@ const StepEdge: React.FC<EdgeProps> = ({
   sourceY, 
   targetX, 
   targetY, 
+  sourcePosition,
+  targetPosition,
   label,
   data,
   style = {}, 
@@ -18,6 +20,15 @@ const StepEdge: React.FC<EdgeProps> = ({
   
   // For edge path calculations only (used in path fallback)
   const midX = sourceX + (targetX - sourceX) / 2;
+  const midY = sourceY + (targetY - sourceY) / 2;
+
+  // Determine side orientations for source/target
+  const sourceHandle: string | undefined = (data as any)?.sourceHandle;
+  const targetHandle: string | undefined = (data as any)?.targetHandle;
+  const sourceIsVertical = (sourcePosition === Position.Top || sourcePosition === Position.Bottom) || !!(sourceHandle && (sourceHandle.includes('top') || sourceHandle.includes('bottom')));
+  const targetIsVertical = (targetPosition === Position.Top || targetPosition === Position.Bottom) || !!(targetHandle && (targetHandle.includes('top') || targetHandle.includes('bottom')));
+  const sourceDir: 'vertical' | 'horizontal' = sourceIsVertical ? 'vertical' : 'horizontal';
+  const targetDir: 'vertical' | 'horizontal' = targetIsVertical ? 'vertical' : 'horizontal';
   
   /* ------------------------------------------------------ */
   /*   Label text & coordinates                           */
@@ -74,8 +85,21 @@ const StepEdge: React.FC<EdgeProps> = ({
     }
   } 
   else {
-    // No bend points, use default step edge
-    edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
+    // No bend points: first segment follows source side orientation,
+    // last segment follows target side orientation (so arrow points correctly at destination)
+    if (sourceDir === 'horizontal' && targetDir === 'horizontal') {
+      // H-H: go horizontal to midX, then vertical to targetY, then horizontal to targetX
+      edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
+    } else if (sourceDir === 'horizontal' && targetDir === 'vertical') {
+      // H-V: go horizontal to target-aligned X first, then vertical into target
+      edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
+    } else if (sourceDir === 'vertical' && targetDir === 'horizontal') {
+      // V-H: go vertical to midY, then horizontal into target
+      edgePath = `M ${sourceX} ${sourceY} L ${sourceX} ${midY} L ${targetX} ${midY} L ${targetX} ${targetY}`;
+    } else {
+      // V-V: go vertical to midY, horizontal to targetX, then vertical into target
+      edgePath = `M ${sourceX} ${sourceY} L ${sourceX} ${midY} L ${targetX} ${midY} L ${targetX} ${targetY}`;
+    }
   }
   
   return (

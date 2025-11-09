@@ -20,6 +20,13 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
 
   // Calculate absolute positions for all nodes in the graph
   const absolutePositions = computeAbsolutePositions(elkGraph);
+  console.log("🧮 [toReactFlow] Absolute positions map:", Object.entries(absolutePositions).map(([id, pos]) => ({
+    id,
+    x: pos.x,
+    y: pos.y,
+    width: pos.width,
+    height: pos.height,
+  })));
   
   // Build a map of edge connection points for each node
   const edgeConnectionPoints = buildNodeEdgePoints(elkGraph, absolutePositions);
@@ -32,7 +39,7 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
   const createNode = (node: any, parentAbsolutePosition = { x: 0, y: 0 }, parentId?: string) => {
     const absPosRaw = absolutePositions[node.id];
     const absPos = snapPos(absPosRaw);
-    const isGroupNode = (node.children?.length ?? 0) > 0;
+    const isGroupNode = (node.children?.length ?? 0) > 0 || node.data?.isGroup === true;
 
     // Quantize node sizes to grid so both start and end land on grid
     const quantizeSize = (v: number) => Math.max(GRID_SIZE, Math.round(v / GRID_SIZE) * GRID_SIZE);
@@ -41,11 +48,16 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
     const groupWidth  = quantizeSize(node.width  || dimensions.groupWidth);
     const groupHeight = quantizeSize(node.height || dimensions.groupHeight);
 
+    // Only set parentId if it's not root (root is skipped from rendering)
+    // Nodes that would have root as parent become top-level (no parentId)
+    const validParentId = parentId && parentId !== 'root' ? parentId : undefined;
+
+
     nodes.push({
       id: node.id,
       type: isGroupNode ? "group" : "custom",
-      position: parentId ? snapPos({ x: node.x ?? 0, y: node.y ?? 0 }) : { x: absPos.x, y: absPos.y },
-      parentId,
+      position: validParentId ? snapPos({ x: node.x ?? 0, y: node.y ?? 0 }) : { x: absPos.x, y: absPos.y },
+      ...(validParentId && { parentId: validParentId }),
       zIndex: isGroupNode ? CANVAS_STYLES.zIndex.groups : CANVAS_STYLES.zIndex.nodes,
       selectable: true,
       selected: false,
@@ -95,11 +107,36 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
     } as CustomNode);
 
     // Process child nodes recursively
-    (node.children || []).forEach((childNode: any) => createNode(childNode, absPos, node.id));
+    // Only pass parentId if this node will be in the ReactFlow nodes array (i.e., not root)
+    const nodeIdInReactFlow = node.id !== 'root' ? node.id : undefined;
+    (node.children || []).forEach((childNode: any) => createNode(childNode, absPos, nodeIdInReactFlow));
   };
 
-  // Start node creation from the root
-  createNode(elkGraph);
+  // Start node creation from root's children (skip root itself)
+  // Root represents the entire canvas and should not be rendered as a node
+  console.log('🏭 [toReactFlow] Creating nodes from elkGraph children:', {
+    rootId: elkGraph.id,
+    childrenCount: (elkGraph.children || []).length,
+    children: (elkGraph.children || []).map(c => ({ id: c.id, x: c.x, y: c.y, w: c.width, h: c.height }))
+  });
+  
+  (elkGraph.children || []).forEach((childNode: any) => {
+    createNode(childNode);
+  });
+  
+  // Final pass: Remove any invalid parentId references
+  // This ensures no node references a parent that doesn't exist in the nodes array
+  const nodeIdsSet = new Set(nodes.map(n => n.id));
+  nodes.forEach(node => {
+    if ((node as any).parentId && !nodeIdsSet.has((node as any).parentId)) {
+      console.warn(`[toReactFlow] FIXING: Removing invalid parentId '${(node as any).parentId}' from node '${node.id}' - parent does not exist`);
+      delete (node as any).parentId;
+      // Update position to absolute if it was relative
+      if ((node.data as any).position) {
+        node.position = (node.data as any).position;
+      }
+    }
+  });
 
   /* ---------- helper to create RF edges -------------------------------- */
   // Create a map of node types for quick lookups
@@ -121,26 +158,12 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
         // For edges created via connector tool, the handle IDs are in the edge data
         if (edge.data?.sourceHandle) {
           sourceHandle = edge.data.sourceHandle;
-          console.log(`🔗 Found connector sourceHandle: ${sourceHandle} for edge ${edgeId}`);
         }
         if (edge.data?.targetHandle) {
           targetHandle = edge.data.targetHandle;
-          console.log(`🔗 Found connector targetHandle: ${targetHandle} for edge ${edgeId}`);
         }
 
-        // Debug: Log edge data
-        console.log(`🔗 Processing edge ${edgeId}:`, { 
-          edgeData: edge.data, 
-          sourceHandle, 
-          targetHandle,
-          hasData: !!edge.data,
-          sourceNodeId,
-          targetNodeId
-        });
-
-        // If not connector handles, try to find connection points for this edge
         if (!sourceHandle || !targetHandle) {
-          console.log(`🔗 No connector handles found for edge ${edgeId}, falling back to connection points`);
           let sourceHandleIndex = -1;
           let sourceHandleSide = "right";
           let targetHandleIndex = -1;
@@ -249,6 +272,24 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
   processEdges(elkGraph);
 
   // Final edge creation complete
+
+  console.log("🧭 [toReactFlow] Final nodes:", nodes.map(node => ({
+    id: node.id,
+    type: node.type,
+    position: node.position,
+    parentId: (node as any).parentId,
+    width: (node.data as any)?.width,
+    height: (node.data as any)?.height,
+  })));
+
+  console.log("🧭 [toReactFlow] Final edges:", edges.map(edge => ({
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    sourceHandle: edge.sourceHandle,
+    targetHandle: edge.targetHandle,
+    type: edge.type,
+  })));
 
   return { nodes, edges };
 } 

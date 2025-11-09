@@ -3,8 +3,8 @@ import { Save, Edit, Check, Download } from 'lucide-react';
 import { useViewMode } from '../../contexts/ViewModeContext';
 import SaveAuth from '../auth/SaveAuth';
 import { markEmbedToCanvasTransition } from '../../utils/chatPersistence';
-import { generateChatName } from '../../utils/chatUtils';
 import { anonymousArchitectureService } from '../../services/anonymousArchitectureService';
+import { ensureAnonymousSaved, EMBED_PENDING_ARCH_PREFIX } from '../../utils/anonymousSave';
 
 interface ViewControlsProps {
   // Save button props
@@ -39,7 +39,7 @@ const ViewControls: React.FC<ViewControlsProps> = ({
       
       // Open in new tab for editing (from embedded contexts)
       const urlParams = new URLSearchParams(window.location.search);
-      const hasArchitectureId = urlParams.has('arch');
+      const urlArchId = urlParams.get('arch');
       
       // Determine target URL based on environment
       const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -62,54 +62,101 @@ const ViewControls: React.FC<ViewControlsProps> = ({
       }
       
       console.log('🔍 [EDIT] Edit button state check:', {
-        hasArchitectureId,
+        hasArchitectureId: !!urlArchId,
         hasRawGraph: !!rawGraph,
         hasChildren: !!(rawGraph && rawGraph.children),
         childrenLength: rawGraph?.children?.length || 0,
         currentSearch: window.location.search
       });
       
-      if (hasArchitectureId) {
-        // If there's already an architecture ID, use it
-        console.log('🔍 [EDIT] Using existing architecture ID from URL');
-        targetUrl += window.location.search;
-      } else if (rawGraph && rawGraph.children && rawGraph.children.length > 0) {
-        // If there's content but no ID, save as anonymous architecture first
-        console.log('💾 [EDIT] Saving current architecture to get shareable ID...');
-        
-        try {
-          // Generate AI-powered name for embed architecture
-          const userPrompt = (window as any).originalChatTextInput || (window as any).chatTextInput || '';
-          let effectivePrompt = userPrompt;
-          if (!effectivePrompt && rawGraph && rawGraph.children && rawGraph.children.length > 0) {
-            const nodeLabels = rawGraph.children.map((node: any) => node.data?.label || node.id).filter(Boolean);
-            effectivePrompt = `Architecture with components: ${nodeLabels.slice(0, 5).join(', ')}`;
-          }
+      let finalArchId = urlArchId || null;
 
-          const architectureName = await generateChatName(effectivePrompt, rawGraph);
-          const anonymousId = await anonymousArchitectureService.saveAnonymousArchitecture(
-            architectureName,
-            rawGraph,
-            userPrompt  // Pass the original userPrompt to be saved with the architecture
-          );
-          console.log('✅ [EDIT] Saved architecture with ID:', anonymousId, 'with userPrompt:', userPrompt ? 'YES' : 'NO');
-          targetUrl += `?arch=${anonymousId}`;
+      // Only attempt to ensure save when we have graph content
+      const hasGraphContent = !!(rawGraph && rawGraph.children && rawGraph.children.length > 0);
+
+      const getUserPrompt = () =>
+        (window as any).originalChatTextInput ||
+        (window as any).chatTextInput ||
+        '';
+
+      const ensureArchitectureSaved = async (): Promise<string | null> => {
+        const maxAttempts = 3;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            const ensuredId = await ensureAnonymousSaved({
+              rawGraph,
+              userPrompt: getUserPrompt(),
+              anonymousService: anonymousArchitectureService,
+            });
+            const resolvedId = ensuredId ?? anonymousArchitectureService.getArchitectureIdFromUrl();
+            if (resolvedId) {
+              return resolvedId;
+            }
+          } catch (error: any) {
+            const message = error?.message || String(error);
+            const isThrottle = message.toLowerCase().includes('throttled');
+            if (isThrottle && attempt < maxAttempts) {
+              const delay = 500 * attempt;
+              console.warn(`⏳ [EDIT] Save throttled, retrying in ${delay}ms (attempt ${attempt}/${maxAttempts})`);
+              await new Promise((resolve) => setTimeout(resolve, delay));
+              continue;
+            }
+            console.error('❌ [EDIT] Failed to ensure anonymous save:', error);
+            throw error;
+          }
+        }
+        return anonymousArchitectureService.getArchitectureIdFromUrl();
+      };
+
+      if (!finalArchId && hasGraphContent) {
+        console.log('💾 [EDIT] Ensuring architecture has a shareable ID...');
+        try {
+          finalArchId = await ensureArchitectureSaved();
         } catch (error) {
-          console.error('❌ [EDIT] Failed to save architecture:', error);
-          // Continue without ID if save fails
+          console.error('❌ [EDIT] Failed to ensure architecture save, falling back to local session storage:', error);
         }
       }
-      // Final safeguard: if we still don't have an arch param, append a temp id
-      // to keep embed→canvas flows deterministic in CI and local dev.
-      if (!targetUrl.includes('arch=')) {
-        const tempId = Date.now().toString(36);
-        targetUrl += `?arch=${tempId}`;
+
+      if (!finalArchId && hasGraphContent) {
+        // Fallback: store the current rawGraph in sessionStorage so canvas can recover if Firestore save fails
+        try {
+          const fallbackId = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+          const chatMessagesRaw = localStorage.getItem('atelier_current_conversation');
+          const chatMessages = chatMessagesRaw ? JSON.parse(chatMessagesRaw) : [];
+          const fallbackName = getUserPrompt() || 'Unsaved Architecture';
+          const payload = {
+            rawGraph,
+            userPrompt: getUserPrompt(),
+            chatMessages,
+            createdAt: Date.now(),
+            name: fallbackName,
+          };
+          const serialized = JSON.stringify(payload);
+          sessionStorage.setItem(`${EMBED_PENDING_ARCH_PREFIX}${fallbackId}`, serialized);
+          try {
+            localStorage.setItem(`${EMBED_PENDING_ARCH_PREFIX}${fallbackId}`, serialized);
+          } catch (localError) {
+            console.warn('⚠️ [EDIT] Unable to persist fallback to localStorage:', localError);
+          }
+          finalArchId = fallbackId;
+          console.log('🗄️ [EDIT] Stored fallback architecture in sessionStorage with ID:', fallbackId);
+        } catch (storageError) {
+          console.error('❌ [EDIT] Failed to persist fallback architecture:', storageError);
+        }
       }
+
+      if (!finalArchId) {
+        console.error('❌ [EDIT] Unable to determine architecture ID for editing. Aborting navigation.');
+        return;
+      }
+
+      const separator = targetUrl.includes('?') ? '&' : '?';
+      targetUrl += `${separator}arch=${finalArchId}`;
       
       console.log('🚀 [EDIT] Opening main app:', targetUrl);
       // Ensure chat persistence exists for canvas validation
       try {
-        const userPrompt = (window as any).originalChatTextInput || (window as any).chatTextInput || '';
+        const userPrompt = getUserPrompt();
         const existing = localStorage.getItem('atelier_current_conversation');
         const parsed = existing ? JSON.parse(existing) : [];
         if (parsed.length === 0 && userPrompt) {

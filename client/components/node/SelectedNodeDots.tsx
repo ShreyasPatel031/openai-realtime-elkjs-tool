@@ -7,13 +7,17 @@ interface SelectedNodeDotsProps {
   nodeEl: HTMLDivElement | null;
   nodeScale: number;
   nodeWidth?: number;
+  nodeHeight?: number;
+  onConnectorDotClick?: (nodeId: string, handleId: string) => void;
 }
 
 const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({ 
   nodeId, 
   nodeEl, 
   nodeScale,
-  nodeWidth = 96
+  nodeWidth = 96,
+  nodeHeight = 96,
+  onConnectorDotClick
 }) => {
   const [hoveredHandle, setHoveredHandle] = useState<string | null>(null);
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
@@ -41,37 +45,11 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
       const newPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
       setMousePos(newPos);
       
-      // COMPREHENSIVE DEBUG: Mouse position calculation
-      if (logCount < 5) {
-        // eslint-disable-next-line no-console
-        console.log(`[MOUSE TRACKING FIXED ${logCount + 1}/5]`, {
-          rawEvent: { clientX: e.clientX, clientY: e.clientY },
-          nodeRect: { 
-            left: rect.left, 
-            top: rect.top, 
-            width: rect.width, 
-            height: rect.height,
-            right: rect.right,
-            bottom: rect.bottom
-          },
-          calculatedRelativePos: newPos,
-          sanityCheck: {
-            mouseInBounds: newPos.x >= 0 && newPos.x <= rect.width && newPos.y >= 0 && newPos.y <= rect.height,
-            expectedNodeSize: '96x96',
-            actualNodeSize: `${rect.width}x${rect.height}`
-          },
-          nodeId
-        });
-        logCount++;
-      }
     };
     const onMouseLeave = () => {
       setMousePos(null);
       setHoveredHandle(null);
       setExpandedHandles(new Set()); // Collapse all when mouse leaves node
-      logCount = 0;
-      // eslint-disable-next-line no-console
-      console.log('[SelectedNodeDots] mouseLeave - resetting debug count');
     };
     nodeEl.addEventListener('mousemove', onMouseMove);
     nodeEl.addEventListener('mouseleave', onMouseLeave);
@@ -90,8 +68,8 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
         { key: 'left', rotation: 270 },
       ].map(({ key, rotation }) => {
         const GAP = 8; // pixels from border
-        const NODE_CENTER = nodeWidth / 2; // center of node
-        const BORDER_DISTANCE = nodeWidth / 2; // distance from center to border
+        const NODE_CENTER_X = nodeWidth / 2; // center of node horizontally
+        const NODE_CENTER_Y = nodeHeight / 2; // center of node vertically
         
         // Small dot: 4x6, so half-sizes are 2x3
         // Large dot: 16x16, so half-sizes are 8x8
@@ -100,30 +78,31 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
         
         let baseSmallCx, baseSmallCy, baseLargeCx, baseLargeCy;
         
-            // Dots positioned with CENTER on the border (half inside, half outside)
-            // For 8px dots: radius is 4px, so center at border = half inside, half outside
-            // Small dot: 4x6 (halfW=2, halfH=3)
-            // Large dot: 16x16 (halfW=8, halfH=8)
-            if (key === 'top') {
-          baseSmallCx = NODE_CENTER;
-          baseSmallCy = 0; // Top border (0) - center at border, dot extends -3 to +3
-          baseLargeCx = NODE_CENTER;
-          baseLargeCy = 0; // Top border (0) - center at border, dot extends -8 to +8
+        // Dots positioned 8px AWAY from border (not on the border)
+        // Top dot: X at center, Y = 0 - GAP - halfHeight (8px away from top border)
+        // Bottom dot: X at center, Y = nodeHeight + GAP + halfHeight (8px away from bottom border)
+        // Left dot: X = 0 - GAP - halfWidth (8px away from left border), Y at center
+        // Right dot: X = nodeWidth + GAP + halfWidth (8px away from right border), Y at center
+        if (key === 'top') {
+          baseSmallCx = NODE_CENTER_X;     // X: always centered
+          baseSmallCy = 0 - GAP - smallHalfH;      // Y: top border - gap - half height
+          baseLargeCx = NODE_CENTER_X;     // X: always centered (same as small)
+          baseLargeCy = 0 - GAP - largeHalfH;      // Y: top border - gap - half height
         } else if (key === 'bottom') {
-          baseSmallCx = NODE_CENTER;
-          baseSmallCy = nodeWidth; // Bottom border - center at border
-          baseLargeCx = NODE_CENTER;
-          baseLargeCy = nodeWidth; // Bottom border - center at border
+          baseSmallCx = NODE_CENTER_X;     // X: always centered
+          baseSmallCy = nodeHeight + GAP + smallHalfH;     // Y: bottom border + gap + half height
+          baseLargeCx = NODE_CENTER_X;     // X: always centered (same as small)
+          baseLargeCy = nodeHeight + GAP + largeHalfH;     // Y: bottom border + gap + half height
         } else if (key === 'left') {
-          baseSmallCx = 0; // Left border - center at border
-          baseSmallCy = NODE_CENTER;
-          baseLargeCx = 0; // Left border - center at border
-          baseLargeCy = NODE_CENTER;
+          baseSmallCx = 0 - GAP - smallHalfW;      // X: left border - gap - half width
+          baseSmallCy = NODE_CENTER_Y;     // Y: always centered
+          baseLargeCx = 0 - GAP - largeHalfW;      // X: left border - gap - half width
+          baseLargeCy = NODE_CENTER_Y;     // Y: always centered (same as small)
         } else { // right
-          baseSmallCx = nodeWidth; // Right border - center at border
-          baseSmallCy = NODE_CENTER;
-          baseLargeCx = nodeWidth; // Right border - center at border
-          baseLargeCy = NODE_CENTER;
+          baseSmallCx = nodeWidth + GAP + smallHalfW;     // X: right border + gap + half width
+          baseSmallCy = NODE_CENTER_Y;     // Y: always centered
+          baseLargeCx = nodeWidth + GAP + largeHalfW;     // X: right border + gap + half width
+          baseLargeCy = NODE_CENTER_Y;     // Y: always centered (same as small)
         }
         
         // Actual centers after ReactFlow scaling (for proximity detection)
@@ -149,27 +128,6 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
         // DEBUG: Track every render and state change for top dot
         if (key === 'top') {
           renderCountRef.current++;
-          const currentState = { isExpanded, isWhite, hoveredHandle };
-          const lastState = lastStateRef.current;
-          
-          if (
-            currentState.isExpanded !== lastState.isExpanded ||
-            currentState.isWhite !== lastState.isWhite ||
-            currentState.hoveredHandle !== lastState.hoveredHandle
-          ) {
-            // eslint-disable-next-line no-console
-            console.log(`[RENDER ${renderCountRef.current}] TOP DOT STATE CHANGE`, {
-              timestamp: Date.now(),
-              from: lastState,
-              to: currentState,
-              stateTransition: `${lastState.isExpanded ? 'EXP' : 'SMALL'}-${lastState.isWhite ? 'WHITE' : 'BLUE'} → ${currentState.isExpanded ? 'EXP' : 'SMALL'}-${currentState.isWhite ? 'WHITE' : 'BLUE'}`,
-              expandedSet: Array.from(expandedHandles),
-              FLICKER_SUSPECT: !currentState.isExpanded && lastState.isExpanded ? '🚨 COLLAPSED UNEXPECTEDLY' : 
-                               currentState.isExpanded && !currentState.isWhite && lastState.isWhite ? '🚨 WHITE→BLUE BUT MIGHT FLASH SMALL' :
-                               'Normal transition'
-            });
-            lastStateRef.current = currentState;
-          }
         }
         
         const hoverAreaCssCx = smallCssCx;
@@ -208,15 +166,11 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
                 if (existingTimeout) {
                   clearTimeout(existingTimeout);
                   timeoutRefs.current.delete(`collapse-${key}`);
-                  // eslint-disable-next-line no-console
-                  console.log(`[${key.toUpperCase()}] Green area mouseEnter - cancelled pending collapse`);
                 }
                 
                 const now = Date.now();
                 const lastCollapse = expansionTimeRef.current.get(`${key}-collapse`);
                 if (lastCollapse && (now - lastCollapse) < MIN_EXPANSION_TIME) {
-                  // eslint-disable-next-line no-console
-                  console.log(`[${key.toUpperCase()}] Green area mouseEnter - too soon after collapse (${now - lastCollapse}ms < ${MIN_EXPANSION_TIME}ms)`);
                   return;
                 }
                 
@@ -235,24 +189,20 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
                   const currentExpandedHandles = expandedHandles;
                   
                   if (currentHoveredHandle === key) {
-                    // eslint-disable-next-line no-console
-                    console.log(`[${key.toUpperCase()}] Green area mouseLeave - but mouse on big dot, keeping expanded`);
                     return;
                   }
                   
                   const expansionTime = expansionTimeRef.current.get(key);
                   const now = Date.now();
                   if (expansionTime && (now - expansionTime) < MIN_EXPANSION_TIME) {
-                    // eslint-disable-next-line no-console
-                    console.log(`[${key.toUpperCase()} DOT] Collapse prevented - too soon (${now - expansionTime}ms < ${MIN_EXPANSION_TIME}ms)`);
                     return;
                   }
                   
                   if (mousePos && nodeEl) {
                     const greenAreaSize = 64; // Updated to match new hover area size
                     const bigDotSize = 16 * nodeScale;
-                    const greenCenterX = (typeof hoverAreaPos.left === 'number' ? hoverAreaPos.left : NODE_CENTER) * nodeScale;
-                    const greenCenterY = (typeof hoverAreaPos.top === 'number' ? hoverAreaPos.top : NODE_CENTER) * nodeScale;
+                    const greenCenterX = (typeof hoverAreaPos.left === 'number' ? hoverAreaPos.left : NODE_CENTER_X) * nodeScale;
+                    const greenCenterY = (typeof hoverAreaPos.top === 'number' ? hoverAreaPos.top : NODE_CENTER_Y) * nodeScale;
                     
                     const distFromGreenCenter = Math.sqrt(
                       Math.pow(mousePos.x - greenCenterX, 2) + 
@@ -261,14 +211,9 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
                     
                     const maxDistance = Math.max(greenAreaSize / 2, bigDotSize / 2) + 5;
                     if (distFromGreenCenter <= maxDistance) {
-                      // eslint-disable-next-line no-console
-                      console.log(`[${key.toUpperCase()}] Mouse still near dots (${distFromGreenCenter.toFixed(1)}px <= ${maxDistance}px), keeping expanded`);
                       return;
                     }
                   }
-                  
-                  // eslint-disable-next-line no-console
-                  console.log(`[${key.toUpperCase()}] Safe to collapse - mouse left area`);
                   
                   const collapseTime = Date.now();
                   expansionTimeRef.current.set(`${key}-collapse`, collapseTime);
@@ -284,6 +229,13 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
                 }, 50);
                 
                 timeoutRefs.current.set(`collapse-${key}`, collapseTimeout);
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                // Starting a connection from this dot mimics connector mode behavior
+                const handleId = `connector-${key}-source`;
+                onConnectorDotClick?.(nodeId, handleId);
               }}
             />
             
@@ -312,16 +264,16 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
                   pointerEvents: isExpanded ? 'auto' : 'none'
                 }}
                 initial={{
-                  x: (isExpanded || stableIsWhite ? largeCssCx : smallCssCx) - NODE_CENTER,
-                  y: (isExpanded || stableIsWhite ? largeCssCy : smallCssCy) - NODE_CENTER,
+                  x: (isExpanded || stableIsWhite ? largeCssCx : smallCssCx) - NODE_CENTER_X,
+                  y: (isExpanded || stableIsWhite ? largeCssCy : smallCssCy) - NODE_CENTER_Y,
                   width: stableIsWhite ? 16 : (isExpanded ? 16 : 4),
                   height: stableIsWhite ? 16 : (isExpanded ? 16 : 6),
                   rotate: stableIsWhite ? 0 : (isExpanded ? 0 : rotation),
                   backgroundColor: stableIsWhite ? '#ffffff' : (isExpanded ? 'rgba(66,133,244,0.15)' : 'rgba(66,133,244,0.5)')
                 }}
                 animate={{
-                  x: (isExpanded || stableIsWhite ? largeCssCx : smallCssCx) - NODE_CENTER,
-                  y: (isExpanded || stableIsWhite ? largeCssCy : smallCssCy) - NODE_CENTER,
+                  x: (isExpanded || stableIsWhite ? largeCssCx : smallCssCx) - NODE_CENTER_X,
+                  y: (isExpanded || stableIsWhite ? largeCssCy : smallCssCy) - NODE_CENTER_Y,
                   width: stableIsWhite ? 16 : (isExpanded ? 16 : 4),
                   height: stableIsWhite ? 16 : (isExpanded ? 16 : 6),
                   rotate: stableIsWhite ? 0 : (isExpanded ? 0 : rotation),
@@ -345,42 +297,22 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
                     if (existingTimeout) {
                       clearTimeout(existingTimeout);
                       timeoutRefs.current.delete(`collapse-${key}`);
-                      // eslint-disable-next-line no-console
-                      console.log(`[${key.toUpperCase()}] Big dot mouseEnter - cancelled pending collapse`);
                     }
                     
-                    const timestamp = Date.now();
-                    // eslint-disable-next-line no-console
-                    console.log(`[${key.toUpperCase()} DOT] mouseEnter at ${timestamp} - turning WHITE`, {
-                      isExpanded,
-                      wasHovered: hoveredHandle === key,
-                      currentState: { isExpanded, isWhite: isExpanded && hoveredHandle === key },
-                      aboutToSet: key
-                    });
                     setHoveredHandle(key);
-                    
-                    setTimeout(() => {
-                      const newIsWhite = expandedHandles.has(key) && hoveredHandle === key;
-                      // eslint-disable-next-line no-console
-                      console.log(`[${key.toUpperCase()} DOT] State after 10ms:`, {
-                        isExpanded: expandedHandles.has(key),
-                        isWhite: newIsWhite,
-                        hoveredHandle,
-                        expectedWhite: true
-                      });
-                    }, 10);
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (isExpanded) {
-                    // eslint-disable-next-line no-console
-                    console.log(`[${key.toUpperCase()} DOT] mouseLeave on BIG DOT - should turn BLUE`, {
-                      isExpanded,
-                      wasHovered: hoveredHandle === key,
-                      nowClearing: true
-                    });
                     setHoveredHandle(null);
                   }
+                }}
+                onClick={(e) => {
+                  // Clicking the blue/white dot starts connection from that port
+                  e.stopPropagation();
+                  e.preventDefault();
+                  const handleId = `connector-${key}-source`;
+                  onConnectorDotClick?.(nodeId, handleId);
                 }}
               >
                 {/* Border with smooth transition - only visible when white */}

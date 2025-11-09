@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Handle, Position } from 'reactflow';
+import { Plus } from 'lucide-react';
 import { baseHandleStyle } from './graph/handles';
 import { getStyle } from './graph/styles';
 import { CANVAS_STYLES } from './graph/styles/canvasStyles';
@@ -37,7 +38,9 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
   const [iconError, setIconError] = useState(false);
   const [finalIconSrc, setFinalIconSrc] = useState<string | undefined>(undefined);
   const [fallbackAttempted, setFallbackAttempted] = useState(false);
-    const apiEndpoint = useApiEndpoint();
+  const [groupIconSrc, setGroupIconSrc] = useState<string | undefined>(undefined);
+  const [groupIconLoaded, setGroupIconLoaded] = useState(false);
+  const apiEndpoint = useApiEndpoint();
 
   // Function to find which category an icon belongs to
   const findIconCategory = (provider: string, iconName: string): string | null => {
@@ -110,6 +113,50 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
     // Icon not found in main database - let semantic fallback handle it
     throw new Error(`Icon not found in database: ${iconName}`);
   };
+
+  // Function to load group icon image from group-icons directory
+  const tryLoadGroupIcon = async (groupIconName: string) => {
+    // Check cache first
+    const cachedUrl = iconCacheService.getCachedIcon(groupIconName);
+    if (cachedUrl) {
+      return cachedUrl;
+    }
+
+    // Group icons are stored as SVG files in /group-icons/{provider}/{icon_name}.svg
+    const prefixMatch = groupIconName.match(/^(aws|gcp|azure)_(.+)$/);
+    if (prefixMatch) {
+      const [, provider, actualIconName] = prefixMatch;
+      const iconPath = `/group-icons/${provider}/${groupIconName}.svg`;
+      const fullIconUrl = buildAssetUrl(iconPath, apiEndpoint);
+
+      try {
+        // Check if the SVG file exists
+        const response = await fetch(fullIconUrl);
+        const contentType = response.headers.get('content-type') || '';
+        
+        if (contentType.includes('text/html')) {
+          throw new Error(`Group icon returned HTML instead of image: ${groupIconName}`);
+        }
+        
+        if (contentType.includes('image/') || contentType.includes('svg') || response.ok) {
+          const img = new Image();
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = fullIconUrl;
+          });
+
+          // Cache the successfully loaded icon
+          iconCacheService.cacheIcon(groupIconName, fullIconUrl);
+          return fullIconUrl;
+        }
+      } catch (error) {
+        console.log(`❌ Group icon not found: ${groupIconName} (${error instanceof Error ? error.message : 'Unknown error'})`);
+      }
+    }
+    
+    throw new Error(`Group icon not found: ${groupIconName}`);
+  };
   
   useEffect(() => {
     // Reset states
@@ -179,6 +226,24 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
       }
     }
   }, [data.icon, id]);
+
+  // Load group icon image for sidebar
+  useEffect(() => {
+    setGroupIconLoaded(false);
+    setGroupIconSrc(undefined);
+
+    if (data.groupIcon) {
+      tryLoadGroupIcon(data.groupIcon)
+        .then((path) => {
+          setGroupIconSrc(path);
+          setGroupIconLoaded(true);
+        })
+        .catch(() => {
+          // Group icon failed to load - sidebar will show placeholder
+          setGroupIconLoaded(false);
+        });
+    }
+  }, [data.groupIcon]);
 
   // Get group icon colors if specified
   const groupIconHex = data.groupIcon ? getGroupIconHex(data.groupIcon) : null;
@@ -438,8 +503,103 @@ const GroupNode: React.FC<GroupNodeProps> = ({ data, id, selected, isConnectable
         </div>
       )}
 
-      {/* Plus button to add a node */}
-      {selected && (
+      {/* Group Icon Sidebar Panel - positioned on right side */}
+      {data.groupIcon && (
+        <div style={{
+          position: 'absolute',
+          top: '0',
+          right: '0',
+          width: '24px',
+          height: '100%',
+          backgroundColor: 'white',
+          border: '1px solid #e4e4e4',
+          borderTopRightRadius: '6px',
+          borderBottomRightRadius: '6px',
+          borderLeft: 'none',
+          padding: '8px 0',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          gap: '8px',
+          boxSizing: 'border-box',
+          zIndex: 10,
+          pointerEvents: 'auto'
+        }}>
+          {/* Group Icon */}
+          <div style={{
+            width: '12px',
+            height: '12px',
+            padding: '2px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            {groupIconLoaded && groupIconSrc ? (
+              <img
+                src={groupIconSrc}
+                alt=""
+                style={{
+                  width: '8px',
+                  height: '8px',
+                  objectFit: 'contain'
+                }}
+                onError={() => {
+                  setGroupIconLoaded(false);
+                }}
+              />
+            ) : (
+              <div style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                border: '1px solid #333',
+                backgroundColor: 'transparent'
+              }} />
+            )}
+          </div>
+
+          {/* Vertical Separator */}
+          <div style={{
+            width: '0px',
+            height: '8px',
+            borderLeft: '1px solid #e4e4e4',
+            flexShrink: 0
+          }} />
+
+          {/* Plus Button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddNode(id);
+            }}
+            style={{
+              width: '12px',
+              height: '12px',
+              padding: '2px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              flexShrink: 0
+            }}
+            title="Add Node"
+          >
+            <Plus style={{
+              width: '8px',
+              height: '8px',
+              color: '#333',
+              strokeWidth: 2
+            }} />
+          </button>
+        </div>
+      )}
+
+      {/* Legacy Plus button to add a node (only show if no group icon sidebar) */}
+      {selected && !data.groupIcon && (
         <button
           style={{
             position: 'absolute',

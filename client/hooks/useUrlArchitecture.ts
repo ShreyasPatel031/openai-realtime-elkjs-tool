@@ -5,6 +5,8 @@
 
 import { useCallback, useRef } from 'react';
 import { anonymousArchitectureService, AnonymousArchitecture } from '../services/anonymousArchitectureService';
+import { EMBED_PENDING_ARCH_PREFIX } from '../utils/anonymousSave';
+import { Timestamp } from 'firebase/firestore';
 
 interface UseUrlArchitectureProps {
   loadArchitecture: (architecture: AnonymousArchitecture, source: string) => void;
@@ -48,7 +50,65 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
     console.log('🔥 [LOAD-SHARED] Starting to load shared architecture:', architectureId);
     
     try {
-      const sharedArch = await anonymousArchitectureService.loadAnonymousArchitectureById(architectureId);
+      let sharedArch = null;
+      const isLocalFallback = architectureId.startsWith('local-');
+
+      if (!isLocalFallback) {
+        sharedArch = await anonymousArchitectureService.loadAnonymousArchitectureById(architectureId);
+      }
+
+      if (!sharedArch && typeof window !== 'undefined') {
+        const storageKey = `${EMBED_PENDING_ARCH_PREFIX}${architectureId}`;
+        let fallbackData: any = null;
+
+        try {
+          const sessionPayload = window.sessionStorage?.getItem(storageKey);
+          if (sessionPayload) {
+            fallbackData = JSON.parse(sessionPayload);
+            window.sessionStorage.removeItem(storageKey);
+          }
+        } catch (error) {
+          console.warn('⚠️ [LOAD-SHARED] Failed to read sessionStorage fallback:', error);
+        }
+
+        if (!fallbackData) {
+          try {
+            const localPayload = window.localStorage?.getItem(storageKey);
+            if (localPayload) {
+              fallbackData = JSON.parse(localPayload);
+              window.localStorage.removeItem(storageKey);
+            }
+          } catch (error) {
+            console.warn('⚠️ [LOAD-SHARED] Failed to read localStorage fallback:', error);
+          }
+        }
+
+        if (fallbackData?.rawGraph) {
+          console.log('🔥 [LOAD-SHARED] Using local fallback architecture data:', {
+            id: architectureId,
+            createdAt: fallbackData.createdAt,
+            hasChatMessages: Array.isArray(fallbackData.chatMessages) && fallbackData.chatMessages.length > 0,
+          });
+
+          sharedArch = {
+            id: architectureId,
+            name: fallbackData.name || 'Unsaved Architecture',
+            rawGraph: fallbackData.rawGraph,
+            sessionId: 'local-fallback',
+            timestamp: Timestamp.now(),
+            isAnonymous: true,
+            userPrompt: fallbackData.userPrompt || '',
+            chatMessages: fallbackData.chatMessages || [],
+          } as AnonymousArchitecture;
+        }
+      } else if (sharedArch && typeof window !== 'undefined') {
+        // Remove any stale fallback once Firestore load succeeds
+        try {
+          const storageKey = `${EMBED_PENDING_ARCH_PREFIX}${architectureId}`;
+          window.sessionStorage?.removeItem(storageKey);
+          window.localStorage?.removeItem(storageKey);
+        } catch {}
+      }
       
       if (sharedArch && sharedArch.rawGraph) {
         console.log('🔥 [LOAD-SHARED] ✅ Loaded shared architecture:', {

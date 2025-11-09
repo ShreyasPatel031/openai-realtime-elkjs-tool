@@ -7,6 +7,7 @@ import { splitTextIntoLines } from '../utils/textMeasurement';
 import SelectedNodeDots from './node/SelectedNodeDots';
 import ConnectorDots from './node/ConnectorDots';
 import NodeHandles from './node/NodeHandles';
+import { useNodeStyle } from '../contexts/NodeStyleContext';
 
 // NO HEURISTIC FALLBACKS - let semantic fallback service handle everything
 
@@ -25,17 +26,20 @@ interface CustomNodeProps {
   id: string;
   selected?: boolean;
   onLabelChange: (id: string, label: string) => void;
-  selectedTool?: 'select' | 'box' | 'connector' | 'group';
+  selectedTool?: 'arrow' | 'hand' | 'box' | 'connector' | 'group';
   connectingFrom?: string | null;
   connectingFromHandle?: string | null;
   onConnectorDotClick?: (nodeId: string, handleId: string) => void;
 }
 
-const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChange, selectedTool = 'select', connectingFrom, connectingFromHandle, onConnectorDotClick }) => {
+const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChange, selectedTool = 'arrow', connectingFrom, connectingFromHandle, onConnectorDotClick }) => {
   const { leftHandles = [], rightHandles = [], topHandles = [], bottomHandles = [] } = data;
+  const { settings } = useNodeStyle();
   
-  const [isEditing, setIsEditing] = useState(data.isEditing);
-  const [label, setLabel] = useState(data.label);
+  const [isEditing, setIsEditing] = useState(data.isEditing || (!data.label || data.label === 'Add text'));
+  const [label, setLabel] = useState(!data.label || data.label === 'Add text' ? '' : data.label);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const lastBlurTimeRef = useRef<number>(0);
   const [iconLoaded, setIconLoaded] = useState(false);
   const [iconError, setIconError] = useState(false);
   const [finalIconSrc, setFinalIconSrc] = useState<string | undefined>(undefined);
@@ -204,26 +208,72 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
 
   // keep local label in sync
   useEffect(() => {
-    setLabel(data.label);
+    setLabel(!data.label || data.label === 'Add text' ? '' : data.label);
   }, [data.label]);
 
-  const handleLabelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setLabel(e.target.value);
-  };
-
-  // On Enter: commit label - no manual icon fetching
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
+  // Auto-enter edit mode when node is selected, clear when deselected
+  useEffect(() => {
+    if (selected && !isEditing) {
+      const timeSinceBlur = Date.now() - lastBlurTimeRef.current;
+      if (timeSinceBlur < 100) {
+        const timer = setTimeout(() => {
+          if (selected && !isEditing) {
+            setIsEditing(true);
+          }
+        }, 100 - timeSinceBlur);
+        return () => clearTimeout(timer);
+      } else {
+        setIsEditing(true);
+      }
+    } else if (!selected && isEditing) {
+      // Clear editing state when node is deselected
       setIsEditing(false);
-      onLabelChange(id, label);
-      // Let the useEffect handle icon loading based on the new label
     }
+  }, [selected, isEditing]);
+
+  // Focus input when entering edit mode
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      const timer = setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          // Auto-resize textarea to fit content
+          const textarea = inputRef.current;
+          textarea.style.height = 'auto';
+          textarea.style.height = `${textarea.scrollHeight}px`;
+        }
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [isEditing, label]);
+
+  const handleLabelChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newLabel = e.target.value;
+    setLabel(newLabel);
+    
+    // Auto-resize textarea to fit content - ResizeObserver will handle node height
+    const textarea = e.target;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
   };
 
-  // No debounced icon updates while editing - let semantic fallback handle it
+  // On Escape: exit edit mode, Enter allows new lines
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape') {
+      lastBlurTimeRef.current = Date.now();
+      setIsEditing(false);
+      onLabelChange(id, label || '');
+      if (!label.trim()) {
+        onLabelChange(id, '');
+      }
+    }
+    // Enter key now creates new lines (default textarea behavior)
+  };
 
-  const handleDoubleClick = () => {
-    setIsEditing(true);
+  const handleClick = () => {
+    if (!isEditing) {
+      setIsEditing(true);
+    }
   };
 
   const nodeStyle = {
@@ -231,11 +281,12 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
     border: '1px solid #e4e4e4', // Figma exact border color
     borderRadius: '8px', // Figma 8px radius
     padding: '0px',
-    // Default square footprint aligned to 16px grid; data.width/height can override
+    // Width fixed, height auto-sizes to content
     width: data.width || 96,
-    height: data.height || 96,
+    minHeight: 96,
     boxSizing: 'border-box' as const,
     display: 'flex',
+    flexDirection: 'column' as const,
     justifyContent: 'flex-start',
     alignItems: 'flex-start',
     fontSize: '12px',
@@ -247,12 +298,42 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
 
   const [nodeEl, setNodeEl] = useState<HTMLDivElement | null>(null);
   const [nodeScale, setNodeScale] = useState<number>(1);
+  const [actualNodeWidth, setActualNodeWidth] = useState<number>(data.width || 96);
+  const [actualNodeHeight, setActualNodeHeight] = useState<number>(96);
   
+  // Update actual node dimensions when data changes or node resizes
+  useEffect(() => {
+    if (!nodeEl) return;
+    
+    const updateDimensions = () => {
+      // Get the computed style to get the actual CSS dimensions (accounting for inline styles)
+      const computedStyle = window.getComputedStyle(nodeEl);
+      const width = parseFloat(computedStyle.width) || data.width || 96;
+      const height = parseFloat(computedStyle.height) || 96;
+      setActualNodeWidth(width);
+      setActualNodeHeight(height);
+    };
+    
+    // Initial update
+    updateDimensions();
+    
+    // Watch for size changes
+    const resizeObserver = new ResizeObserver(() => {
+      requestAnimationFrame(updateDimensions);
+    });
+    
+    resizeObserver.observe(nodeEl);
+    
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [nodeEl, data.width]);
+
   // FIXED: Recalculate nodeScale on zoom changes using ResizeObserver
   useEffect(() => {
     if (!nodeEl) return;
     
-    const cssWidth = data.width || 96; // Use data.width from props
+    const cssWidth = actualNodeWidth; // Use actual rendered width
     
     const updateScale = () => {
       const rect = nodeEl.getBoundingClientRect();
@@ -298,29 +379,54 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
       clearTimeout(timeoutId);
       resizeObserver.disconnect();
     };
-  }, [nodeEl, data.width]);
+  }, [nodeEl, actualNodeWidth]);
   
 
 
   return (
-    <div 
-      style={nodeStyle} 
-      data-testid="react-flow-node" 
-      ref={(el) => {
-        setNodeEl(el);
-        // Scale calculation now handled by ResizeObserver in useEffect
-      }}
-    >
-      {/* Connector mode dots - shown when connector tool is selected (NOT when just selected) */}
-      {selectedTool === 'connector' && (
-        <ConnectorDots 
+    <>
+      <style>
+        {`
+          .node-text-input::placeholder {
+            color: #e4e4e4;
+            opacity: 1;
+          }
+        `}
+      </style>
+      <div 
+        style={nodeStyle} 
+        data-testid="react-flow-node" 
+        ref={(el) => {
+          setNodeEl(el);
+          // Scale calculation now handled by ResizeObserver in useEffect
+        }}
+        onClick={undefined}
+        onMouseDown={undefined}
+        onMouseUp={undefined}
+        onPointerDown={undefined}
+        onPointerUp={undefined}
+      >
+      {/* Selected node dots - shown when node is selected */}
+      {selected && (
+        <SelectedNodeDots 
           nodeId={id} 
-          nodeWidth={data.width || 96}
-          connectingFrom={connectingFrom}
-          connectingFromHandle={connectingFromHandle}
-          onHandleClick={onConnectorDotClick}
+          nodeEl={nodeEl}
+          nodeScale={nodeScale}
+          nodeWidth={actualNodeWidth}
+          nodeHeight={actualNodeHeight}
+          onConnectorDotClick={onConnectorDotClick}
         />
       )}
+      
+      {/* Connector mode dots - always render handles for ReactFlow, but only show visual dots when connector tool is active */}
+      <ConnectorDots 
+        nodeId={id} 
+        nodeWidth={data.width || 96}
+        connectingFrom={connectingFrom}
+        connectingFromHandle={connectingFromHandle}
+        onHandleClick={onConnectorDotClick}
+        showVisualDots={selectedTool === 'connector'}
+      />
       
       {/* Edge connection handles */}
       <NodeHandles
@@ -330,37 +436,85 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
         bottomHandles={bottomHandles}
       />
       
-      {/* Node text - only show if data provided, center aligned */}
-      {data.label && (
+      {/* Node text - always present for editing */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         width: '100%',
-        height: '100%',
-        position: 'relative',
+        flex: 1,
         zIndex: 1, // Lower z-index than green hover areas (zIndex: 1000)
-        pointerEvents: 'auto' // Allow text interaction
+        pointerEvents: isEditing ? 'auto' : 'none', // Only interactive when editing
+        boxSizing: 'border-box'
       }}>
         {isEditing ? (
-          <input
-            type="text"
+          <div 
+            style={{
+              width: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: (!label || !label.trim()) && !(iconLoaded && finalIconSrc) ? 'center' : 'flex-start',
+            paddingTop: `${settings.nodePaddingVertical}px`,
+            paddingBottom: `${settings.nodePaddingVertical}px`,
+            paddingLeft: `${settings.nodePaddingHorizontal}px`,
+            paddingRight: `${settings.nodePaddingHorizontal}px`,
+              boxSizing: 'border-box',
+              gap: iconLoaded && finalIconSrc && (label && label.trim()) ? `${settings.textPadding}px` : '0',
+          }}>
+            {iconLoaded && finalIconSrc && (
+              <img 
+                src={finalIconSrc}
+                  alt="" 
+                style={{ 
+                    width: `${settings.iconSize}px`,
+                    height: `${settings.iconSize}px`,
+                    objectFit: 'contain',
+                    flexShrink: 0
+                  }}
+                />
+            )}
+            <textarea
+              ref={inputRef}
             value={label}
             onChange={handleLabelChange}
             onKeyDown={handleKeyDown}
-            autoFocus
+              onBlur={() => {
+                lastBlurTimeRef.current = Date.now();
+                setIsEditing(false);
+                onLabelChange(id, label || '');
+              }}
+              placeholder={selected || !label ? "Add text" : ""}
             style={{
               width: '100%',
-              padding: '4px',
-              border: '1px solid #ccc',
-              borderRadius: '4px',
+                maxWidth: '100%',
+                minHeight: label ? 'auto' : '10px',
+                padding: '0',
+                boxSizing: 'border-box',
+                border: 'none',
+                borderRadius: '8px',
               textAlign: 'center',
-            }}
-          />
-        ) : data.label ? (
+                fontSize: '8px',
+                lineHeight: '10px',
+                fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                fontWeight: 400,
+                color: '#333',
+                background: 'transparent',
+                outline: 'none',
+                resize: 'none',
+                cursor: 'text',
+                overflow: 'hidden',
+                whiteSpace: 'pre-wrap',
+                wordWrap: 'break-word',
+                flexShrink: 0
+              }}
+              className="node-text-input"
+            />
+          </div>
+        ) : (
           <div
-            onDoubleClick={handleDoubleClick}
+            onClick={handleClick}
             style={{
               textAlign: 'center',
               cursor: 'pointer',
@@ -368,38 +522,46 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
               lineHeight: '10px',
               fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
               fontWeight: 400,
-              color: '#e4e4e4',
+              color: '#000000',
               width: '100%',
-              paddingLeft: '10px',
-              paddingRight: '10px',
-              margin: '0 auto',
-              marginTop: '2px',
-              wordBreak: 'normal',
-              overflowWrap: 'normal',
-              boxSizing: 'border-box'
+              paddingTop: `${settings.nodePaddingVertical}px`,
+              paddingBottom: `${settings.nodePaddingVertical}px`,
+              paddingLeft: `${settings.nodePaddingHorizontal}px`,
+              paddingRight: `${settings.nodePaddingHorizontal}px`,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'flex-start',
+              alignItems: 'center',
+              boxSizing: 'border-box',
+              pointerEvents: 'auto',
+              wordBreak: 'break-word',
+              overflowWrap: 'break-word',
+              whiteSpace: 'pre-wrap',
+              gap: (label && label.trim()) && iconLoaded ? `${settings.textPadding}px` : '0',
             }}
           >
-            {/* Render each line manually to match ELK calculation */}
-            {(() => {
-              const lines = splitTextIntoLines(label, 76);
-              return lines.map((line, index) => (
-                <div key={index} style={{ 
-                  lineHeight: '10px',
-                  width: '100%',
-                  textAlign: 'center',
-                  overflow: 'hidden',
-                  whiteSpace: 'nowrap',
-                  textOverflow: 'ellipsis'
-                }}>
-                  {line}
-                </div>
-              ));
-            })()}
+            {iconLoaded && finalIconSrc && (
+              <img 
+                src={finalIconSrc} 
+                alt="" 
+                style={{
+                  width: `${settings.iconSize}px`,
+                  height: `${settings.iconSize}px`,
+                  objectFit: 'contain',
+                  flexShrink: 0
+                }}
+              />
+            )}
+            {label && label.trim() && (
+              <div style={{ width: '100%' }}>
+                {label}
+              </div>
+            )}
           </div>
-        ) : null}
+        )}
       </div>
-      )}
     </div>
+    </>
   );
 };
 

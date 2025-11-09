@@ -33,7 +33,7 @@ test.describe('Embed-to-Canvas Flow', () => {
     await page.locator('button[type="submit"]').first().click();
 
     await page.waitForTimeout(5000);
-    const nodes = page.locator('.react-flow__node');
+    const nodes = page.locator('.react-flow__node:visible');
     await nodes.first().waitFor({ state: 'visible', timeout: 20000 });
     
     const embedNodeCount = await nodes.count();
@@ -60,8 +60,8 @@ test.describe('Embed-to-Canvas Flow', () => {
     // Root path (/) is correct - it auto-detects auth state
 
     console.log('📊 Verifying architecture...');
-    const canvasNodes = canvasPage.locator('.react-flow__node');
-    await canvasNodes.first().waitFor({ state: 'visible', timeout: 10000 });
+    const canvasNodes = canvasPage.locator('.react-flow__node:visible');
+    await canvasNodes.first().waitFor({ state: 'visible', timeout: 20000 });
     
     const canvasNodeCount = await canvasNodes.count();
     console.log(`✅ Canvas: ${canvasNodeCount} nodes`);

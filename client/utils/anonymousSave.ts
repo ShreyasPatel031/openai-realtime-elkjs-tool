@@ -4,6 +4,8 @@
  */
 
 import { Timestamp } from 'firebase/firestore';
+
+export const EMBED_PENDING_ARCH_PREFIX = 'embed_pending_arch_' as const;
 import { generateNameWithFallback } from './naming';
 
 export interface AnonymousArchitectureService {

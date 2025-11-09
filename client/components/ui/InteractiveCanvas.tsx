@@ -52,8 +52,9 @@ import { useUrlArchitecture } from "../../hooks/useUrlArchitecture"
 import { ensureEdgeVisibility, updateEdgeStylingOnSelection, updateEdgeStylingOnDeselection } from "../../utils/edgeVisibility"
 import { syncWithFirebase as syncWithFirebaseService } from "../../services/syncArchitectures"
 import { generateSVG, handleSvgZoom } from "../../utils/svgExport"
-import GroupNode from "../GroupNode"
+import DraftGroupNode from "../node/DraftGroupNode"
 import StepEdge from "../StepEdge"
+import { createNodeID } from "../../types/graph"
 /**
  * READ ME: InteractiveCanvas is already very large. Do NOT add new interaction
  * logic or component code directly here. Add it in a dedicated helper/module and
@@ -62,6 +63,7 @@ import StepEdge from "../StepEdge"
 import DevPanel from "../DevPanel"
 import { placeNodeOnCanvas } from "./canvasInteractions"
 import NodeHoverPreview from "./NodeHoverPreview"
+import GroupHoverPreview from "./GroupHoverPreview"
 import CanvasToolbar from "./CanvasToolbar"
 
 import Chatbox from "./Chatbox"
@@ -110,7 +112,7 @@ const SIMPLE_DEFAULT = addIconsToArchitecture(SIMPLE_DEFAULT_ARCHITECTURE);
 // Register node and edge types
 const nodeTypes = {
   custom: CustomNodeComponent,
-  group: GroupNode
+  group: DraftGroupNode,
 };
 
 const edgeTypes = {
@@ -416,9 +418,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   
   // Canvas tool selection state (FREE by default - selection tool)
   const [selectedTool, setSelectedTool] = useState<"select" | "box" | "connector" | "group">("select");
-  const handleToolSelect = useCallback((tool: typeof selectedTool) => {
-    setSelectedTool(tool);
-  }, []);
   
   // Helper functions for operation tracking
   const setArchitectureOperationState = useCallback((architectureId: string, isRunning: boolean) => {
@@ -791,13 +790,89 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     onEdgesChange,
     onConnect,
     handleLabelChange,
+    handleAddNode,
+    handleDeleteNode,
+    handleMoveNode,
+    handleAddEdge,
+    handleDeleteEdge,
+    handleGroupNodes,
+    handleRemoveGroup,
+    handleBatchUpdate,
     
     viewStateRef,
+    shouldSkipFitViewRef,
   } = useElkToReactflowGraphConverter({
     id: "root",
     children: [],
     edges: []
-  });
+  }, selectedTool);
+
+  // Canvas tool selection handler (defined after setNodes is available)
+  const handleToolSelect = useCallback((tool: typeof selectedTool) => {
+    console.log('🛠️ [handleToolSelect] Switching tool:', { from: selectedTool, to: tool });
+    
+    // CRITICAL: Use ReactFlow's API directly to deselect nodes IMMEDIATELY
+    // This must happen BEFORE setting the tool state to prevent ReactFlow from re-selecting
+    if (tool === 'connector' || tool === 'box') {
+      console.log('🛠️ [handleToolSelect] Deselecting nodes for tool:', tool);
+      
+      // Use ReactFlow's API directly - get current nodes from ReactFlow's internal state
+      // This is the source of truth, not our React state which might be stale
+      if (reactFlowRef.current) {
+        const currentNodes = reactFlowRef.current.getNodes();
+        const selectedNodes = currentNodes.filter(n => n.selected);
+        
+        if (selectedNodes.length > 0) {
+          console.log('🛠️ [handleToolSelect] Found selected nodes via ReactFlow API:', selectedNodes.map(n => n.id));
+          
+          // Deselect immediately using ReactFlow's API - this is synchronous
+          reactFlowRef.current.setNodes((nds) => {
+            const updated = nds.map(node => ({ ...node, selected: false }));
+            console.log('🛠️ [handleToolSelect] Deselected via ReactFlow API, remaining selected:', updated.filter(n => n.selected).length);
+            return updated;
+          });
+        } else {
+          console.log('🛠️ [handleToolSelect] No selected nodes found via ReactFlow API');
+        }
+      } else {
+        console.warn('🛠️ [handleToolSelect] reactFlowRef.current is null!');
+      }
+      
+      // Also update our state for consistency (in case ReactFlow's state is out of sync)
+      const selectedNodesFromState = nodes.filter(n => n.selected);
+      if (selectedNodesFromState.length > 0) {
+        console.log('🛠️ [handleToolSelect] Also updating via setNodes:', selectedNodesFromState.map(n => n.id));
+        setNodes((nds) => {
+          return nds.map(node => ({ ...node, selected: false }));
+        });
+      }
+      
+      // Clear our selection state
+      setSelectedNodes([]);
+      setSelectedEdges([]);
+    }
+    
+    // Special case: If switching away from arrow tool while nodes are selected, deselect them
+    if (selectedTool === 'arrow' && tool !== 'arrow') {
+      const selectedNodesFromState = nodes.filter(n => n.selected);
+      if (selectedNodesFromState.length > 0) {
+        console.log('🛠️ [handleToolSelect] Switching away from select tool, deselecting nodes:', selectedNodesFromState.map(n => n.id));
+        
+        // Use ReactFlow's API directly
+        if (reactFlowRef.current) {
+          reactFlowRef.current.setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
+        }
+        
+        setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
+        setSelectedNodes([]);
+      }
+    }
+    
+    // Set the tool AFTER deselection - but synchronously, not in setTimeout
+    // The ReactFlow API call above should have already deselected, so we can set tool immediately
+    setSelectedTool(tool);
+    console.log('🛠️ [handleToolSelect] Tool set to:', tool);
+  }, [selectedTool, nodes, setNodes, setSelectedNodes]);
 
   // Listen for auth state changes (moved here after config is defined)
   useEffect(() => {
@@ -1257,8 +1332,16 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   }, [selectedArchitectureId, handleShareArchitecture, user, rawGraph, anonymousArchitectureService]);
 
   // Initialize with empty canvas for "New Architecture" tab
+  // Only reset when switching TO "new-architecture", not when already on it
+  const previousArchitectureIdRef = useRef<string>(selectedArchitectureId);
   useEffect(() => {
-    if (selectedArchitectureId === 'new-architecture') {
+    const wasNewArch = previousArchitectureIdRef.current === 'new-architecture';
+    const isNewArch = selectedArchitectureId === 'new-architecture';
+    
+    // Only reset if switching TO new-architecture from another architecture
+    // Don't reset if already on new-architecture (would clear user's work!)
+    if (isNewArch && !wasNewArch) {
+      console.log('🔄 [useEffect] Switching to new-architecture, resetting graph');
       const emptyGraph = {
         id: "root",
         children: [],
@@ -1266,6 +1349,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       };
       setRawGraph(emptyGraph);
     }
+    
+    previousArchitectureIdRef.current = selectedArchitectureId;
   }, [selectedArchitectureId, setRawGraph]);
 
   // Debug logging for graph state changes
@@ -1990,6 +2075,7 @@ Adapt these patterns to your specific requirements while maintaining the overall
   }, [handleChatSubmit]);
 
   const handleAddNodeToGroup = useCallback((groupId: string) => {
+    console.log('[GroupTool] handleAddNodeToGroup called', { groupId });
     const nodeName = `new_node_${Date.now()}`;
     const updated = batchUpdate([
       {
@@ -2003,12 +2089,16 @@ Adapt these patterns to your specific requirements while maintaining the overall
     // Try to focus edit on the newly created node in RF layer
     const newNodeId = nodeName.toLowerCase();
     setTimeout(() => {
+      console.log('[GroupTool] Focusing newly added node', { newNodeId });
       setNodes(nds => nds.map(n => n.id === newNodeId ? { ...n, data: { ...n.data, isEditing: true } } : n));
     }, 0);
   }, [rawGraph, handleGraphChange, setNodes]);
   
   // Ref to store ReactFlow instance for auto-zoom functionality
   const reactFlowRef = useRef<any>(null);
+  const pendingSelectionRef = useRef<{ id: string; size?: { width: number; height: number } } | null>(null);
+  
+  // Note: Using nodes state directly in handleToolSelect instead of ref to avoid stale closures
 
   // Removed individual tracking refs - now using unified fitView approach
   // Track agent busy state to disable input while drawing
@@ -2031,9 +2121,16 @@ Adapt these patterns to your specific requirements while maintaining the overall
   }, []);
 
   // Unified auto-fit view: triggers on ANY graph state change
+  // BUT skip fitView for user-created nodes in FREE mode (they're placed at cursor)
   useEffect(() => {
     // Only trigger if we have content and ReactFlow is ready
     if (nodes.length > 0 && reactFlowRef.current && layoutVersion > 0) {
+      // Check if we should skip fitView (for user mutations in FREE mode)
+      if (shouldSkipFitViewRef?.current === true) {
+        shouldSkipFitViewRef.current = false; // Clear flag after checking
+        return;
+      }
+      
       const timeoutId = setTimeout(() => {
         manualFitView();
       }, 200); // Unified delay to ensure layout is complete
@@ -2096,6 +2193,7 @@ Adapt these patterns to your specific requirements while maintaining the overall
     setIsSyncing(true);
     
     // Clear React Flow state first
+    console.log('🔄 [syncGraphStateWithReactFlow] Clearing edges and nodes');
     setNodes([]);
     setEdges([]);
     
@@ -2202,18 +2300,23 @@ Adapt these patterns to your specific requirements while maintaining the overall
 
   // Manual handler for clicking on connector dots to start connection with edge preview
   const handleConnectorDotClick = useCallback((nodeId: string, handleId: string) => {
-    console.log(`[InteractiveCanvas] handleConnectorDotClick called:`, { nodeId, handleId, currentConnectingFrom: connectingFrom });
+    // Ensure UI enters connector mode when starting from selected node dots
+    if (selectedTool !== 'connector') {
+      setSelectedTool('connector');
+    }
+    // CRITICAL: Immediately deselect all nodes when connector port is clicked
+    // This prevents ReactFlow from selecting the node when clicking on the port
+    if (reactFlowRef.current) {
+      reactFlowRef.current.setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
+    }
+    setSelectedNodes([]);
+    
     
     // Check if handleId is a target handle (completing a connection)
     if (handleId.includes('target') && connectingFrom && connectingFrom !== nodeId) {
-      // Complete the connection
-      console.log(`[InteractiveCanvas] Completing connection from ${connectingFrom} to ${nodeId}`, {
-        source: connectingFrom,
-        sourceHandle: connectingFromHandle,
-        target: nodeId,
-        targetHandle: handleId
-      });
+      console.log('🔗 [handleConnectorDotClick] Completing connection:', { connectingFrom, nodeId, sourceHandle: connectingFromHandle, targetHandle: handleId });
       
+      // Complete the connection
       // Create the connection with proper handle IDs
       const connection = { 
         source: connectingFrom, 
@@ -2222,31 +2325,27 @@ Adapt these patterns to your specific requirements while maintaining the overall
         targetHandle: handleId || undefined
       };
       
-      console.log(`[InteractiveCanvas] Calling onConnect with:`, connection);
-      console.log(`[InteractiveCanvas] Connection details:`, {
-        source: connection.source,
-        sourceHandle: connection.sourceHandle,
-        target: connection.target,
-        targetHandle: connection.targetHandle,
-        sourceHandleType: connection.sourceHandle?.includes('connector') ? 'connector' : 'regular',
-        targetHandleType: connection.targetHandle?.includes('connector') ? 'connector' : 'regular'
-      });
+      console.log('🔗 [handleConnectorDotClick] Created connection object:', connection);
       
       // Call onConnect - this will trigger ReactFlow's onConnect handler
       // which then calls our graph onConnect handler
+      console.log('🚀 [handleConnectorDotClick] Calling onConnect...');
       onConnect(connection);
+      console.log('✅ [handleConnectorDotClick] onConnect called');
       
       // Clear connection state
       setConnectingFrom(null);
       setConnectingFromHandle(null);
       setConnectionMousePos(null);
+      // Return to arrow mode and hide ports after edge is created
+      setSelectedTool('arrow');
       return;
     }
     
     // Otherwise, start a new connection
-    console.log(`[InteractiveCanvas] Starting new connection from ${nodeId}, handle ${handleId}`);
     setConnectingFrom(nodeId);
     setConnectingFromHandle(handleId);
+    console.log('✅ [handleConnectorDotClick] Set connectingFrom:', { nodeId, handleId });
     
     // Track mouse movement to show edge preview (always show when connecting)
     const handleMouseMove = (e: MouseEvent) => {
@@ -2330,7 +2429,24 @@ Adapt these patterns to your specific requirements while maintaining the overall
                                    target.closest('[style*="rgba(0, 255, 0"]') ||
                                    target.closest('.react-flow__handle[id*="connector"]');
       
-      // If clicking anywhere EXCEPT a connector port, cancel the connection (deselect)
+      // CRITICAL FIX: Allow toolbar clicks to pass through
+      const isToolbarClick = target.closest('.absolute.bottom-8.left-1\\/2.-translate-x-1\\/2.z-\\[8000\\]') ||
+                             target.closest('[aria-label="Select (V)"]') ||
+                             target.closest('[aria-label="Add box (R)"]') ||
+                             target.closest('[aria-label="Add connector (C)"]') ||
+                             target.closest('[aria-label="Create group (G)"]');
+      
+      // If clicking on toolbar, let the toolbar handle it - don't intercept
+      if (isToolbarClick) {
+        console.log(`[InteractiveCanvas] Toolbar click detected - allowing it to pass through`);
+        // Clean up listeners but don't prevent the toolbar click
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('click', handleClick);
+        return; // Let toolbar handle the click
+      }
+      
+      // If clicking anywhere EXCEPT a connector port or toolbar, cancel the connection (deselect)
       if (!isConnectorPortClick) {
         console.log(`[InteractiveCanvas] Click outside connector port detected, cancelling connection (deselection)`);
         document.removeEventListener('mousemove', handleMouseMove);
@@ -2361,9 +2477,10 @@ Adapt these patterns to your specific requirements while maintaining the overall
     return <CustomNodeComponent {...props} onLabelChange={handleLabelChange} selectedTool={selectedTool} connectingFrom={connectingFrom} connectingFromHandle={connectingFromHandle} onConnectorDotClick={handleConnectorDotClick} />;
   }, [handleLabelChange, selectedTool, connectingFrom, connectingFromHandle, handleConnectorDotClick]);
   
-  const GroupNodeWrapper = useCallback((props: any) => {
-    return <GroupNode {...props} onAddNode={handleAddNodeToGroup} />;
-  }, [handleAddNodeToGroup]);
+  const GroupNodeWrapper = useCallback(
+    (props: any) => <DraftGroupNode {...props} onAddNode={handleAddNodeToGroup} />,
+    [handleAddNodeToGroup]
+  );
   
   const memoizedNodeTypes = useMemo(() => {
     return {
@@ -2683,6 +2800,41 @@ Adapt these patterns to your specific requirements while maintaining the overall
 
   // Handle selection changes to ensure edges remain visible
   const onSelectionChange = useCallback(({ nodes: selectedNodesParam, edges: selectedEdgesParam }: { nodes: Node[]; edges: Edge[] }) => {
+    console.log('🎯 [onSelectionChange] Called:', { 
+      selectedNodes: selectedNodesParam.length, 
+      selectedEdges: selectedEdgesParam.length,
+      selectedTool,
+      nodeIds: selectedNodesParam.map(n => n.id),
+      edgeIds: selectedEdgesParam.map(e => e.id)
+    });
+    
+    // CRITICAL: When connector or box tool is active, ignore node selections
+    // Box tool: nodes should not be selectable while placing new nodes
+    // Connector tool: nodes should not be selectable while connecting
+    if (selectedTool === 'box') {
+      console.log('🎯 [onSelectionChange] Tool is connector/box, ignoring selection');
+      // Clear node selection when these tools are active
+      // Use ReactFlow's API directly to ensure deselection happens immediately
+      if (selectedNodesParam.length > 0) {
+        console.log('🎯 [onSelectionChange] Force deselecting via ReactFlow API:', selectedNodesParam.map(n => n.id));
+        
+        // Use ReactFlow's API directly for immediate deselection
+        if (reactFlowRef.current) {
+          reactFlowRef.current.setNodes((nds) => {
+            const updated = nds.map(node => ({ ...node, selected: false }));
+            console.log('🎯 [onSelectionChange] Deselected via ReactFlow API, remaining selected:', updated.filter(n => n.selected).length);
+            return updated;
+          });
+        }
+        
+        // Also update our state for consistency
+        setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
+      }
+      setSelectedNodes([]);
+      setSelectedEdges(selectedEdgesParam);
+      return;
+    }
+    
     // Update selected nodes and edges state for delete functionality
     setSelectedNodes(selectedNodesParam);
     setSelectedEdges(selectedEdgesParam);
@@ -2692,7 +2844,6 @@ Adapt these patterns to your specific requirements while maintaining the overall
       console.log(`🔗 Selected edges:`, selectedEdgesParam.map(edge => edge.id));
     }
     if (selectedNodesParam.length > 0) {
-      console.log(`📦 Selected nodes:`, selectedNodesParam.map(node => node.id));
     }
     
     if (selectedNodesParam.length > 0) {
@@ -2701,24 +2852,50 @@ Adapt these patterns to your specific requirements while maintaining the overall
       // Is a group node selected?
       const hasGroupNode = selectedNodesParam.some(node => node.type === 'group');
       
+      console.log('🎯 [onSelectionChange] Nodes selected, updating edge styling');
       // Force edge visibility regardless of node type, but especially for group nodes
-      setEdges(currentEdges => updateEdgeStylingOnSelection(currentEdges, selectedIds));
+      setEdges((currentEdges) => {
+        console.log('🎯 [onSelectionChange] setEdges (selection) - currentEdges:', currentEdges.length, 'IDs:', currentEdges.map(e => e.id));
+        const updated = updateEdgeStylingOnSelection(currentEdges, selectedIds);
+        console.log('🎯 [onSelectionChange] setEdges (selection) - updated:', updated.length, 'IDs:', updated.map(e => e.id));
+        return updated;
+      });
       
       // Update selected nodes tracking
       setSelectedNodeIds(selectedIds);
     } else {
+      console.log('🎯 [onSelectionChange] Nothing selected, updating edge styling');
       // Nothing selected - still ensure edges are visible
-      setEdges(currentEdges => updateEdgeStylingOnDeselection(currentEdges));
+      setEdges((currentEdges) => {
+        console.log('🎯 [onSelectionChange] setEdges (deselection) - currentEdges:', currentEdges.length, 'IDs:', currentEdges.map(e => e.id));
+        // Hard reset any dotted styling
+        const cleared = currentEdges.map(e => ({
+          ...e,
+          style: {
+            ...(e.style || {}),
+            strokeDasharray: undefined,
+            strokeDashoffset: undefined
+          }
+        }));
+        const updated = updateEdgeStylingOnDeselection(cleared);
+        console.log('🎯 [onSelectionChange] setEdges (deselection) - updated:', updated.length, 'IDs:', updated.map(e => e.id));
+        return updated;
+      });
       
       setSelectedNodeIds([]);
     }
-  }, []);
+  }, [selectedTool, setNodes]);
 
   // Critical fix to ensure edges remain visible at all times
   useEffect(() => {
     // Function to ensure all edges are visible always
     const ensureEdgesVisible = () => {
-      setEdges(currentEdges => ensureEdgeVisibility(currentEdges, { customZIndex: 3000 }));
+      setEdges((currentEdges) => {
+        console.log('👁️ [ensureEdgesVisible] setEdges - currentEdges:', currentEdges.length, 'IDs:', currentEdges.map(e => e.id));
+        const updated = ensureEdgeVisibility(currentEdges, { customZIndex: 3000 });
+        console.log('👁️ [ensureEdgesVisible] setEdges - updated:', updated.length, 'IDs:', updated.map(e => e.id));
+        return updated;
+      });
     };
     
     // Run the fix immediately
@@ -2730,6 +2907,64 @@ Adapt these patterns to your specific requirements while maintaining the overall
     // Clean up
     return () => cancelAnimationFrame(id);
   }, [setEdges, layoutVersion]); // Run on mount and when layout changes
+
+  // Add mousedown handler to pane for immediate deselection (not waiting for mouse up)
+  useEffect(() => {
+    if (!reactFlowRef.current) return;
+    
+    const pane = document.querySelector('.react-flow__pane');
+    if (!pane) return;
+    
+    const handlePaneMouseDown = (e: MouseEvent) => {
+      // Only deselect if clicking on pane (not on a node or edge)
+      const target = e.target as HTMLElement;
+      if (target && target.closest('.react-flow__node')) {
+        return; // Don't deselect if clicking on a node
+      }
+      if (target && target.closest('.react-flow__edge')) {
+        return; // Don't deselect if clicking on an edge
+      }
+      
+      // Deselect immediately on mouse down when in arrow mode
+      if (selectedTool === 'arrow') {
+        setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
+        setSelectedNodes([]);
+        setSelectedEdges([]);
+      }
+    };
+    
+    pane.addEventListener('mousedown', handlePaneMouseDown);
+    
+    return () => {
+      pane.removeEventListener('mousedown', handlePaneMouseDown);
+    };
+  }, [reactFlowRef, selectedTool, setNodes, setSelectedNodes, setSelectedEdges]);
+
+  // CRITICAL: When tool changes to box/connector, immediately deselect any selected nodes
+  // This handles the case where ReactFlow's internal state has selected nodes that our React state doesn't know about
+  useEffect(() => {
+    if (selectedTool === 'box' || selectedTool === 'connector') {
+      if (reactFlowRef.current) {
+        const currentNodes = reactFlowRef.current.getNodes();
+        const selectedNodes = currentNodes.filter(n => n.selected);
+        
+        if (selectedNodes.length > 0) {
+          console.log('🔄 [useEffect] Tool changed to', selectedTool, '- deselecting nodes:', selectedNodes.map(n => n.id));
+          
+          // Deselect immediately using ReactFlow's API
+          reactFlowRef.current.setNodes((nds) => {
+            const updated = nds.map(node => ({ ...node, selected: false }));
+            console.log('🔄 [useEffect] Deselected via ReactFlow API, remaining selected:', updated.filter(n => n.selected).length);
+            return updated;
+          });
+          
+          // Also clear our selection state
+          setSelectedNodes([]);
+          setSelectedEdges([]);
+        }
+      }
+    }
+  }, [selectedTool, reactFlowRef, setSelectedNodes, setSelectedEdges]);
 
   // Update message handling to use the hook's state
   const handleNodeClick = useCallback((nodeId: string) => {
@@ -2808,6 +3043,47 @@ Adapt these patterns to your specific requirements while maintaining the overall
     };
   }, [useReactFlow, handleSvgZoom]);
 
+  useEffect(() => {
+    const pending = pendingSelectionRef.current;
+    if (!pending) return;
+
+    const match = nodes.find((node) => node.id === pending.id);
+    if (!match) return;
+
+    if (
+      !match.selected ||
+      (pending.size?.width && match.data?.width !== pending.size.width) ||
+      (pending.size?.height && match.data?.height !== pending.size.height)
+    ) {
+      setNodes((nds) =>
+        nds.map((node) =>
+          node.id === pending.id
+            ? {
+                ...node,
+                selected: true,
+                data: {
+                  ...node.data,
+                  width: pending.size?.width ?? node.data?.width,
+                  height: pending.size?.height ?? node.data?.height,
+                },
+                style:
+                  node.type === 'group'
+                    ? {
+                        ...(node.style || {}),
+                        width: pending.size?.width ?? (node.style as any)?.width,
+                        height: pending.size?.height ?? (node.style as any)?.height,
+                      }
+                    : node.style,
+              }
+            : node
+        )
+      );
+    }
+
+    setSelectedNodes([{ ...(match as Node), selected: true }]);
+    pendingSelectionRef.current = null;
+  }, [nodes, setNodes, setSelectedNodes]);
+
   return (
     <div className="w-full h-full flex overflow-hidden bg-white dark:bg-black">
       
@@ -2838,22 +3114,27 @@ Adapt these patterns to your specific requirements while maintaining the overall
       {/* Main Graph Area */}
       <div className="flex-1 relative min-h-0 overflow-hidden">
         {/* Canvas Toolbar - bottom center overlay */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[101]">
+        <div 
+          className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[8000]"
+        >
           <CanvasToolbar selectedTool={selectedTool} onSelect={handleToolSelect} />
         </div>
         {/* Hover preview for Box placement (snap-to-grid) */}
         <NodeHoverPreview reactFlowRef={reactFlowRef} visible={selectedTool === 'box'} />
+        <GroupHoverPreview reactFlowRef={reactFlowRef} visible={selectedTool === 'group'} />
         {/* ReactFlow container - only show when in ReactFlow mode */}
         {useReactFlow && (
           <div className="absolute inset-0 h-full w-full z-0"
-            onClick={(e) => placeNodeOnCanvas(
-              e as unknown as MouseEvent,
-              selectedTool,
-              reactFlowRef,
-              setNodes,
-              viewStateRef,
-              (next) => setSelectedTool(next)
-            )}
+            onClick={(e) => {
+              placeNodeOnCanvas(
+                e.nativeEvent as MouseEvent,
+                selectedTool,
+                reactFlowRef,
+                handleAddNode,
+                viewStateRef,
+                (next) => setSelectedTool(next)
+              );
+            }}
           >
             <ReactFlow 
               ref={reactFlowRef}
@@ -2874,6 +3155,157 @@ Adapt these patterns to your specific requirements while maintaining the overall
                 setConnectionMousePos(null);
               }}
               onSelectionChange={onSelectionChange}
+              onPaneClick={(event) => {
+                // Group tool: Create group when nodes are selected and user clicks on canvas
+                if (selectedTool === 'group') {
+                  console.log('[GroupTool] Pane click detected', {
+                    selectedNodesCount: selectedNodes.length,
+                    selectedNodeIds: selectedNodes.map(node => node.id),
+                  });
+                  if (selectedNodes.length >= 1) {
+                    const nodeIds = selectedNodes.map(node => node.id);
+                    const groupId = `group-${Date.now()}`;
+                    const parentId = 'root'; // Default to root, could be improved to detect actual parent
+                    
+                    try {
+                      console.log('[GroupTool] Creating group', { nodeIds, groupId, parentId });
+                      handleGroupNodes(nodeIds, parentId, groupId, undefined);
+                      // Clear selection after grouping
+                      setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
+                      setSelectedNodes([]);
+                      // Switch back to arrow tool for manipulation
+                      setSelectedTool('arrow');
+                    } catch (error) {
+                      console.error('Failed to create group:', error);
+                    }
+                  } else if (selectedNodes.length === 0) {
+                    console.log('[GroupTool] Pane click with no selection, creating empty group');
+                    const rfInstance = reactFlowRef.current;
+                    if (!rfInstance) {
+                      console.warn('[GroupTool] ReactFlow instance unavailable; aborting empty group create');
+                      return;
+                    }
+
+                    const screenPoint = { x: event.clientX, y: event.clientY };
+                    const flowPoint = rfInstance.screenToFlowPosition
+                      ? rfInstance.screenToFlowPosition(screenPoint)
+                      : rfInstance.project(screenPoint);
+
+                    const snap = (v: number) => Math.round(v / 16) * 16;
+                    const GROUP_WIDTH = 480;
+                    const GROUP_HEIGHT = 320;
+                    const topLeft = {
+                      x: snap(flowPoint.x - GROUP_WIDTH / 2),
+                      y: snap(flowPoint.y - GROUP_HEIGHT / 2),
+                    };
+
+                    const rawGroupName = `Draft group ${Date.now()}`;
+                    const normalizedId = createNodeID(rawGroupName);
+
+                    if (viewStateRef.current) {
+                      const view = viewStateRef.current;
+                      view.node = view.node || {};
+                      view.node[normalizedId] = { x: topLeft.x, y: topLeft.y, w: GROUP_WIDTH, h: GROUP_HEIGHT };
+                    }
+
+                    if (shouldSkipFitViewRef?.current !== undefined) {
+                      shouldSkipFitViewRef.current = true;
+                    }
+
+                    try {
+                      handleBatchUpdate([
+                        {
+                          name: 'add_node',
+                          nodename: rawGroupName,
+                          parentId: 'root',
+                          data: {
+                            label: 'Group',
+                            isGroup: true,
+                          },
+                        },
+                      ]);
+                    } catch (error) {
+                      console.error('Failed to add draft group node:', error);
+                      return;
+                    }
+
+                    pendingSelectionRef.current = {
+                      id: normalizedId,
+                      size: { width: GROUP_WIDTH, height: GROUP_HEIGHT },
+                    };
+
+                    // Switch back to arrow tool for immediate manipulation
+                    setSelectedTool('arrow');
+                    setTimeout(() => {
+                      setNodes((nds) => {
+                        const updated = nds.map((node) => {
+                          if (node.id !== normalizedId) return node;
+                          return {
+                            ...node,
+                            selected: true,
+                            data: {
+                              ...node.data,
+                              width: GROUP_WIDTH,
+                              height: GROUP_HEIGHT,
+                            },
+                            style: {
+                              ...(node.style || {}),
+                              width: GROUP_WIDTH,
+                              height: GROUP_HEIGHT,
+                            },
+                          };
+                        });
+                        // Node might not exist yet if raw graph hasn't been processed; append placeholder
+                        if (!updated.some((node) => node.id === normalizedId)) {
+                          const placeholder: Node = {
+                            id: normalizedId,
+                            type: 'group',
+                            position: topLeft,
+                            data: {
+                              label: 'Group',
+                              width: GROUP_WIDTH,
+                              height: GROUP_HEIGHT,
+                              isGroup: true,
+                            },
+                            style: {
+                              width: GROUP_WIDTH,
+                              height: GROUP_HEIGHT,
+                              backgroundColor: 'transparent',
+                              border: 'none',
+                              display: 'flex',
+                              justifyContent: 'flex-start',
+                              alignItems: 'flex-start',
+                              padding: '0px',
+                              pointerEvents: 'auto',
+                            },
+                            selected: true,
+                            draggable: true,
+                            zIndex: CANVAS_STYLES.zIndex.groups,
+                          };
+                          return [...updated, placeholder];
+                        }
+                        return updated;
+                      });
+                    }, 0);
+                  }
+                } else if (selectedTool === 'connector') {
+                  // In connector mode: clicking empty canvas should cancel and switch back to select
+                  setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
+                  setSelectedNodes([]);
+                  // Clear dotted styling and any edge selection
+                  setEdges((current) => updateEdgeStylingOnDeselection(current.map(e => ({
+                    ...e,
+                    style: { ...(e.style || {}), strokeDasharray: undefined, strokeDashoffset: undefined }
+                  }))));
+                  setSelectedEdges([]);
+                  setSelectedTool('arrow');
+                } else if (selectedTool === 'arrow') {
+                  // Only deselect when in select mode - other tools handle their own behavior
+                  setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
+                  setSelectedNodes([]);
+                  setSelectedEdges([]);
+                }
+              }}
               onInit={(instance) => {
                 reactFlowRef.current = instance;
               }}
@@ -2892,19 +3324,19 @@ Adapt these patterns to your specific requirements while maintaining the overall
                   color: '#555'
                 }
               }}
-              fitView
+              // fitView removed - we control fitView manually via manualFitView() only
               minZoom={CANVAS_STYLES.canvas.zoom.min}
               maxZoom={CANVAS_STYLES.canvas.zoom.max}
               defaultViewport={CANVAS_STYLES.canvas.viewport.default}
               zoomOnScroll
               panOnScroll
-              panOnDrag
-              selectionOnDrag
-              elementsSelectable={true}
-              nodesDraggable={true}
+              panOnDrag={selectedTool === 'hand'}
+              selectionOnDrag={selectedTool === 'arrow'}
+              elementsSelectable={selectedTool !== 'box' && selectedTool !== 'hand'} // Disable selection in box mode (placer) and hand mode (pan only)
+              nodesDraggable={selectedTool !== 'hand'}
               nodesConnectable={false} // Disable ReactFlow's default drag-to-connect, we use custom click-to-connect
-              selectNodesOnDrag={true}
-              style={{ cursor: 'grab' }}
+              selectNodesOnDrag={selectedTool === 'arrow'} // Only allow marquee selection in arrow mode
+              style={{ cursor: selectedTool === 'hand' ? 'grab' : 'default' }}
               elevateEdgesOnSelect={true}
               disableKeyboardA11y={false}
               edgesFocusable={true}

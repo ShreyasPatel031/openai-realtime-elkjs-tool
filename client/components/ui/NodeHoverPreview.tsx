@@ -11,6 +11,21 @@ const NodeHoverPreview: React.FC<NodeHoverPreviewProps> = ({ reactFlowRef, grid 
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [zoom, setZoom] = useState<number>(1);
   const lastScreenPosRef = useRef<{ x: number; y: number } | null>(null);
+  
+  // Track mouse position even when not visible, so preview shows immediately when tool is selected
+  useEffect(() => {
+    const pane = document.querySelector('.react-flow__pane');
+    if (!pane || !(pane instanceof HTMLElement)) return;
+    
+    const trackMouse = (e: MouseEvent) => {
+      lastScreenPosRef.current = { x: e.clientX, y: e.clientY };
+    };
+    
+    pane.addEventListener('mousemove', trackMouse);
+    return () => {
+      pane.removeEventListener('mousemove', trackMouse);
+    };
+  }, []);
 
   useEffect(() => {
     if (!visible) {
@@ -64,11 +79,32 @@ const NodeHoverPreview: React.FC<NodeHoverPreviewProps> = ({ reactFlowRef, grid 
         reproject(lastScreenPosRef.current!);
       });
     };
+    
+    // Initialize position immediately when becoming visible (use current mouse position if available)
+    // This ensures preview shows immediately when switching to box tool
+    if (lastScreenPosRef.current) {
+      reproject(lastScreenPosRef.current);
+    } else {
+      // If no last position, try to get current mouse position from document
+      const getCurrentMousePos = () => {
+        // We can't get current mouse position without an event, so we'll wait for first mousemove
+        // But we can initialize at center of viewport as fallback
+        const rect = pane.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        return { x: centerX, y: centerY };
+      };
+      const fallbackPos = getCurrentMousePos();
+      lastScreenPosRef.current = fallbackPos;
+      reproject(fallbackPos);
+    }
+    
     pane.addEventListener('mousemove', onMove);
     pane.addEventListener('wheel', onWheel, { passive: true });
     const onLeave = () => setPos(null);
     pane.addEventListener('mouseleave', onLeave);
     return () => {
+      cancelAnimationFrame(raf);
       pane.removeEventListener('mousemove', onMove);
       pane.removeEventListener('wheel', onWheel as any);
       pane.removeEventListener('mouseleave', onLeave);

@@ -68,10 +68,20 @@ const ConnectorDots: React.FC<ConnectorDotsProps> = ({
 
   // Shared click handler for selecting a port
   const handlePortClick = React.useCallback((key: string, e: React.MouseEvent) => {
-    console.log(`[PORT SELECTION] Port ${key} clicked on node ${nodeId}`);
+    // CRITICAL: Stop ALL event propagation to prevent node selection
     e.stopPropagation();
     e.preventDefault();
-    e.nativeEvent.stopImmediatePropagation(); // Stop ReactFlow from selecting the node
+    e.nativeEvent.stopImmediatePropagation();
+    
+    // Immediately set the port as clicked and blue
+    clickedPortRef.current = key;
+    setHoveredConnectorDot(key);
+    
+    // Clear any pending hover timeout
+    if (clearHoverTimeoutRef.current) {
+      clearTimeout(clearHoverTimeoutRef.current);
+      clearHoverTimeoutRef.current = null;
+    }
     
     // Check if there's already a connection in progress
     // If so, complete the connection instead of starting a new one
@@ -79,31 +89,13 @@ const ConnectorDots: React.FC<ConnectorDotsProps> = ({
       // There's a connection in progress from another node
       // Try to connect to this port's target handle
       const targetHandleId = `connector-${key}-target`;
-      console.log(`[PORT SELECTION] Completing connection to node ${nodeId}, handle ${targetHandleId}`);
-      // Pass a completion signal - we'll handle this in InteractiveCanvas
       onHandleClick?.(nodeId, targetHandleId);
       return;
     }
     
     // Otherwise, start a new connection from this port
     const handleId = `connector-${key}-source`;
-    
-    console.log(`[PORT SELECTION] Setting clickedPortRef to ${key}`);
-    clickedPortRef.current = key;
-    
-    if (clearHoverTimeoutRef.current) {
-      console.log(`[PORT SELECTION] Clearing pending timeout`);
-      clearTimeout(clearHoverTimeoutRef.current);
-      clearHoverTimeoutRef.current = null;
-    }
-    
-    console.log(`[PORT SELECTION] Setting hoveredConnectorDot to ${key}`);
-    setHoveredConnectorDot(key);
-    
-    console.log(`[PORT SELECTION] Calling onHandleClick with nodeId=${nodeId}, handleId=${handleId}`);
     onHandleClick?.(nodeId, handleId);
-    
-    console.log(`[PORT SELECTION] Click handler complete. clickedPortRef=${clickedPortRef.current}`);
   }, [nodeId, onHandleClick, isConnecting, isConnectingFromThisNode]);
 
   return (
@@ -142,21 +134,6 @@ const ConnectorDots: React.FC<ConnectorDotsProps> = ({
         // Selected handles stay blue permanently until connection is complete
         const isHovered = hoveredConnectorDot === key || isSelectedHandle || wasJustClicked;
         
-        // DEBUG: Log state for top port only
-        if (key === 'top' && (wasJustClicked || isSelectedHandle || hoveredConnectorDot === key)) {
-          console.log(`[PORT STATE ${key}]`, {
-            nodeId,
-            hoveredConnectorDot,
-            clickedPortRef: clickedPortRef.current,
-            wasJustClicked,
-            isConnectingFromThisNode,
-            connectingFromHandle,
-            expectedHandle: `connector-${key}-source`,
-            isSelectedHandle,
-            isHovered,
-            finalColor: isHovered ? 'BLUE' : 'WHITE'
-          });
-        }
         
         // Keep all ports visible - don't hide them when connecting
         const shouldShow = true;
@@ -179,14 +156,41 @@ const ConnectorDots: React.FC<ConnectorDotsProps> = ({
                 transform: 'translate(-50%, -50%)',
                 width: 64, // Larger hover area
                 height: 64,
-                cursor: 'pointer',
+                cursor: 'pointer', // ALWAYS pointer, never crosshair
                 pointerEvents: 'auto', // Detect hover and clicks
                 zIndex: 997,
                 background: 'rgba(0, 255, 0, 0.25)', // Green hover area (visible)
                 borderRadius: '8px', // Rounded corners
                 opacity: isHovered ? 1 : 0.5 // More visible on hover
               }}
-              onClick={(e) => handlePortClick(key, e)}
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                e.nativeEvent.stopImmediatePropagation();
+                handlePortClick(key, e);
+              }}
+              onMouseDown={(e) => {
+                // CRITICAL: Stop mousedown to prevent node selection
+                e.stopPropagation();
+                e.preventDefault();
+                e.nativeEvent.stopImmediatePropagation();
+              }}
+              onMouseUp={(e) => {
+                // CRITICAL: Stop mouseup to prevent node selection
+                e.stopPropagation();
+                e.preventDefault();
+                e.nativeEvent.stopImmediatePropagation();
+              }}
+              onPointerDown={(e) => {
+                // Also stop pointer events
+                e.stopPropagation();
+                e.preventDefault();
+              }}
+              onPointerUp={(e) => {
+                // Also stop pointer events
+                e.stopPropagation();
+                e.preventDefault();
+              }}
               onMouseEnter={() => {
                 // Clear any pending clear timeout
                 if (clearHoverTimeoutRef.current) {
@@ -228,6 +232,7 @@ const ConnectorDots: React.FC<ConnectorDotsProps> = ({
             {/* ReactFlow Handle for connection detection only - DISABLED for drag-to-connect */}
             {/* This Handle exists only so ReactFlow knows where connections can be made */}
             {/* It's completely invisible and non-interactive */}
+            {/* ReactFlow Handles - COMPLETELY DISABLED, we handle connections manually */}
             <Handle
               type="source"
               position={position}
@@ -235,14 +240,14 @@ const ConnectorDots: React.FC<ConnectorDotsProps> = ({
               style={{
                 left: (key === 'left' || key === 'right') ? dotPosition : '50%',
                 top: (key === 'top' || key === 'bottom') ? topPosition : '50%',
-                width: 0, // Zero size to prevent drag-to-connect
+                width: 0,
                 height: 0,
                 borderRadius: '50%',
                 backgroundColor: 'transparent',
                 border: 'none',
                 opacity: 0,
-                pointerEvents: 'none', // Disable pointer events to prevent drag-to-connect
-                zIndex: -1, // Behind everything
+                pointerEvents: 'none', // COMPLETELY DISABLED
+                zIndex: -1,
                 transform: 'translate(-50%, -50%)',
                 cursor: 'default'
               }}
@@ -254,16 +259,16 @@ const ConnectorDots: React.FC<ConnectorDotsProps> = ({
               style={{
                 left: (key === 'left' || key === 'right') ? dotPosition : '50%',
                 top: (key === 'top' || key === 'bottom') ? topPosition : '50%',
-                width: 24, // Smaller handle area - when you get close, cursor becomes crosshair
-                height: 24,
+                width: 0, // Zero size - COMPLETELY DISABLED
+                height: 0,
                 borderRadius: '50%',
                 backgroundColor: 'transparent',
                 border: 'none',
                 opacity: 0,
-                pointerEvents: 'auto',
-                zIndex: 999,
+                pointerEvents: 'none', // COMPLETELY DISABLED - no cursor changes
+                zIndex: -1,
                 transform: 'translate(-50%, -50%)',
-                cursor: 'crosshair' // Crosshair when on handle
+                cursor: 'default' // Never crosshair
               }}
             />
             {/* Visual dot overlay - handles hover styling */}
@@ -279,17 +284,38 @@ const ConnectorDots: React.FC<ConnectorDotsProps> = ({
                 borderRadius: '50%',
                 backgroundColor,
                 border: `1px solid ${borderColor}`,
-                cursor: 'pointer',
+                cursor: 'pointer', // ALWAYS pointer, never crosshair
                 pointerEvents: 'auto', // Made clickable so clicking directly on dot works
                 zIndex: 1001, // Above everything
                 transition: 'background-color 0.2s ease-out, border-color 0.2s ease-out'
               }}
-              onClick={(e) => handlePortClick(key, e)}
-              onMouseDown={(e) => {
-                // Also stop propagation on mousedown to prevent ReactFlow node selection
+              onClick={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
                 e.nativeEvent.stopImmediatePropagation();
+                handlePortClick(key, e);
+              }}
+              onMouseDown={(e) => {
+                // CRITICAL: Stop mousedown propagation to prevent ReactFlow node selection
+                e.stopPropagation();
+                e.preventDefault();
+                e.nativeEvent.stopImmediatePropagation();
+              }}
+              onMouseUp={(e) => {
+                // Also stop mouseup to be safe
+                e.stopPropagation();
+                e.preventDefault();
+                e.nativeEvent.stopImmediatePropagation();
+              }}
+              onPointerDown={(e) => {
+                // Also stop pointer events
+                e.stopPropagation();
+                e.preventDefault();
+              }}
+              onPointerUp={(e) => {
+                // Also stop pointer events
+                e.stopPropagation();
+                e.preventDefault();
               }}
             />
           </React.Fragment>

@@ -32,8 +32,11 @@ import {
   addNode, deleteNode, moveNode,
   addEdge, deleteEdge,
   groupNodes, removeGroup,
-  batchUpdate
+  batchUpdate,
+  edgeIdExists
 } from "../components/graph/mutations";
+
+import { CANVAS_STYLES } from "../components/graph/styles/canvasStyles";
 
 import {
   NON_ROOT_DEFAULT_OPTIONS   // ← 1️⃣ single source-of-truth sizes
@@ -47,7 +50,7 @@ const elk = new ELK();
 /* -------------------------------------------------- */
 /* 🔹 2.  hook                                         */
 /* -------------------------------------------------- */
-export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
+export function useElkToReactflowGraphConverter(initialRaw: RawGraph, selectedTool: string = 'select') {
   /* 1) raw‐graph state */
   const [rawGraph, setRawGraph] = useState<RawGraph>(initialRaw);
   
@@ -60,6 +63,11 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
   /* refs that NEVER cause re-render */
   const hashRef = useRef<string>(structuralHash(initialRaw));
   const abortRef = useRef<AbortController | null>(null);
+  const lastMutationRef = useRef<{ source: 'ai' | 'user'; scopeId: string; timestamp: number } | null>(null);
+  const previousHashRef = useRef<string>(structuralHash(initialRaw));
+  
+  // Track if we should skip fitView (for user mutations in FREE mode)
+  const shouldSkipFitViewRef = useRef<boolean>(false);
   
   /* react-flow state */
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -80,61 +88,112 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
   type MutateOptions = { source?: 'ai' | 'user'; scopeId?: string };
   
   // Pass-through mutate wrapper that accepts optional options as the first arg.
-  // For Phase 0.3 this is ignored (no behavior change).
+  // Phase 1: Add conditional ELK triggering based on source and mode
   const mutate = useCallback((...args: any[]) => {
     let fn: MutFn;
     let rest: any[];
+    let options: MutateOptions = { source: 'user' }; // Default to user
+    
     if (typeof args[0] === 'function') {
       fn = args[0] as MutFn;
       rest = args.slice(1);
     } else {
-      // args[0] could be options; ignore for now
+      // args[0] is options
+      options = { ...options, ...args[0] };
       fn = args[1] as MutFn;
       rest = args.slice(2);
     }
+    
     setRawGraph(prev => {
       const next = fn(...rest, prev) as RawGraph;
+      
+      // Store mutation context for the layout effect to use
+      lastMutationRef.current = {
+        source: options.source || 'user',
+        scopeId: options.scopeId || 'root',
+        timestamp: Date.now()
+      };
+      
       hashRef.current = structuralHash(next);
       return next;
     });
   }, []);
   
   /* -------------------------------------------------- */
-  /* 🔹 4.  exposed handlers                            */
+  /* 🔹 4.  mutation wrappers for mutate pattern       */
+  /* -------------------------------------------------- */
+  // The mutate function appends the current graph as the LAST parameter,
+  // but mutations expect graph in different positions. Create wrappers:
+  
+  // addNode expects: (nodeName, parentId, graph, data?)
+  // mutate calls: (nodeName, parentId, data?, graph)
+  const addNodeWrapper = (nodeName: string, parentId: string, data: any, graph: RawGraph) => {
+    return addNode(nodeName, parentId, graph, data);
+  };
+  
+  // deleteNode expects: (nodeId, graph)
+  // mutate calls: (nodeId, graph) - already correct
+  
+  // addEdge expects: (edgeId, sourceId, targetId, labelOrGraph?, sourceHandle?, targetHandle?, graph?)
+  // mutate calls: (edgeId, sourceId, targetId, label?, sourceHandle?, targetHandle?, graph)
+  // Create a wrapper that checks for duplicate edge IDs before calling addEdge
+  const addEdgeWrapper = (edgeId: string, sourceId: string, targetId: string, label: any, sourceHandle: any, targetHandle: any, graph: RawGraph) => {
+    console.log('📦 [addEdgeWrapper] Called with:', { edgeId, sourceId, targetId, label, sourceHandle, targetHandle, graphChildren: graph.children?.length || 0, graphEdges: graph.edges?.length || 0 });
+    
+    // Check if edge already exists BEFORE calling addEdge
+    // This prevents duplicate edge creation even if mutate is called multiple times
+    const exists = edgeIdExists(graph, edgeId);
+    console.log('🔍 [addEdgeWrapper] Edge exists check:', { edgeId, exists });
+    
+    if (exists) {
+      // Edge already exists, return graph unchanged (idempotent)
+      console.log('⚠️ [addEdgeWrapper] Edge already exists, returning graph unchanged');
+      return graph;
+    }
+    
+    console.log('✅ [addEdgeWrapper] Edge does not exist, calling addEdge');
+    const result = addEdge(edgeId, sourceId, targetId, label, sourceHandle, targetHandle, graph);
+    console.log('✅ [addEdgeWrapper] addEdge returned, new graph has', result.children?.length || 0, 'children,', result.edges?.length || 0, 'edges');
+    console.log('📊 [addEdgeWrapper] Graph edges:', result.edges?.map(e => ({ id: e.id, sources: e.sources, targets: e.targets })) || []);
+    return result;
+  };
+  
+  /* -------------------------------------------------- */
+  /* 🔹 5.  exposed handlers                            */
   /* -------------------------------------------------- */
   const handlers = useMemo(() => ({
-    // Backward compatible variants (no options)
-    handleAddNode     : (...a: any[]) => mutate(addNode,      ...a),
-    handleDeleteNode  : (...a: any[]) => mutate(deleteNode,   ...a),
-    handleMoveNode    : (...a: any[]) => mutate(moveNode,     ...a),
-    handleAddEdge     : (...a: any[]) => mutate(addEdge,      ...a), // Now supports handle IDs: (edgeId, sourceId, targetId, graph, label?, sourceHandle?, targetHandle?)
-    handleDeleteEdge  : (...a: any[]) => mutate(deleteEdge,   ...a),
-    handleGroupNodes  : (...a: any[]) => mutate(groupNodes,   ...a),
-    handleRemoveGroup : (...a: any[]) => mutate(removeGroup,  ...a),
-    handleBatchUpdate : (...a: any[]) => mutate(batchUpdate,  ...a),
+    // Backward compatible variants (no options) - using wrappers where needed
+    handleAddNode     : (...a: any[]) => mutate(addNodeWrapper, ...a),
+    handleDeleteNode  : (...a: any[]) => mutate(deleteNode,    ...a),
+    handleMoveNode    : (...a: any[]) => mutate(moveNode,      ...a),
+    handleAddEdge     : (...a: any[]) => mutate(addEdgeWrapper, ...a), // Use wrapper to prevent duplicates
+    handleDeleteEdge  : (...a: any[]) => mutate(deleteEdge,    ...a),
+    handleGroupNodes  : (...a: any[]) => mutate(groupNodes,    ...a),
+    handleRemoveGroup : (...a: any[]) => mutate(removeGroup,   ...a),
+    handleBatchUpdate : (...a: any[]) => mutate(batchUpdate,   ...a),
     // New option-aware variants (ignored for now)
-    addNodeWith       : (opts: MutateOptions, ...a: any[]) => mutate(opts, addNode,     ...a),
-    deleteNodeWith    : (opts: MutateOptions, ...a: any[]) => mutate(opts, deleteNode,  ...a),
-    moveNodeWith      : (opts: MutateOptions, ...a: any[]) => mutate(opts, moveNode,    ...a),
-    addEdgeWith       : (opts: MutateOptions, ...a: any[]) => mutate(opts, addEdge,     ...a),
-    deleteEdgeWith    : (opts: MutateOptions, ...a: any[]) => mutate(opts, deleteEdge,  ...a),
-    groupNodesWith    : (opts: MutateOptions, ...a: any[]) => mutate(opts, groupNodes,  ...a),
-    removeGroupWith   : (opts: MutateOptions, ...a: any[]) => mutate(opts, removeGroup, ...a),
-    batchUpdateWith   : (opts: MutateOptions, ...a: any[]) => mutate(opts, batchUpdate, ...a),
+    addNodeWith       : (opts: MutateOptions, ...a: any[]) => mutate(opts, addNodeWrapper, ...a),
+    deleteNodeWith    : (opts: MutateOptions, ...a: any[]) => mutate(opts, deleteNode,     ...a),
+    moveNodeWith      : (opts: MutateOptions, ...a: any[]) => mutate(opts, moveNode,       ...a),
+    addEdgeWith       : (opts: MutateOptions, ...a: any[]) => mutate(opts, addEdge,        ...a),
+    deleteEdgeWith    : (opts: MutateOptions, ...a: any[]) => mutate(opts, deleteEdge,     ...a),
+    groupNodesWith    : (opts: MutateOptions, ...a: any[]) => mutate(opts, groupNodes,     ...a),
+    removeGroupWith   : (opts: MutateOptions, ...a: any[]) => mutate(opts, removeGroup,    ...a),
+    batchUpdateWith   : (opts: MutateOptions, ...a: any[]) => mutate(opts, batchUpdate,    ...a),
   }), [mutate]);
   
-  const handleAddNode = useCallback(
+  const handleAddNodeLegacy = useCallback(
     (groupId: string) => {
       const newNodeId = `new-node-${Date.now()}`;
-      const newNode = {
+      const newNode: Node = {
         id: newNodeId,
         data: { label: 'New Node', isEditing: true },
         position: { x: 20, y: 20 },
         type: 'custom',
         parentNode: groupId,
-        extent: 'parent',
+        extent: 'parent' as const,
       };
-      setNodes((nds) => nds.concat(newNode));
+      setNodes((nds) => [...nds, newNode]);
     },
     [setNodes]
   );
@@ -157,7 +216,158 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
   /* 🔹 5. layout side-effect                           */
   /* -------------------------------------------------- */
   useEffect(() => {
+    const mutation = lastMutationRef.current;
+    const currentHash = hashRef.current;
+    
     if (!rawGraph) return;
+    
+    // Skip processing if rawGraph hash hasn't changed
+    // Only process when the graph structure actually changes, not when selectedTool changes
+    if (currentHash === previousHashRef.current) {
+      console.log('⏭️ [useEffect] Skipping - graph unchanged');
+      return;
+    }
+    
+    // Update ref to track current hash
+    previousHashRef.current = currentHash;
+    
+    // 🔥 POLICY GATE: Decide if ELK should run based on source and mode
+    const shouldRunELK = (() => {
+      if (!mutation) {
+        return true; // Initial load or unknown trigger
+      }
+      
+      if (mutation.source === 'ai') {
+        return true; // AI always triggers ELK
+      }
+      
+      if (mutation.source === 'user') {
+        return false; // User edits in FREE mode = no ELK
+      }
+      
+      return false;
+    })();
+    
+    
+    if (!shouldRunELK) {
+      // User drew a node in FREE mode - create ReactFlow nodes directly from domain + ViewState
+      try {
+        // Create ReactFlow nodes from domain graph children using ViewState positions
+        const rfNodes: Node[] = [];
+        const rfEdges: Edge[] = [];
+        
+        // Determine which node is newly created by finding the node ID that matches the mutation pattern
+        let newlyCreatedNodeId: string | null = null;
+        
+        if (mutation && Date.now() - mutation.timestamp < 100) {
+          // Extract timestamp from the node ID that was just created
+          const mutationTime = mutation.timestamp;
+          newlyCreatedNodeId = (rawGraph.children || []).find(node => {
+            // Node IDs are in format: user-node-{timestamp}
+            const idTimestamp = parseInt(node.id.split('-').pop() || '0');
+            return Math.abs(idTimestamp - mutationTime) < 10; // Allow small timing difference
+          })?.id || null;
+        }
+          
+
+        // Process nodes from domain graph
+        (rawGraph.children || []).forEach((domainNode: any) => {
+          const viewState = viewStateRef.current?.node?.[domainNode.id];
+          const position = viewState ? { x: viewState.x, y: viewState.y } : { x: 0, y: 0 };
+          
+          
+          // Always select newly created nodes (tool will switch to 'select' after creation)
+          const isNewlyCreated = domainNode.id === newlyCreatedNodeId;
+          const shouldSelect = isNewlyCreated;
+          
+          
+          const rfNode: Node = {
+            id: domainNode.id,
+            type: 'custom',
+            position,
+            data: {
+              label: domainNode.labels?.[0]?.text || domainNode.id,
+              width: 96, // Default node width
+              height: 96, // Default node height
+              isEditing: domainNode.data?.label === '', // Auto-edit if empty label
+              ...domainNode.data
+            },
+            zIndex: CANVAS_STYLES.zIndex.nodes,
+            selected: shouldSelect, // Only select if tool allows it
+            draggable: true
+          };
+          
+          
+          rfNodes.push(rfNode);
+        });
+        
+        // Process edges from domain graph
+        console.log('🔗 [FREE Mode] Processing edges from domain graph:', rawGraph.edges?.length || 0);
+        if (rawGraph.edges && rawGraph.edges.length > 0) {
+          rawGraph.edges.forEach((edge: any) => {
+            console.log('🔗 [FREE Mode] Processing edge:', { id: edge.id, sources: edge.sources, targets: edge.targets, data: edge.data });
+            
+            // Create ReactFlow edge
+            edge.sources?.forEach((sourceId: string) => {
+              edge.targets?.forEach((targetId: string) => {
+                const rfEdge: Edge = {
+                  id: edge.id,
+                  source: sourceId,
+                  target: targetId,
+                  sourceHandle: edge.data?.sourceHandle,
+                  targetHandle: edge.data?.targetHandle,
+                  type: 'step',
+                  zIndex: CANVAS_STYLES.zIndex.edges,
+                };
+                rfEdges.push(rfEdge);
+                console.log('✅ [FREE Mode] Created ReactFlow edge:', rfEdge);
+              });
+            });
+          });
+        }
+        
+        console.log('✅ [FREE Mode] Created ReactFlow elements:', { nodes: rfNodes.length, edges: rfEdges.length });
+        
+        setNodes(rfNodes);
+        // CRITICAL: Preserve existing edges when updating - merge with existing edges
+        // This prevents edges from being lost when onSelectionChange updates styling
+        setEdges((currentEdges) => {
+          // Create a map of edges from the graph (source of truth)
+          const graphEdgeMap = new Map(rfEdges.map(e => [e.id, e]));
+          
+          // Merge existing edges with graph edges, preserving styling
+          const existingEdgeMap = new Map(currentEdges.map(e => [e.id, e]));
+          const mergedEdges = rfEdges.map(newEdge => {
+            const existingEdge = existingEdgeMap.get(newEdge.id);
+            if (existingEdge) {
+              // Preserve styling from existing edge, but update source/target/handles
+              return {
+                ...existingEdge,
+                ...newEdge,
+                style: existingEdge.style, // Preserve styling
+              };
+            }
+            return newEdge;
+          });
+          
+          // Also keep edges that exist in ReactFlow but not in graph (they might have been removed)
+          // Actually, we should remove edges that aren't in the graph anymore
+          // But preserve edges that are in the graph
+          console.log('🔀 [FREE Mode] Merged edges:', { existing: currentEdges.length, new: rfEdges.length, merged: mergedEdges.length });
+          return mergedEdges;
+        });
+        
+        // Skip fitView for user-created nodes in FREE mode (they're placed at cursor)
+        shouldSkipFitViewRef.current = true;
+        
+        incLayoutVersion(v => v + 1);
+        
+      } catch (error) {
+        console.error('[FREE Mode] Failed to create ReactFlow elements:', error);
+      }
+      
+      return;
+    }
     
     /* cancel any in-flight run */
     abortRef.current?.abort();
@@ -217,8 +427,10 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
         // 1) inject IDs + elkOptions onto a clone of rawGraph
         const prepared = ensureIds(structuredClone(rawGraph));
         
+        
         // 2) run ELK
         const layout = await elk.layout(prepared);
+        
         
         /* stale result? – ignore */
         if (hashAtStart !== hashRef.current) return;
@@ -230,12 +442,13 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
         const { nodes: rfNodes, edges: rfEdges } =
           processLayoutedGraph(layout, {
             width      : NON_ROOT_DEFAULT_OPTIONS.width,
-            height     : NON_ROOT_DEFAULT_OPTIONS.height,
+            height     : 96, // Default node height since NON_ROOT_DEFAULT_OPTIONS.height was removed
             groupWidth : NON_ROOT_DEFAULT_OPTIONS.width  * 3,
-            groupHeight: NON_ROOT_DEFAULT_OPTIONS.height * 3,
+            groupHeight: 96 * 3, // Use default height * 3
             padding    : 10
           });
         
+
         setNodes(rfNodes);
         setEdges(rfEdges);
 
@@ -268,7 +481,7 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
     })();
     
     return () => ac.abort();
-  }, [rawGraph]);
+  }, [rawGraph]); // Only depend on rawGraph, not selectedTool - tool changes shouldn't trigger graph processing
   
   /* -------------------------------------------------- */
   /* 🔹 6. react-flow helpers                           */
@@ -298,44 +511,67 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
   
   // Track pending connections to prevent duplicates
   const pendingConnectionsRef = useRef<Set<string>>(new Set());
+  // Track pending edge IDs to prevent duplicate edge creation
+  const pendingEdgeIdsRef = useRef<Set<string>>(new Set());
   
   const onConnect: OnConnect = useCallback(({ source, target, sourceHandle, targetHandle }: Connection) => {
-    if (!source || !target) return;
+    console.log('🔗 [onConnect] Called:', { source, target, sourceHandle, targetHandle });
     
-    console.log(`[useElkToReactflowGraphConverter] onConnect called:`, { source, target, sourceHandle, targetHandle });
+    if (!source || !target) {
+      console.log('❌ [onConnect] Missing source or target, returning');
+      return;
+    }
     
     // Create a unique key for this connection attempt
     const connectionKey = `${source}:${sourceHandle || ''}->${target}:${targetHandle || ''}`;
+    console.log('🔑 [onConnect] Connection key:', connectionKey);
     
     // Check if this connection is already pending
     if (pendingConnectionsRef.current.has(connectionKey)) {
-      console.log('⚠️ Duplicate connection attempt ignored:', connectionKey);
+      console.log('⚠️ [onConnect] Duplicate connection attempt ignored (pending):', connectionKey);
       return;
     }
     
     // Mark as pending
     pendingConnectionsRef.current.add(connectionKey);
+    console.log('✅ [onConnect] Marked connection as pending:', connectionKey);
     
     // Generate unique edge ID with timestamp and counter to avoid collisions
     const counter = Date.now();
     const random = Math.random().toString(36).slice(2, 11);
     const id = `edge-${counter}-${random}`;
+    console.log('🆔 [onConnect] Generated edge ID:', id);
+    
+    // Check if this edge ID is already being created
+    if (pendingEdgeIdsRef.current.has(id)) {
+      console.log('⚠️ [onConnect] Edge ID already pending, removing from pending connections');
+      pendingConnectionsRef.current.delete(connectionKey);
+      return;
+    }
+    
+    // Mark edge ID as pending
+    pendingEdgeIdsRef.current.add(id);
+    console.log('✅ [onConnect] Marked edge ID as pending:', id);
     
     try {
       // Pass handle IDs to addEdge if they're connector handles
       // Note: mutate automatically passes graph as the last parameter, so we pass: edgeId, sourceId, targetId, label?, sourceHandle?, targetHandle?
-      console.log(`[useElkToReactflowGraphConverter] Calling handleAddEdge with handles:`, { id, source, target, sourceHandle, targetHandle });
+      console.log('🚀 [onConnect] Calling handleAddEdge with:', { id, source, target, sourceHandle, targetHandle });
       handlers.handleAddEdge(id, source, target, undefined, sourceHandle || undefined, targetHandle || undefined);
+      console.log('✅ [onConnect] handleAddEdge called successfully');
     } catch (error) {
       // If edge creation fails (e.g., duplicate), remove from pending
-      console.error('Failed to create edge:', error);
+      console.error('❌ [onConnect] Failed to create edge:', error);
       pendingConnectionsRef.current.delete(connectionKey);
+      pendingEdgeIdsRef.current.delete(id);
       throw error;
     }
     
     // Remove from pending after a short delay (edge should be created by then)
     setTimeout(() => {
       pendingConnectionsRef.current.delete(connectionKey);
+      pendingEdgeIdsRef.current.delete(id);
+      console.log('🧹 [onConnect] Cleaned up pending refs for:', { connectionKey, id });
     }, 100);
   }, [handlers]);
   
@@ -346,9 +582,10 @@ export function useElkToReactflowGraphConverter(initialRaw: RawGraph) {
     rawGraph, layoutGraph, layoutError, nodes, edges, layoutVersion,
     setRawGraph, setNodes, setEdges,
     viewStateRef,
+    shouldSkipFitViewRef,  // Expose ref so InteractiveCanvas can check if fitView should be skipped
     ...handlers,
     onNodesChange, onEdgesChange, onConnect,
-    handleAddNode,
+    handleAddNodeLegacy: handleAddNodeLegacy,
     handleLabelChange,
   } as const;
 }

@@ -57,6 +57,11 @@ export interface ElkGraphEdge {
     endPoint: { x: number; y: number };
     bendPoints?: { x: number; y: number }[];
   }[];
+  data?: {
+    sourceHandle?: string;
+    targetHandle?: string;
+    [key: string]: any;
+  };
 }
 
 export interface ElkGraph {

@@ -11,6 +11,21 @@ const NodeHoverPreview: React.FC<NodeHoverPreviewProps> = ({ reactFlowRef, grid 
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [zoom, setZoom] = useState<number>(1);
   const lastScreenPosRef = useRef<{ x: number; y: number } | null>(null);
+  
+  // Track mouse position even when not visible, so preview shows immediately when tool is selected
+  useEffect(() => {
+    const pane = document.querySelector('.react-flow__pane');
+    if (!pane || !(pane instanceof HTMLElement)) return;
+    
+    const trackMouse = (e: MouseEvent) => {
+      lastScreenPosRef.current = { x: e.clientX, y: e.clientY };
+    };
+    
+    pane.addEventListener('mousemove', trackMouse);
+    return () => {
+      pane.removeEventListener('mousemove', trackMouse);
+    };
+  }, []);
 
   useEffect(() => {
     if (!visible) {
@@ -64,6 +79,11 @@ const NodeHoverPreview: React.FC<NodeHoverPreviewProps> = ({ reactFlowRef, grid 
         reproject(lastScreenPosRef.current!);
       });
     };
+    // Initialize position immediately when visible (use current mouse position if available)
+    if (lastScreenPosRef.current) {
+      reproject(lastScreenPosRef.current);
+    }
+    
     pane.addEventListener('mousemove', onMove);
     pane.addEventListener('wheel', onWheel, { passive: true });
     const onLeave = () => setPos(null);

@@ -1,15 +1,17 @@
 import type { MutableRefObject } from 'react';
-import type { ReactFlowInstance, Node } from 'reactflow';
+import type { ReactFlowInstance } from 'reactflow';
 
 export function placeNodeOnCanvas(
   e: MouseEvent,
   selectedTool: 'select' | 'box' | 'connector' | 'group',
   reactFlowRef: MutableRefObject<ReactFlowInstance | null>,
-  setNodes: (updater: (nodes: Node[]) => Node[]) => void,
+  handleAddNode: (nodeName: string, parentId: string, data?: { label?: string; icon?: string; style?: any }) => void,
   viewStateRef?: MutableRefObject<any>,
   onDone?: (nextTool: 'select' | 'box' | 'connector' | 'group') => void,
 ) {
-  if (selectedTool !== 'box') return;
+  if (selectedTool !== 'box') {
+    return;
+  }
   const target = e.currentTarget as HTMLDivElement;
   if (!target) return;
   const rf = reactFlowRef.current;
@@ -25,21 +27,23 @@ export function placeNodeOnCanvas(
   const topLeft = { x: snappedCenter.x - half, y: snappedCenter.y - half };
   const id = `user-node-${Date.now()}`;
 
-  setNodes((nds) => nds.concat({
-    id,
-    data: { label: 'Add text', isEditing: false, width: NODE_SIZE, height: NODE_SIZE },
-    position: { x: topLeft.x, y: topLeft.y },
-    type: 'custom'
-  } as unknown as Node));
+  // Add node to domain graph (structure only, no positions)
+  handleAddNode(id, 'root', {
+    label: '',  // Empty label for "Add text" placeholder
+  });
 
+  // Write position to ViewState (not domain graph)
   try {
     if (viewStateRef && viewStateRef.current) {
       const vs = viewStateRef.current;
       vs.node = vs.node || {};
       vs.node[id] = { x: topLeft.x, y: topLeft.y, w: NODE_SIZE, h: NODE_SIZE };
     }
-  } catch {}
+  } catch (error) {
+    console.error(`[canvasInteractions] Error writing to viewState:`, error);
+  }
 
+  // Auto-switch to select tool after creating a node so user can interact with it
   onDone?.('select');
 }
 

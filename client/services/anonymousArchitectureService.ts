@@ -28,6 +28,9 @@ class AnonymousArchitectureService {
   private sessionId: string | null = null
   private lastSaveTime: number = 0
   private saveThrottleMs: number = 1000 // Minimum 1 second between saves (reasonable spam protection);
+  private firestoreUnavailable = false
+  private readonly disableFirestore = import.meta.env.VITE_FIREBASE_API_KEY === 'test-firebase-api-key'
+  private readonly fallbackStorageKey = 'anonymous_architectures_fallback'
 
   /**
    * Get or create a session ID for anonymous user
@@ -49,6 +52,182 @@ class AnonymousArchitectureService {
     this.sessionId = sessionId;
     return sessionId;
   }
+  
+  private shouldUseFirestore(): boolean {
+    return !this.disableFirestore && !this.firestoreUnavailable;
+  }
+
+  private markFirestoreUnavailable(error?: unknown) {
+    if (!this.firestoreUnavailable) {
+      console.warn('⚠️ Firestore unavailable, falling back to local storage for anonymous architectures.', error);
+    }
+    this.firestoreUnavailable = true;
+  }
+
+  private getFallbackStore(): Record<string, any> {
+    if (typeof window === 'undefined') return {};
+    try {
+      const fromLocal = window.localStorage.getItem(this.fallbackStorageKey);
+      const fromSession = window.sessionStorage.getItem(this.fallbackStorageKey);
+      const raw = fromLocal || fromSession;
+      if (!raw) return {};
+      return JSON.parse(raw);
+    } catch (error) {
+      console.warn('⚠️ Failed to read fallback anonymous architecture store:', error);
+      return {};
+    }
+  }
+
+  private saveFallbackStore(store: Record<string, any>) {
+    if (typeof window === 'undefined') return;
+    const serialized = JSON.stringify(store);
+    try {
+      window.localStorage.setItem(this.fallbackStorageKey, serialized);
+    } catch (error) {
+      console.warn('⚠️ Unable to persist fallback anonymous architectures to localStorage:', error);
+    }
+    try {
+      window.sessionStorage.setItem(this.fallbackStorageKey, serialized);
+    } catch (error) {
+      console.warn('⚠️ Unable to persist fallback anonymous architectures to sessionStorage:', error);
+    }
+  }
+
+  private buildFallbackEntry(
+    id: string,
+    data: Omit<AnonymousArchitecture, 'id' | 'timestamp'> & { timestamp?: Timestamp | number }
+  ) {
+    const timestampMs =
+      typeof data.timestamp === 'number'
+        ? data.timestamp
+        : data.timestamp instanceof Timestamp
+          ? data.timestamp.toMillis()
+          : Date.now();
+
+    return {
+      ...data,
+      id,
+      timestamp: timestampMs,
+      isAnonymous: true as const,
+    };
+  }
+
+  private convertFallbackEntry(entry: any): AnonymousArchitecture {
+    return {
+      ...entry,
+      timestamp: typeof entry.timestamp === 'number'
+        ? Timestamp.fromMillis(entry.timestamp)
+        : entry.timestamp ?? Timestamp.now(),
+      isAnonymous: true,
+    } as AnonymousArchitecture;
+  }
+
+  private saveAnonymousArchitectureToFallback(anonymousArch: Omit<AnonymousArchitecture, 'id'>): string {
+    const store = this.getFallbackStore();
+    const id = `local_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    store[id] = this.buildFallbackEntry(id, anonymousArch);
+    this.saveFallbackStore(store);
+    this.updateUrlWithArchitectureId(id);
+    console.log('✅ Saved anonymous architecture to fallback store:', id);
+    return id;
+  }
+
+  private updateFallbackArchitecture(id: string, updates: Partial<AnonymousArchitecture>): void {
+    const store = this.getFallbackStore();
+    if (!store[id]) {
+      return;
+    }
+    store[id] = this.buildFallbackEntry(id, {
+      ...(store[id] as any),
+      ...updates,
+      timestamp: Date.now(),
+    });
+    this.saveFallbackStore(store);
+    console.log('✅ Updated anonymous architecture in fallback store:', id);
+  }
+
+  private loadFallbackArchitecture(id: string): AnonymousArchitecture | null {
+    const store = this.getFallbackStore();
+    if (!store[id]) return null;
+    return this.convertFallbackEntry(store[id]);
+  }
+
+  private getAllFallbackArchitectures(): AnonymousArchitecture[] {
+    const store = this.getFallbackStore();
+    return Object.values(store)
+      .map(entry => this.convertFallbackEntry(entry))
+      .sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+  }
+
+  private deleteFallbackArchitecture(id: string) {
+    const store = this.getFallbackStore();
+    if (store[id]) {
+      delete store[id];
+      this.saveFallbackStore(store);
+      console.log('🗑️ Removed anonymous architecture from fallback store:', id);
+    }
+  }
+  
+  private async transferFallbackArchitectures(userId: string, userEmail: string): Promise<{count: number, transferredIds: string[]}> {
+    const fallbackArchs = this.getAllFallbackArchitectures();
+    if (fallbackArchs.length === 0) {
+      console.log('ℹ️ No fallback anonymous architectures to transfer');
+      return { count: 0, transferredIds: [] };
+    }
+
+    const { default: ArchitectureService } = await import('./architectureService');
+    const transferredIds: string[] = [];
+
+    for (const arch of fallbackArchs) {
+      try {
+        let architectureName = arch.name;
+        try {
+          const response = await fetch('/api/generateChatName', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              architecture: arch.rawGraph,
+              nodeCount: arch.rawGraph?.children?.length || 0,
+              edgeCount: arch.rawGraph?.edges?.length || 0,
+              userPrompt: `Architecture with ${arch.rawGraph?.children?.length || 0} components from user session`
+            }),
+          });
+          if (response.ok) {
+            const data = await response.json();
+            if (data.name && data.name.trim()) {
+              architectureName = data.name.trim();
+            }
+          }
+        } catch (namingError) {
+          console.warn('⚠️ AI naming failed for fallback transfer, using original name:', namingError);
+        }
+
+        const nodes = arch.rawGraph?.children || [];
+        const edges = arch.rawGraph?.edges || [];
+
+        const newArchId = await ArchitectureService.saveArchitecture({
+          name: architectureName,
+          userId,
+          userEmail,
+          rawGraph: arch.rawGraph,
+          nodes,
+          edges,
+          userPrompt: `Architecture transferred from anonymous fallback session`,
+        });
+
+        transferredIds.push(newArchId);
+        this.deleteFallbackArchitecture(arch.id!);
+      } catch (error) {
+        console.error(`❌ Failed to transfer fallback architecture "${arch.name}":`, error);
+      }
+    }
+
+    localStorage.removeItem('anonymous_session_id');
+    this.sessionId = null;
+
+    console.log(`🎉 Successfully transferred ${transferredIds.length}/${fallbackArchs.length} fallback anonymous architectures`);
+    return { count: transferredIds.length, transferredIds };
+  }
 
   /**
    * Save an anonymous architecture
@@ -60,14 +239,12 @@ class AnonymousArchitectureService {
         throw new Error('Anonymous architecture saving only works on client side');
       }
 
-      // Ensure Firebase is initialized
       if (!db) {
-        throw new Error('Firebase db is not initialized');
+        this.markFirestoreUnavailable('Firebase db is not initialized');
       }
 
       const now = Date.now();
 
-      // Light throttle to prevent spam clicking (1 second)
       if (now - this.lastSaveTime < this.saveThrottleMs) {
         console.log('⏳ Save throttled - too soon after last save');
         throw new Error('Save throttled - please wait before saving again');
@@ -75,13 +252,11 @@ class AnonymousArchitectureService {
 
       const sessionId = this.getSessionId();
 
-      // Try to get userPrompt from various sources if not provided
       const finalUserPrompt = userPrompt
         || (window as any).originalChatTextInput
         || (window as any).chatTextInput
         || '';
 
-      // Get chat messages from localStorage if available
       let chatMessages: Array<{id: string; content: string; timestamp: number; sender: 'user' | 'assistant'}> | undefined;
       try {
         const { getCurrentConversation } = await import('../utils/chatPersistence');
@@ -106,17 +281,24 @@ class AnonymousArchitectureService {
 
       console.log('💾 Saving anonymous architecture:', name, 'for session:', sessionId);
 
-      const docRef = await addDoc(collection(db, 'anonymous_architectures'), anonymousArch);
+      if (this.shouldUseFirestore()) {
+        try {
+          const docRef = await addDoc(collection(db, 'anonymous_architectures'), anonymousArch);
 
-      console.log('✅ Anonymous architecture saved with ID:', docRef.id);
+          console.log('✅ Anonymous architecture saved with ID:', docRef.id);
 
-      // Update throttling state
+          this.lastSaveTime = now;
+          this.updateUrlWithArchitectureId(docRef.id);
+
+          return docRef.id;
+        } catch (firestoreError) {
+          this.markFirestoreUnavailable(firestoreError);
+        }
+      }
+
+      const fallbackId = this.saveAnonymousArchitectureToFallback(anonymousArch);
       this.lastSaveTime = now;
-
-      // Update URL with architecture ID for sharing
-      this.updateUrlWithArchitectureId(docRef.id);
-
-      return docRef.id;
+      return fallbackId;
     } catch (error) {
       console.error('❌ Error saving anonymous architecture:', error);
       throw error;
@@ -126,28 +308,37 @@ class AnonymousArchitectureService {
   /**
    * Load a specific anonymous architecture by ID (for shared URLs)
    */
-  async loadAnonymousArchitectureById(architectureId: string): Promise<AnonymousArchitecture | null> {
-    try {
-      const docRef = doc(db, 'anonymous_architectures', architectureId);
-      const docSnap = await getDoc(docRef);
-      
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        console.log('📥 Loaded shared anonymous architecture:', architectureId);
-        return {
-          id: docSnap.id,
-          ...data,
-          timestamp: data.timestamp || Timestamp.now()
-        } as AnonymousArchitecture;
-      } else {
-        console.warn('⚠️ Anonymous architecture not found:', architectureId);
+    async loadAnonymousArchitectureById(architectureId: string): Promise<AnonymousArchitecture | null> {
+      if (!this.shouldUseFirestore()) {
+        return this.loadFallbackArchitecture(architectureId);
+      }
+
+      try {
+        const docRef = doc(db, 'anonymous_architectures', architectureId);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          console.log('📥 Loaded shared anonymous architecture:', architectureId);
+          return {
+            id: docSnap.id,
+            ...data,
+            timestamp: data.timestamp || Timestamp.now()
+          } as AnonymousArchitecture;
+        } else {
+          console.warn('⚠️ Anonymous architecture not found in Firestore:', architectureId);
+          return this.loadFallbackArchitecture(architectureId);
+        }
+      } catch (error) {
+        this.markFirestoreUnavailable(error);
+        const fallback = this.loadFallbackArchitecture(architectureId);
+        if (fallback) {
+          return fallback;
+        }
+        console.error('❌ Error loading anonymous architecture:', error);
         return null;
       }
-    } catch (error) {
-      console.error('❌ Error loading anonymous architecture:', error);
-      return null;
     }
-  }
 
   /**
    * Update URL with architecture ID for sharing
@@ -190,40 +381,48 @@ class AnonymousArchitectureService {
   /**
    * Get anonymous architectures for current session
    */
-  async getAnonymousArchitectures(): Promise<AnonymousArchitecture[]> {
-    try {
-      const sessionId = this.getSessionId();
-      
-      const q = query(
-        collection(db, 'anonymous_architectures'),
-        where('sessionId', '==', sessionId),
-        where('isAnonymous', '==', true)
-      );
+    async getAnonymousArchitectures(): Promise<AnonymousArchitecture[]> {
+      if (!this.shouldUseFirestore()) {
+        return this.getAllFallbackArchitectures();
+      }
 
-      const querySnapshot = await getDocs(q);
-      const architectures: AnonymousArchitecture[] = [];
+      try {
+        const sessionId = this.getSessionId();
+        
+        const q = query(
+          collection(db, 'anonymous_architectures'),
+          where('sessionId', '==', sessionId),
+          where('isAnonymous', '==', true)
+        );
 
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        architectures.push({
-          id: doc.id,
-          ...data,
-          timestamp: data.timestamp || Timestamp.now()
-        } as AnonymousArchitecture);
-      });
+        const querySnapshot = await getDocs(q);
+        const architectures: AnonymousArchitecture[] = [];
 
-      console.log(`📥 Found ${architectures.length} anonymous architectures for session:`, sessionId);
-      return architectures.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
-    } catch (error) {
-      console.error('❌ Error loading anonymous architectures:', error);
-      return [];
-    }
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          architectures.push({
+            id: doc.id,
+            ...data,
+            timestamp: data.timestamp || Timestamp.now()
+          } as AnonymousArchitecture);
+        });
+
+        console.log(`📥 Found ${architectures.length} anonymous architectures for session:`, sessionId);
+        return architectures.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+      } catch (error) {
+        this.markFirestoreUnavailable(error);
+        return this.getAllFallbackArchitectures();
+      }
   }
 
   /**
    * Transfer anonymous architectures to signed-in user
    */
   async transferAnonymousArchitectures(userId: string, userEmail: string): Promise<{count: number, transferredIds: string[]}> {
+      if (!this.shouldUseFirestore()) {
+        return this.transferFallbackArchitectures(userId, userEmail);
+      }
+
     try {
       const sessionId = this.getSessionId();
       console.log('🔄 Transferring anonymous architectures to user:', userEmail, 'from session:', sessionId);
@@ -322,25 +521,51 @@ class AnonymousArchitectureService {
   /**
    * Update an existing anonymous architecture
    */
-  async updateAnonymousArchitecture(architectureId: string, updates: Partial<AnonymousArchitecture>): Promise<void> {
-    try {
-      const docRef = doc(db, 'anonymous_architectures', architectureId);
-      await updateDoc(docRef, {
-        ...updates,
-        timestamp: Timestamp.now() // Update timestamp
-      });
-      
-      console.log('✅ Updated anonymous architecture:', architectureId);
-    } catch (error) {
-      console.error('❌ Error updating anonymous architecture:', error);
-      throw error;
-    }
+    async updateAnonymousArchitecture(architectureId: string, updates: Partial<AnonymousArchitecture>): Promise<void> {
+      if (!this.shouldUseFirestore()) {
+        this.updateFallbackArchitecture(architectureId, updates);
+        return;
+      }
+
+      try {
+        const docRef = doc(db, 'anonymous_architectures', architectureId);
+        await updateDoc(docRef, {
+          ...updates,
+          timestamp: Timestamp.now() // Update timestamp
+        });
+        
+        console.log('✅ Updated anonymous architecture:', architectureId);
+      } catch (error) {
+        this.markFirestoreUnavailable(error);
+        this.updateFallbackArchitecture(architectureId, updates);
+      }
   }
 
   /**
    * Cleanup old anonymous architectures (older than 7 days)
    */
   async cleanupOldAnonymousArchitectures(): Promise<void> {
+      if (!this.shouldUseFirestore()) {
+        const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const store = this.getFallbackStore();
+        let removed = 0;
+        for (const [id, entry] of Object.entries(store)) {
+          const timestampMs =
+            typeof entry.timestamp === 'number'
+              ? entry.timestamp
+              : entry.timestamp?.toMillis?.() ?? Date.now();
+          if (timestampMs < cutoff) {
+            delete store[id];
+            removed++;
+          }
+        }
+        if (removed > 0) {
+          this.saveFallbackStore(store);
+          console.log(`🧹 Cleaned up ${removed} old anonymous architectures from fallback store`);
+        }
+        return;
+      }
+
     try {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -357,7 +582,8 @@ class AnonymousArchitectureService {
       await Promise.all(deletePromises);
       
       console.log(`🧹 Cleaned up ${querySnapshot.size} old anonymous architectures`);
-    } catch (error: any) {
+      } catch (error: any) {
+        this.markFirestoreUnavailable(error);
       // Handle specific Firestore index errors gracefully
       if (error?.code === 'failed-precondition' && error?.message?.includes('index')) {
         console.log('ℹ️ Firestore index not ready for cleanup query - this is expected during initial setup');

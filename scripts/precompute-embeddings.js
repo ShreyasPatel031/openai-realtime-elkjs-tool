@@ -50,11 +50,12 @@ async function precomputeEmbeddings() {
   
   // Check for API key
   if (!process.env.OPENAI_API_KEY && !process.env.VITE_OPENAI_API_KEY) {
-    console.log('⚠️  No OpenAI API key found, skipping embedding pre-computation');
+    console.log('⚠️  No OpenAI API key found, generating deterministic fallback embeddings');
     console.log('    OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET');
     console.log('    VITE_OPENAI_API_KEY:', process.env.VITE_OPENAI_API_KEY ? 'SET' : 'NOT SET');
-    // Create empty file so runtime doesn't crash
-    fs.writeFileSync(OUTPUT_PATH, JSON.stringify({ architectures: [], embeddings: {} }));
+    const fallback = generateFallbackEmbeddings();
+    fs.writeFileSync(OUTPUT_PATH, JSON.stringify(fallback, null, 2));
+    console.log(`✅ Wrote fallback embeddings to ${OUTPUT_PATH}`);
     return;
   }
   
@@ -175,6 +176,59 @@ async function precomputeEmbeddings() {
     console.error('❌ Failed to pre-compute embeddings:', error);
     process.exit(1);
   }
+}
+
+function deterministicVector(text, length = 128) {
+  const vector = new Array(length).fill(0);
+  let seed = 0;
+  for (let i = 0; i < text.length; i++) {
+    seed = (seed * 31 + text.charCodeAt(i)) >>> 0;
+    const index = seed % length;
+    const value = ((seed % 2000) / 1000) - 1;
+    vector[index] = Number(value.toFixed(6));
+  }
+  if (vector.every((val) => val === 0)) {
+    return vector.map((_, idx) => Number(Math.sin(idx + seed).toFixed(6)));
+  }
+  return vector;
+}
+
+function generateFallbackEmbeddings() {
+  const fallbackArchitectures = [
+    {
+      id: 'arch_mock_1',
+      cloud: 'generic',
+      group: 'serverless',
+      subgroup: 'mock_api',
+      source: 'mock',
+      description: 'Mock serverless API with gateway, compute, and storage components',
+      architecture: JSON.stringify({
+        nodes: [
+          { id: 'client', label: 'Client', icon: 'browser_client' },
+          { id: 'gateway', label: 'API Gateway', icon: 'aws_api_gateway' },
+          { id: 'compute', label: 'Function', icon: 'aws_lambda' },
+          { id: 'data', label: 'Database', icon: 'aws_dynamodb' }
+        ],
+        edges: [
+          { id: 'edge-1', source: 'client', target: 'gateway', label: 'requests' },
+          { id: 'edge-2', source: 'gateway', target: 'compute', label: 'invokes' },
+          { id: 'edge-3', source: 'compute', target: 'data', label: 'stores' }
+        ]
+      })
+    }
+  ];
+
+  const searchKey = 'generic serverless mock_api mock serverless api with gateway, compute, and storage components';
+  const embeddings = {
+    [searchKey]: deterministicVector(searchKey)
+  };
+
+  return {
+    architectures: fallbackArchitectures,
+    embeddings,
+    generatedAt: new Date().toISOString(),
+    count: fallbackArchitectures.length
+  };
 }
 
 function parseCSVLine(line) {

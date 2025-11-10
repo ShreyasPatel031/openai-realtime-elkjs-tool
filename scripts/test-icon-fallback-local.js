@@ -6,7 +6,13 @@
 
 import fetch from 'node-fetch';
 
+const explicitServerUrl = process.env.TEST_SERVER_URL;
+
 async function findLocalServer() {
+    if (explicitServerUrl) {
+        return explicitServerUrl;
+    }
+
     const ports = [3000, 3001, 3002, 3003, 3004];
     
     for (const port of ports) {
@@ -28,6 +34,11 @@ async function findLocalServer() {
 }
 
 async function waitForLocalServer(maxRetries = 30) {
+    if (explicitServerUrl) {
+        console.log(`🔗 Using provided test server: ${explicitServerUrl}`);
+        return explicitServerUrl;
+    }
+
     console.log('🔍 Waiting for local dev server...');
     
     for (let i = 0; i < maxRetries; i++) {

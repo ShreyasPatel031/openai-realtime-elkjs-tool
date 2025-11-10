@@ -26,7 +26,7 @@
     "test:e2e": "playwright test",
     "test:icon-fallback": "node scripts/test-icon-fallback.js",
     "test:comprehensive": "npm run test:build && npm run test:icon-fallback && npm run test:e2e -- icon-display-validation.test.ts && npm run test:e2e -- chat-to-diagram-flow.test.ts && npm run test:e2e -- interactive-canvas-rendering.test.ts && npm run test:e2e -- embed-to-canvas-flow.test.ts && npm run test:e2e -- embed-to-auth-flow.test.ts && npm run test:local",
-    "test:local": "npm run test:build && npm run test:icon-fallback:local && npm run test:e2e:local -- icon-display-validation.test.ts && npm run test:e2e:local -- chat-to-diagram-flow.test.ts && npm run test:e2e:local -- interactive-canvas-rendering.test.ts && npm run test:e2e:local -- embed-to-canvas-flow.test.ts && npm run test:e2e:local -- embed-to-auth-flow.test.ts",
+    "test:local": "node scripts/run-local-tests.js",
     "test:icon-fallback:local": "node scripts/test-icon-fallback-local.js",
     "test:e2e:local": "playwright test --config playwright.local.config.ts",
     "test:build": "npm run build",

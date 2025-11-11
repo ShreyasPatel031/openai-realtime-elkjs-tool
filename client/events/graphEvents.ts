@@ -9,6 +9,7 @@ export type ElkGraphEventDetail = {
   targetArchitectureId?: string; // ID of the architecture being updated
   version?: number;       // schema version for future compatibility
   ts?: number;            // Date.now() timestamp
+  viewState?: any;        // Optional view state metadata for FREE mode layouts
 };
 
 /**

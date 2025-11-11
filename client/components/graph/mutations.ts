@@ -228,9 +228,9 @@ export const addNode = (
   } else {
     const foundParent = findNodeById(clonedGraph, parentId);
     if (!foundParent) {
-      notFound("node", parentId);
-      throw new Error(`Parent node '${parentId}' not found`);
-    }
+    notFound("node", parentId);
+    throw new Error(`Parent node '${parentId}' not found`);
+  }
     parentNode = foundParent;
   }
 
@@ -587,8 +587,8 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
     movedNodeIds.push(nodeId);
   }
   
-  parent.children.push(groupNode);
-
+    parent.children.push(groupNode);
+    
   if (movedNodeIds.length > 0) {
     movedNodeIds
       .map(id => findNodeById(graph, id)!)

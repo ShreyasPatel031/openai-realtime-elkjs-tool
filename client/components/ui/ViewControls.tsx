@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useCallback, useEffect, useRef, MutableRefObject } from 'react';
 import { Save, Edit, Check, Download } from 'lucide-react';
 import { useViewMode } from '../../contexts/ViewModeContext';
 import SaveAuth from '../auth/SaveAuth';
-import { markEmbedToCanvasTransition } from '../../utils/chatPersistence';
+import { markEmbedToCanvasTransition, EMBED_PENDING_CHAT_KEY, EMBED_CHAT_BROADCAST_CHANNEL, getCurrentConversation, normalizeChatMessages, mergeChatMessages, PersistedChatMessage, saveChatMessage } from '../../utils/chatPersistence';
 import { anonymousArchitectureService } from '../../services/anonymousArchitectureService';
 import { ensureAnonymousSaved, EMBED_PENDING_ARCH_PREFIX } from '../../utils/anonymousSave';
 
@@ -19,6 +19,7 @@ interface ViewControlsProps {
   
   // Export props
   onExport?: () => void;
+  viewStateRef?: MutableRefObject<any>;
 }
 
 const ViewControls: React.FC<ViewControlsProps> = ({
@@ -28,9 +29,136 @@ const ViewControls: React.FC<ViewControlsProps> = ({
   handleManualSave,
   handleSave,
   user,
-  onExport
+  onExport,
+  viewStateRef
 }) => {
   const { config } = useViewMode();
+  const chatSnapshotRef = useRef<string | null>(null);
+  const embedChatChannelRef = useRef<BroadcastChannel | null>(null);
+
+  const collectChatMessages = useCallback((): PersistedChatMessage[] => {
+    if (typeof window === 'undefined') {
+      return [];
+    }
+
+    const sources: Array<PersistedChatMessage[] | undefined> = [];
+
+    sources.push(normalizeChatMessages(getCurrentConversation()));
+
+    const fallbackStrings = [
+      localStorage.getItem('atelier_current_conversation'),
+      (window as any).__atelierLastConversation,
+      (window as any).__embedChatPayload,
+    ];
+
+    fallbackStrings.forEach((raw) => {
+      if (typeof raw !== 'string' || raw.length === 0) return;
+      try {
+        const parsed = JSON.parse(raw);
+        sources.push(normalizeChatMessages(parsed));
+      } catch (error) {
+        console.warn('⚠️ [EDIT] Failed to parse stored chat snapshot:', error);
+      }
+    });
+
+    const merged = sources.reduce<PersistedChatMessage[] | undefined>(
+      (acc, current) => mergeChatMessages(acc, current),
+      undefined
+    );
+
+    return merged ?? [];
+  }, []);
+
+  const getLatestChatSnapshot = useCallback((): string | null => {
+    if (typeof window === 'undefined') return null;
+    const sources = [
+      chatSnapshotRef.current,
+      localStorage.getItem('atelier_current_conversation'),
+      (window as any).__embedChatPayload,
+      (window as any).__atelierLastConversation,
+    ];
+    console.log('📝 [EDIT] Snapshot sources lengths:', sources.map((src) => (typeof src === 'string' ? src.length : src ? -1 : 0)));
+    for (const source of sources) {
+      if (typeof source === 'string' && source.length > 0) {
+        return source;
+      }
+    }
+    return null;
+  }, []);
+
+  const emitChatSnapshot = useCallback(
+    (channel?: BroadcastChannel | null, extra?: { prompt?: string }) => {
+      if (!channel) return;
+      const snapshot = getLatestChatSnapshot();
+      if (!snapshot) return;
+      console.log('📡 [EDIT] Broadcasting chat snapshot, length:', snapshot.length);
+      channel.postMessage({
+        type: 'chat-snapshot',
+        conversation: snapshot,
+        prompt: extra?.prompt ?? null,
+      });
+    },
+    [getLatestChatSnapshot]
+  );
+
+  useEffect(() => {
+    const handleEmbedChatRequest = (event: MessageEvent) => {
+      if (typeof window === 'undefined') return;
+      if (event.origin !== window.location.origin) return;
+      const message = event.data;
+      if (!message || typeof message !== 'object') return;
+      if (message.type !== 'embed-chat-request') return;
+
+      const snapshot = getLatestChatSnapshot();
+
+      console.log('📬 [EDIT] Received chat request, responding with length:', snapshot ? snapshot.length : 'none');
+
+      event.source?.postMessage(
+        {
+          type: 'embed-chat-snapshot',
+          conversation: snapshot,
+        },
+        event.origin
+      );
+    };
+
+    window.addEventListener('message', handleEmbedChatRequest);
+    return () => {
+      window.removeEventListener('message', handleEmbedChatRequest);
+    };
+  }, [getLatestChatSnapshot]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (typeof BroadcastChannel === 'undefined') {
+      console.log('📡 [EDIT] BroadcastChannel unavailable in this environment');
+      return;
+    }
+
+    const channel = new BroadcastChannel(EMBED_CHAT_BROADCAST_CHANNEL);
+    console.log('📡 [EDIT] Broadcast channel connected in embed');
+    embedChatChannelRef.current = channel;
+
+    const handleChannelMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'chat-request') {
+        console.log('📡 [EDIT] Received chat request via broadcast');
+        emitChatSnapshot(channel, { prompt: data.prompt ?? null });
+      }
+    };
+
+    channel.onmessage = handleChannelMessage;
+
+    // Send initial snapshot when channel connects
+    emitChatSnapshot(channel);
+
+    return () => {
+      channel.onmessage = null;
+      channel.close();
+      embedChatChannelRef.current = null;
+    };
+  }, [emitChatSnapshot]);
 
   const handleEditClick = async () => {
     try {
@@ -73,20 +201,59 @@ const ViewControls: React.FC<ViewControlsProps> = ({
 
       // Only attempt to ensure save when we have graph content
       const hasGraphContent = !!(rawGraph && rawGraph.children && rawGraph.children.length > 0);
+      const chatMessagesSnapshot = collectChatMessages();
+      const hasChatContent = chatMessagesSnapshot.length > 0;
+      let viewStateSnapshot: any = undefined;
+      if (viewStateRef?.current) {
+        try {
+          viewStateSnapshot = JSON.parse(JSON.stringify(viewStateRef.current));
+        } catch (error) {
+          console.warn('⚠️ [EDIT] Failed to clone viewState snapshot:', error);
+          viewStateSnapshot = viewStateRef.current;
+        }
+      }
+      const rawGraphWithViewState = viewStateSnapshot ? { ...rawGraph, viewState: viewStateSnapshot } : rawGraph;
 
       const getUserPrompt = () =>
         (window as any).originalChatTextInput ||
         (window as any).chatTextInput ||
         '';
+      const userPromptForTransition = getUserPrompt();
+
+      // Persist chat snapshot for embed-to-canvas transition regardless of graph content
+      try {
+        const chatSnapshot =
+          localStorage.getItem('atelier_current_conversation') ||
+          (window as any).__atelierLastConversation ||
+          null;
+        if (chatSnapshot) {
+          localStorage.setItem(EMBED_PENDING_CHAT_KEY, chatSnapshot);
+          sessionStorage.setItem(EMBED_PENDING_CHAT_KEY, chatSnapshot);
+          (window as any).__embedChatSnapshot = chatSnapshot;
+          chatSnapshotRef.current = chatSnapshot;
+          console.log('✅ [EDIT] Stored embed chat snapshot for transition (pre-save), length:', chatSnapshot.length);
+        } else {
+          localStorage.removeItem(EMBED_PENDING_CHAT_KEY);
+          sessionStorage.removeItem(EMBED_PENDING_CHAT_KEY);
+          (window as any).__embedChatSnapshot = null;
+          chatSnapshotRef.current = null;
+          console.log('ℹ️ [EDIT] No embed chat snapshot found to store');
+        }
+      } catch (error) {
+        console.warn('⚠️ [EDIT] Failed to persist embed chat snapshot:', error);
+      }
+
+      emitChatSnapshot(embedChatChannelRef.current, { prompt: userPromptForTransition || '' });
 
       const ensureArchitectureSaved = async (): Promise<string | null> => {
         const maxAttempts = 3;
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
           try {
             const ensuredId = await ensureAnonymousSaved({
-              rawGraph,
+              rawGraph: rawGraphWithViewState,
               userPrompt: getUserPrompt(),
               anonymousService: anonymousArchitectureService,
+              metadata: viewStateSnapshot ? { viewState: viewStateSnapshot } : undefined,
             });
             const resolvedId = ensuredId ?? anonymousArchitectureService.getArchitectureIdFromUrl();
             if (resolvedId) {
@@ -117,19 +284,18 @@ const ViewControls: React.FC<ViewControlsProps> = ({
         }
       }
 
-      if (!finalArchId && hasGraphContent) {
+      if (!finalArchId && (hasGraphContent || hasChatContent)) {
         // Fallback: store the current rawGraph in sessionStorage so canvas can recover if Firestore save fails
         try {
           const fallbackId = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-          const chatMessagesRaw = localStorage.getItem('atelier_current_conversation');
-          const chatMessages = chatMessagesRaw ? JSON.parse(chatMessagesRaw) : [];
           const fallbackName = getUserPrompt() || 'Unsaved Architecture';
           const payload = {
-            rawGraph,
+            rawGraph: rawGraphWithViewState,
             userPrompt: getUserPrompt(),
-            chatMessages,
+            chatMessages: chatMessagesSnapshot,
             createdAt: Date.now(),
             name: fallbackName,
+            viewState: viewStateSnapshot,
           };
           const serialized = JSON.stringify(payload);
           sessionStorage.setItem(`${EMBED_PENDING_ARCH_PREFIX}${fallbackId}`, serialized);
@@ -150,63 +316,112 @@ const ViewControls: React.FC<ViewControlsProps> = ({
         return;
       }
 
-      if (hasGraphContent && typeof window !== 'undefined') {
+      if ((hasGraphContent || hasChatContent) && typeof window !== 'undefined') {
         try {
           const storageKey = `${EMBED_PENDING_ARCH_PREFIX}${finalArchId}`;
-          const chatMessagesRaw = localStorage.getItem('atelier_current_conversation');
-          let chatMessages: any[] = [];
-          if (chatMessagesRaw) {
-            try {
-              const parsed = JSON.parse(chatMessagesRaw);
-              if (Array.isArray(parsed)) {
-                chatMessages = parsed;
-              }
-            } catch {
-              chatMessages = [];
-            }
-          }
           const fallbackName = getUserPrompt() || 'Unsaved Architecture';
           const payload = {
-            rawGraph,
+            rawGraph: rawGraphWithViewState,
             userPrompt: getUserPrompt(),
-            chatMessages,
+            chatMessages: chatMessagesSnapshot,
             createdAt: Date.now(),
             name: fallbackName,
+            viewState: viewStateSnapshot,
           };
           const serialized = JSON.stringify(payload);
           try {
             sessionStorage.setItem(storageKey, serialized);
-            console.log('✅ [EDIT] Stored fallback payload in sessionStorage:', storageKey, 'chatCount:', chatMessages.length);
+            console.log('✅ [EDIT] Stored fallback payload in sessionStorage:', storageKey, 'chatCount:', chatMessagesSnapshot.length);
           } catch (error) {
             console.warn('⚠️ [EDIT] Failed to persist fallback architecture to sessionStorage:', error);
           }
           try {
             localStorage.setItem(storageKey, serialized);
-            console.log('✅ [EDIT] Stored fallback payload in localStorage:', storageKey, 'chatCount:', chatMessages.length);
+            console.log('✅ [EDIT] Stored fallback payload in localStorage:', storageKey, 'chatCount:', chatMessagesSnapshot.length);
           } catch (error) {
             console.warn('⚠️ [EDIT] Failed to persist fallback architecture to localStorage:', error);
+          }
+          try {
+            const chatSnapshot = JSON.stringify(chatMessagesSnapshot);
+            if (chatSnapshot) {
+              sessionStorage.setItem(EMBED_PENDING_CHAT_KEY, chatSnapshot);
+              localStorage.setItem(EMBED_PENDING_CHAT_KEY, chatSnapshot);
+              chatSnapshotRef.current = chatSnapshot;
+              console.log('✅ [EDIT] Stored embed chat snapshot for transition, length:', chatMessagesSnapshot.length);
+            }
+          } catch (error) {
+            console.warn('⚠️ [EDIT] Failed to store embed chat snapshot:', error);
           }
         } catch (error) {
           console.warn('⚠️ [EDIT] Unexpected error while preparing fallback payload:', error);
         }
       }
 
-      const separator = targetUrl.includes('?') ? '&' : '?';
-      targetUrl += `${separator}arch=${finalArchId}`;
+      const urlObject = new URL(targetUrl);
+      urlObject.searchParams.set('arch', finalArchId);
+      if (userPromptForTransition) {
+        console.log('📝 [EDIT] userPromptForTransition:', userPromptForTransition);
+        urlObject.searchParams.set('embedPrompt', userPromptForTransition);
+      }
+      const latestSnapshotForUrl = getLatestChatSnapshot();
+      console.log('📝 [EDIT] Latest snapshot length for URL:', latestSnapshotForUrl ? latestSnapshotForUrl.length : 0);
+      if (latestSnapshotForUrl) {
+        try {
+          const encodedSnapshot = window.btoa(unescape(encodeURIComponent(latestSnapshotForUrl)));
+          urlObject.searchParams.set('embedChatSnapshot', encodedSnapshot);
+        } catch (error) {
+          console.warn('⚠️ [EDIT] Failed to encode chat snapshot for URL:', error);
+        }
+      }
+      targetUrl = urlObject.toString();
+      (window as any).__targetUrlForEdit = targetUrl;
       
       console.log('🚀 [EDIT] Opening main app:', targetUrl);
       // Ensure chat persistence exists for canvas validation
       try {
-        const userPrompt = getUserPrompt();
-        const existing = localStorage.getItem('atelier_current_conversation');
-        const parsed = existing ? JSON.parse(existing) : [];
-        if (parsed.length === 0 && userPrompt) {
-          localStorage.setItem('atelier_current_conversation', JSON.stringify([{ content: String(userPrompt) }]));
+        const existing = collectChatMessages();
+        if (existing.length === 0 && userPromptForTransition) {
+          saveChatMessage(String(userPromptForTransition), 'user');
         }
       } catch {}
       // Mark the embed-to-canvas transition
       markEmbedToCanvasTransition();
-      window.open(targetUrl, '_blank');
+      const latestSnapshot = getLatestChatSnapshot();
+      const snapshotPayload = {
+        conversation: latestSnapshot,
+        prompt: userPromptForTransition || ''
+      };
+
+      const newWindow = window.open(targetUrl, '_blank');
+      if (newWindow) {
+        try {
+          const encoded = window.btoa(unescape(encodeURIComponent(JSON.stringify(snapshotPayload))));
+          newWindow.name = `embed-${encoded}`;
+        } catch (error) {
+          console.warn('⚠️ [EDIT] Failed to encode chat snapshot payload for window name:', error);
+        }
+      }
+      (window as any).__embedChatPayload = snapshotPayload.conversation;
+
+      const snapshotForMessage = getLatestChatSnapshot();
+
+      if (newWindow && snapshotForMessage) {
+        const sendSnapshot = () => {
+          try {
+            newWindow.postMessage(
+              {
+                type: 'embed-chat-snapshot',
+                conversation: snapshotForMessage,
+                prompt: userPromptForTransition || null,
+              },
+              window.location.origin
+            );
+          } catch {}
+        };
+
+        setTimeout(sendSnapshot, 200);
+        setTimeout(sendSnapshot, 800);
+      }
     } catch (error) {
       console.error('❌ [EDIT] Failed to open main app:', error);
     }

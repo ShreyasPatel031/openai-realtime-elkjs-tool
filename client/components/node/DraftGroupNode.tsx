@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { NodeProps, useReactFlow, Handle, Position } from 'reactflow';
 import { LayoutDashboard, LayoutPanelLeft, CirclePlus } from 'lucide-react';
 import { baseHandleStyle } from '../graph/handles';
+import { useNodeInteractions } from '../../contexts/NodeInteractionContext';
 
 type DraftGroupState = 'default' | 'create' | 'interaction';
 
@@ -23,9 +24,24 @@ interface DraftGroupNodeProps extends NodeProps<DraftGroupData> {
  * DraftGroupNode - Figma-style group frame with resize handles and toolbar states.
  */
 const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, style, position, onAddNode }) => {
+  const interactions = useNodeInteractions();
   const { setNodes, getNodes, screenToFlowPosition } = useReactFlow();
+  const handleAddNodeToGroup = interactions?.handleAddNodeToGroup ?? onAddNode;
   const [label, setLabel] = useState(data.label || 'Group');
+  const [hoveredCorner, setHoveredCorner] = useState<'nw' | 'ne' | 'sw' | 'se' | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const handleRefs = useRef<Record<'nw' | 'ne' | 'sw' | 'se', HTMLDivElement | null>>({
+    nw: null,
+    ne: null,
+    sw: null,
+    se: null,
+  });
+  const cleanupRefs = useRef<Record<'nw' | 'ne' | 'sw' | 'se', (() => void) | null>>({
+    nw: null,
+    ne: null,
+    sw: null,
+    se: null,
+  });
   const resizeStartRef = useRef<{
     corner: 'nw' | 'ne' | 'sw' | 'se';
     startPointerFlowX: number;
@@ -37,13 +53,6 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
     startPosX: number;
     startPosY: number;
   } | null>(null);
-
-  const handleRefs = {
-    nw: useRef<HTMLDivElement>(null),
-    ne: useRef<HTMLDivElement>(null),
-    sw: useRef<HTMLDivElement>(null),
-    se: useRef<HTMLDivElement>(null),
-  };
 
   const currentState: DraftGroupState = data.state || 'default';
   const showSelection = selected || currentState === 'create' || currentState === 'interaction';
@@ -197,31 +206,6 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
     },
     [getNodes, id, nodeHeight, nodeWidth, position, screenToFlowPosition, setNodes]
   );
-
-  const attachHandleListener = useCallback(
-    (corner: 'nw' | 'ne' | 'sw' | 'se') =>
-      (element: HTMLDivElement | null) => {
-        if (!element) return;
-        const handleMouseDown = (e: MouseEvent) => {
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          handleResizeStart(e, corner);
-        };
-        element.addEventListener('mousedown', handleMouseDown, true);
-        (element as any).__cleanupResize = () => {
-          element.removeEventListener('mousedown', handleMouseDown, true);
-        };
-      },
-    [handleResizeStart]
-  );
-
-  useEffect(() => () => {
-    (['nw', 'ne', 'sw', 'se'] as const).forEach((corner) => {
-      const ref = handleRefs[corner].current as any;
-      ref?.__cleanupResize?.();
-    });
-  }, []);
 
   const handleLabelChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setLabel(e.target.value);
@@ -516,61 +500,118 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
     </div>
   );
 
-  const renderCornerHandles = () => {
-    const handleBaseStyles: React.CSSProperties = {
-      position: 'absolute',
-      width: '8px',
-      height: '8px',
-      background: '#FFFFFF',
-      border: `1px solid ${FIGMA_BLUE}`,
-      borderRadius: '1px',
-      zIndex: 10000,
-      pointerEvents: 'auto',
-      cursor: 'pointer',
+  const registerHandleRef = useCallback(
+    (corner: 'nw' | 'ne' | 'sw' | 'se') =>
+      (element: HTMLDivElement | null) => {
+        if (cleanupRefs.current[corner]) {
+          cleanupRefs.current[corner]?.();
+          cleanupRefs.current[corner] = null;
+        }
+        handleRefs.current[corner] = element;
+        if (!element) return;
+
+        const handleMouseDown = (event: MouseEvent) => {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation?.();
+          handleResizeStart(event, corner);
+        };
+
+        element.addEventListener('mousedown', handleMouseDown, true);
+        cleanupRefs.current[corner] = () => {
+          element.removeEventListener('mousedown', handleMouseDown, true);
+        };
+      },
+    [handleResizeStart]
+  );
+
+  useEffect(() => {
+    return () => {
+      (['nw', 'ne', 'sw', 'se'] as const).forEach((corner) => {
+        cleanupRefs.current[corner]?.();
+        cleanupRefs.current[corner] = null;
+      });
     };
+  }, []);
+
+  const renderCornerHandles = () => {
+    const HOVER_FILL = 'rgba(52, 211, 153, 0.22)';
+    const HOVER_BORDER = 'rgba(52, 211, 153, 0.48)';
+    const IDLE_FILL = 'rgba(52, 211, 153, 0.10)';
+    const IDLE_BORDER = 'rgba(52, 211, 153, 0.18)';
+    const MIN_SIZE = 48;
+    const MAX_SIZE = 112;
+
+    const zoomAwareSize = Math.min(
+      MAX_SIZE,
+      Math.max(MIN_SIZE, Math.min(nodeWidth, nodeHeight) * 0.35)
+    );
+    const half = zoomAwareSize / 2;
+
+    const corners: Array<'nw' | 'ne' | 'sw' | 'se'> = ['nw', 'ne', 'sw', 'se'];
 
     return (
       <>
-        <div
-          ref={(el) => {
-            handleRefs.nw.current = el;
-            attachHandleListener('nw')(el);
-          }}
-          style={{ ...handleBaseStyles, top: '-4px', left: '-4px', cursor: getCursor('nw') }}
-          onClick={(e) => e.stopPropagation()}
-          data-handle="nw"
-          data-node-id={id}
-        />
-        <div
-          ref={(el) => {
-            handleRefs.ne.current = el;
-            attachHandleListener('ne')(el);
-          }}
-          style={{ ...handleBaseStyles, top: '-4px', right: '-4px', cursor: getCursor('ne') }}
-          onClick={(e) => e.stopPropagation()}
-          data-handle="ne"
-          data-node-id={id}
-        />
-        <div
-          ref={(el) => {
-            handleRefs.sw.current = el;
-            attachHandleListener('sw')(el);
-          }}
-          style={{ ...handleBaseStyles, bottom: '-4px', left: '-4px', cursor: getCursor('sw') }}
-          onClick={(e) => e.stopPropagation()}
-          data-handle="sw"
-          data-node-id={id}
-        />
-        <div
-          ref={(el) => {
-            handleRefs.se.current = el;
-            attachHandleListener('se')(el);
-          }}
-          style={{ ...handleBaseStyles, bottom: '-4px', right: '-4px', cursor: getCursor('se') }}
-          onClick={(e) => e.stopPropagation()}
-          data-handle="se"
-          data-node-id={id}
-        />
+        {corners.map((corner) => {
+          const isHovered = hoveredCorner === corner;
+          const baseStyle: React.CSSProperties = {
+            position: 'absolute',
+            width: `${zoomAwareSize}px`,
+            height: `${zoomAwareSize}px`,
+            cursor: getCursor(corner),
+            borderRadius: '12px',
+            background: isHovered ? HOVER_FILL : IDLE_FILL,
+            border: `1px solid ${isHovered ? HOVER_BORDER : IDLE_BORDER}`,
+            transition: 'background 0.12s ease-out, border-color 0.12s ease-out',
+            pointerEvents: 'auto',
+            zIndex: 9998,
+          };
+
+          switch (corner) {
+            case 'nw':
+              baseStyle.top = `${-half}px`;
+              baseStyle.left = `${-half}px`;
+              break;
+            case 'ne':
+              baseStyle.top = `${-half}px`;
+              baseStyle.right = `${-half}px`;
+              break;
+            case 'sw':
+              baseStyle.bottom = `${-half}px`;
+              baseStyle.left = `${-half}px`;
+              break;
+            case 'se':
+              baseStyle.bottom = `${-half}px`;
+              baseStyle.right = `${-half}px`;
+              break;
+          }
+
+          return (
+            <div
+              key={corner}
+              ref={registerHandleRef(corner)}
+              style={baseStyle}
+              onMouseEnter={() => setHoveredCorner(corner)}
+              onMouseLeave={() => setHoveredCorner((prev) => (prev === corner ? null : prev))}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  width: '8px',
+                  height: '8px',
+                  background: '#FFFFFF',
+                  border: `1px solid ${FIGMA_BLUE}`,
+                  borderRadius: '1px',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  pointerEvents: 'none',
+                  boxShadow: isHovered ? '0 0 0 1px rgba(52, 211, 153, 0.5)' : 'none',
+                }}
+              />
+            </div>
+          );
+        })}
       </>
     );
   };
@@ -608,7 +649,7 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
         }}
         onClick={(event) => {
           event.stopPropagation();
-          onAddNode?.(id);
+          handleAddNodeToGroup?.(id);
         }}
       >
         +

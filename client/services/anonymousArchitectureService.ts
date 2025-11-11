@@ -5,6 +5,7 @@
 import { collection, addDoc, doc, updateDoc, query, where, getDocs, deleteDoc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Timestamp } from 'firebase/firestore';
+import { normalizeChatMessages } from '../utils/chatPersistence';
 
 export interface AnonymousArchitecture {
   id?: string;
@@ -20,14 +21,47 @@ export interface AnonymousArchitecture {
     id: string;
     content: string;
     timestamp: number;
-    sender: 'user' | 'assistant';
+    sender: 'user' | 'assistant' | 'system';
   }>;
+  viewState?: any;
 }
 
 class AnonymousArchitectureService {
   private sessionId: string | null = null
   private lastSaveTime: number = 0
   private saveThrottleMs: number = 1000 // Minimum 1 second between saves (reasonable spam protection);
+
+  /**
+   * Recursively strip undefined/null values to satisfy Firestore
+   */
+  private cleanFirestoreData(value: any): any {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+
+    if (Array.isArray(value)) {
+      const cleanedArray = value
+        .map((item) => this.cleanFirestoreData(item))
+        .filter((item) => item !== undefined);
+      return cleanedArray;
+    }
+
+    if (value instanceof Timestamp) {
+      return value;
+    }
+
+    if (typeof value === 'object') {
+      const cleaned: Record<string, any> = {};
+      for (const [key, val] of Object.entries(value)) {
+        const cleanedValue = this.cleanFirestoreData(val);
+        if (cleanedValue !== undefined) {
+          cleaned[key] = cleanedValue;
+        }
+      }
+      return cleaned;
+    }
+
+    return value;
+  }
 
   /**
    * Get or create a session ID for anonymous user
@@ -53,7 +87,7 @@ class AnonymousArchitectureService {
   /**
    * Save an anonymous architecture
    */
-  async saveAnonymousArchitecture(name: string, rawGraph: any, userPrompt?: string): Promise<string> {
+  async saveAnonymousArchitecture(name: string, rawGraph: any, userPrompt?: string, viewState?: any): Promise<string> {
     try {
       // Ensure we're running on client side
       if (typeof window === 'undefined') {
@@ -82,13 +116,12 @@ class AnonymousArchitectureService {
         || '';
 
       // Get chat messages from localStorage if available
-      let chatMessages: Array<{id: string; content: string; timestamp: number; sender: 'user' | 'assistant'}> | undefined;
+      let chatMessages: Array<{id: string; content: string; timestamp: number; sender: 'user' | 'assistant' | 'system'}> | undefined;
       try {
         const { getCurrentConversation } = await import('../utils/chatPersistence');
-        const messages = getCurrentConversation();
-        if (messages && messages.length > 0) {
-          chatMessages = messages;
-        }
+        const rawConversation = getCurrentConversation();
+        console.log('💬 [ANON-SAVE] Raw conversation for persistence:', rawConversation);
+        chatMessages = normalizeChatMessages(rawConversation);
       } catch (error) {
         console.warn('Failed to get chat messages for architecture:', error);
       }
@@ -101,12 +134,20 @@ class AnonymousArchitectureService {
         isAnonymous: true,
         userAgent: navigator.userAgent,
         userPrompt: finalUserPrompt,
-        chatMessages,
       };
 
-      console.log('💾 Saving anonymous architecture:', name, 'for session:', sessionId);
+      if (viewState) {
+        anonymousArch.viewState = this.cleanFirestoreData(viewState);
+      }
 
-      const docRef = await addDoc(collection(db, 'anonymous_architectures'), anonymousArch);
+      if (chatMessages && chatMessages.length > 0) {
+        anonymousArch.chatMessages = chatMessages;
+        console.log('💬 [ANON-SAVE] Persisting chat messages:', chatMessages);
+      }
+
+      console.log('💾 Saving anonymous architecture:', name, 'for session:', sessionId);
+      const cleanedArch = this.cleanFirestoreData(anonymousArch);
+      const docRef = await addDoc(collection(db, 'anonymous_architectures'), cleanedArch);
 
       console.log('✅ Anonymous architecture saved with ID:', docRef.id);
 
@@ -325,10 +366,23 @@ class AnonymousArchitectureService {
   async updateAnonymousArchitecture(architectureId: string, updates: Partial<AnonymousArchitecture>): Promise<void> {
     try {
       const docRef = doc(db, 'anonymous_architectures', architectureId);
-      await updateDoc(docRef, {
+      const processedUpdates: Partial<AnonymousArchitecture> = {
         ...updates,
-        timestamp: Timestamp.now() // Update timestamp
-      });
+        timestamp: Timestamp.now()
+      };
+
+      if ('chatMessages' in processedUpdates) {
+        const normalized = normalizeChatMessages(processedUpdates.chatMessages as any);
+        if (normalized && normalized.length > 0) {
+          processedUpdates.chatMessages = normalized;
+        } else {
+          delete processedUpdates.chatMessages;
+        }
+      }
+
+      const cleanedUpdates = this.cleanFirestoreData(processedUpdates);
+
+      await updateDoc(docRef, cleanedUpdates);
       
       console.log('✅ Updated anonymous architecture:', architectureId);
     } catch (error) {

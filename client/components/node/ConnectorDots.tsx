@@ -196,18 +196,18 @@ const ConnectorDots: React.FC<ConnectorDotsProps> = ({
                 <div
                   style={{
                     position: 'absolute',
-                    left: (key === 'left' || key === 'right') ? dotPosition : '50%',
-                    top: (key === 'top' || key === 'bottom') ? topPosition : '50%',
-                    transform: 'translate(-50%, -50%)',
-                    width: 64, // Larger hover area
-                    height: 64,
+                left: (key === 'left' || key === 'right') ? dotPosition : '50%',
+                top: (key === 'top' || key === 'bottom') ? topPosition : '50%',
+                transform: 'translate(-50%, -50%)',
+                width: 64, // Larger hover area
+                height: 64,
                     cursor: 'pointer', // ALWAYS pointer, never crosshair
-                    pointerEvents: 'auto', // Detect hover and clicks
-                    zIndex: 997,
-                    background: 'rgba(0, 255, 0, 0.25)', // Green hover area (visible)
-                    borderRadius: '8px', // Rounded corners
-                    opacity: isHovered ? 1 : 0.5 // More visible on hover
-                  }}
+                pointerEvents: 'auto', // Detect hover and clicks
+                zIndex: 997,
+                background: 'rgba(0, 255, 0, 0.25)', // Green hover area (visible)
+                borderRadius: '8px', // Rounded corners
+                opacity: isHovered ? 1 : 0.5 // More visible on hover
+              }}
                   onClick={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
@@ -236,68 +236,68 @@ const ConnectorDots: React.FC<ConnectorDotsProps> = ({
                     e.stopPropagation();
                     e.preventDefault();
                   }}
-                  onMouseEnter={() => {
-                    // Clear any pending clear timeout
-                    if (clearHoverTimeoutRef.current) {
-                      clearTimeout(clearHoverTimeoutRef.current);
-                      clearHoverTimeoutRef.current = null;
-                    }
-                    // Set hover for this specific port
-                    setHoveredConnectorDot(key);
-                  }}
-                  onMouseLeave={(e) => {
-                    // Never clear hover if this is the selected handle or was just clicked
-                    if (isSelectedHandle || wasJustClicked) {
-                      return;
-                    }
-                    
-                    // Check if we're moving to another port on the same node
-                    const relatedTarget = e.relatedTarget as HTMLElement;
-                    const isMovingToAnotherPort = relatedTarget?.closest('[data-connector-dot]') && 
-                                                 relatedTarget.closest('[data-node-id]')?.getAttribute('data-node-id') === nodeId;
-                    
-                    // Don't clear if moving to another port on the same node
-                    if (!isMovingToAnotherPort) {
-                      // Use a small delay to handle quick movements
-                      if (clearHoverTimeoutRef.current) {
-                        clearTimeout(clearHoverTimeoutRef.current);
-                      }
-                      clearHoverTimeoutRef.current = setTimeout(() => {
-                        // Only clear if still not the selected handle and wasn't just clicked
-                        const stillSelected = isConnectingFromThisNode && connectingFromHandle === `connector-${key}-source`;
-                        const stillClicked = clickedPortRef.current === key;
-                        if (!stillSelected && !stillClicked) {
-                          setHoveredConnectorDot(null);
-                        }
-                      }, 50);
-                    }
-                  }}
-                />
+              onMouseEnter={() => {
+                // Clear any pending clear timeout
+                if (clearHoverTimeoutRef.current) {
+                  clearTimeout(clearHoverTimeoutRef.current);
+                  clearHoverTimeoutRef.current = null;
+                }
+                // Set hover for this specific port
+                setHoveredConnectorDot(key);
+              }}
+              onMouseLeave={(e) => {
+                // Never clear hover if this is the selected handle or was just clicked
+                if (isSelectedHandle || wasJustClicked) {
+                  return;
+                }
                 
-                {/* Visual dot overlay - handles hover styling */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: (key === 'left' || key === 'right') ? dotPosition : '50%',
-                    top: (key === 'top' || key === 'bottom') ? topPosition : '50%',
-                    transform: 'translate(-50%, -50%)',
-                    width: DOT_SIZE,
-                    height: DOT_SIZE,
-                    borderRadius: '50%',
-                    backgroundColor,
-                    border: `1px solid ${borderColor}`,
+                // Check if we're moving to another port on the same node
+                const relatedTarget = e.relatedTarget as HTMLElement;
+                const isMovingToAnotherPort = relatedTarget?.closest('[data-connector-dot]') && 
+                                             relatedTarget.closest('[data-node-id]')?.getAttribute('data-node-id') === nodeId;
+                
+                // Don't clear if moving to another port on the same node
+                if (!isMovingToAnotherPort) {
+                  // Use a small delay to handle quick movements
+                  if (clearHoverTimeoutRef.current) {
+                    clearTimeout(clearHoverTimeoutRef.current);
+                  }
+                  clearHoverTimeoutRef.current = setTimeout(() => {
+                    // Only clear if still not the selected handle and wasn't just clicked
+                    const stillSelected = isConnectingFromThisNode && connectingFromHandle === `connector-${key}-source`;
+                    const stillClicked = clickedPortRef.current === key;
+                    if (!stillSelected && !stillClicked) {
+                      setHoveredConnectorDot(null);
+                    }
+                  }, 50);
+                }
+              }}
+            />
+                
+            {/* Visual dot overlay - handles hover styling */}
+            <div
+              style={{
+                position: 'absolute',
+                left: (key === 'left' || key === 'right') ? dotPosition : '50%',
+                top: (key === 'top' || key === 'bottom') ? topPosition : '50%',
+                transform: 'translate(-50%, -50%)',
+                width: DOT_SIZE,
+                height: DOT_SIZE,
+                borderRadius: '50%',
+                backgroundColor,
+                border: `1px solid ${borderColor}`,
                     cursor: 'pointer', // ALWAYS pointer, never crosshair
-                    pointerEvents: 'auto', // Made clickable so clicking directly on dot works
-                    zIndex: 1001, // Above everything
-                    transition: 'background-color 0.2s ease-out, border-color 0.2s ease-out'
-                  }}
+                pointerEvents: 'auto', // Made clickable so clicking directly on dot works
+                zIndex: 1001, // Above everything
+                transition: 'background-color 0.2s ease-out, border-color 0.2s ease-out'
+              }}
                   onClick={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
                     e.nativeEvent.stopImmediatePropagation();
                     handlePortClick(key, e);
                   }}
-                  onMouseDown={(e) => {
+              onMouseDown={(e) => {
                     // CRITICAL: Stop mousedown propagation to prevent ReactFlow node selection
                     e.stopPropagation();
                     e.preventDefault();
@@ -305,10 +305,10 @@ const ConnectorDots: React.FC<ConnectorDotsProps> = ({
                   }}
                   onMouseUp={(e) => {
                     // Also stop mouseup to be safe
-                    e.stopPropagation();
-                    e.preventDefault();
-                    e.nativeEvent.stopImmediatePropagation();
-                  }}
+                e.stopPropagation();
+                e.preventDefault();
+                e.nativeEvent.stopImmediatePropagation();
+              }}
                   onPointerDown={(e) => {
                     // Also stop pointer events
                     e.stopPropagation();

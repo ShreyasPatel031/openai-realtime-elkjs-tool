@@ -408,14 +408,26 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
       {/* Agent Icon - Always visible, fixed position */}
       {config.showAgentIcon && (
         <div className="absolute top-4 right-4 z-50">
-          <div className="relative group" data-testid="agent-icon">
-            <div className="w-10 h-10 flex items-center justify-center rounded-lg shadow-lg border bg-white text-gray-700 border-gray-200">
+          <div
+            className="relative group cursor-pointer outline-none"
+            data-testid="agent-icon"
+            role="button"
+            tabIndex={0}
+            onClick={onToggleCollapse}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onToggleCollapse();
+              }
+            }}
+            aria-label={isCollapsed ? 'Open Chat Panel' : 'Close Chat Panel'}
+          >
+            <div className="w-10 h-10 flex items-center justify-center rounded-lg shadow-lg border bg-white text-gray-700 border-gray-200 transition-transform duration-200 group-hover:scale-105">
               <Cpu className="w-4 h-4" />
             </div>
             {/* Hover overlay - show expand icon when collapsed, collapse icon when expanded */}
-            <button 
-              onClick={onToggleCollapse}
-              className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-200 shadow-lg"
+            <div 
+              className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-200 shadow-lg"
               title={isCollapsed ? "Open Chat Panel" : "Close Chat Panel"}
             >
               {isCollapsed ? (
@@ -423,7 +435,7 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
               ) : (
                 <PanelRightClose className="w-4 h-4" />
               )}
-            </button>
+            </div>
           </div>
         </div>
       )}

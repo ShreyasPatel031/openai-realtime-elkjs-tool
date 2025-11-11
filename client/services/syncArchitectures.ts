@@ -5,6 +5,7 @@
  */
 
 import { ArchitectureService } from './architectureService';
+import { normalizeChatMessages } from '../utils/chatPersistence';
 
 interface SyncArchitectureOptions {
   userId: string;
@@ -136,8 +137,10 @@ function convertFirebaseArch(arch: any) {
     createdAt: safeCreatedAt,
     lastModified: safeLastModified,
     rawGraph: arch.rawGraph,
+    chatMessages: normalizeChatMessages(arch.chatMessages) ?? [],
     userPrompt: arch.userPrompt || '',
-    isFromFirebase: true
+    isFromFirebase: true,
+    viewState: arch.viewState || null
   };
 }
 

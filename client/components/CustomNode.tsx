@@ -8,6 +8,7 @@ import SelectedNodeDots from './node/SelectedNodeDots';
 import ConnectorDots from './node/ConnectorDots';
 import NodeHandles from './node/NodeHandles';
 import { useNodeStyle } from '../contexts/NodeStyleContext';
+import { useNodeInteractions } from '../contexts/NodeInteractionContext';
 
 // NO HEURISTIC FALLBACKS - let semantic fallback service handle everything
 
@@ -25,14 +26,18 @@ interface CustomNodeProps {
   };
   id: string;
   selected?: boolean;
-  onLabelChange: (id: string, label: string) => void;
+  onLabelChange?: (id: string, label: string) => void;
   selectedTool?: 'arrow' | 'hand' | 'box' | 'connector' | 'group';
   connectingFrom?: string | null;
   connectingFromHandle?: string | null;
   onConnectorDotClick?: (nodeId: string, handleId: string) => void;
 }
 
+const noopLabelChange = (_id: string, _label: string) => {};
+const noopConnectorClick = (_nodeId: string, _handleId: string) => {};
+
 const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChange, selectedTool = 'arrow', connectingFrom, connectingFromHandle, onConnectorDotClick }) => {
+  const interactions = useNodeInteractions();
   const { leftHandles = [], rightHandles = [], topHandles = [], bottomHandles = [] } = data;
   const { settings } = useNodeStyle();
   
@@ -45,6 +50,17 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
   const [finalIconSrc, setFinalIconSrc] = useState<string | undefined>(undefined);
   const [fallbackAttempted, setFallbackAttempted] = useState(false);
   const apiEndpoint = useApiEndpoint();
+  const effectiveSelectedTool = interactions?.selectedTool ?? selectedTool;
+  const effectiveConnectingFrom = interactions?.connectingFrom ?? connectingFrom;
+  const effectiveConnectingFromHandle = interactions?.connectingFromHandle ?? connectingFromHandle;
+  const handleConnectorDotClickFn: (nodeId: string, handleId: string) => void =
+    interactions?.handleConnectorDotClick ??
+    onConnectorDotClick ??
+    noopConnectorClick;
+  const handleLabelChangeFn: (nodeId: string, newLabel: string) => void =
+    interactions?.handleLabelChange ??
+    onLabelChange ??
+    noopLabelChange;
 
   // helpers hoisted for reuse
   const findIconCategory = (provider: string, iconName: string): string | null => {
@@ -250,7 +266,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
   const handleLabelChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newLabel = e.target.value;
     setLabel(newLabel);
-    
+
     // Auto-resize textarea to fit content - ResizeObserver will handle node height
     const textarea = e.target;
     textarea.style.height = 'auto';
@@ -262,17 +278,17 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
     if (e.key === 'Escape') {
       lastBlurTimeRef.current = Date.now();
       setIsEditing(false);
-      onLabelChange(id, label || '');
+      handleLabelChangeFn(id, label || '');
       if (!label.trim()) {
-        onLabelChange(id, '');
-      }
+        handleLabelChangeFn(id, '');
+    }
     }
     // Enter key now creates new lines (default textarea behavior)
   };
 
   const handleClick = () => {
     if (!isEditing) {
-      setIsEditing(true);
+    setIsEditing(true);
     }
   };
 
@@ -414,7 +430,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
           nodeScale={nodeScale}
           nodeWidth={actualNodeWidth}
           nodeHeight={actualNodeHeight}
-          onConnectorDotClick={onConnectorDotClick}
+          onConnectorDotClick={handleConnectorDotClickFn}
         />
       )}
       
@@ -422,10 +438,10 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
       <ConnectorDots 
         nodeId={id} 
         nodeWidth={data.width || 96}
-        connectingFrom={connectingFrom}
-        connectingFromHandle={connectingFromHandle}
-        onHandleClick={onConnectorDotClick}
-        showVisualDots={selectedTool === 'connector'}
+        connectingFrom={effectiveConnectingFrom}
+        connectingFromHandle={effectiveConnectingFromHandle}
+        onHandleClick={handleConnectorDotClickFn}
+        showVisualDots={effectiveSelectedTool === 'connector'}
       />
       
       {/* Edge connection handles */}
@@ -452,9 +468,9 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
           <div 
             style={{
               width: '100%',
-            display: 'flex',
+          display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center',
+          alignItems: 'center',
             justifyContent: (!label || !label.trim()) && !(iconLoaded && finalIconSrc) ? 'center' : 'flex-start',
             paddingTop: `${settings.nodePaddingVertical}px`,
             paddingBottom: `${settings.nodePaddingVertical}px`,
@@ -465,16 +481,16 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
           }}>
             {iconLoaded && finalIconSrc && (
               <img 
-                src={finalIconSrc}
+              src={finalIconSrc}
                   alt="" 
-                style={{ 
+              style={{ 
                     width: `${settings.iconSize}px`,
                     height: `${settings.iconSize}px`,
                     objectFit: 'contain',
                     flexShrink: 0
-                  }}
-                />
-            )}
+              }}
+            />
+          )}
             <textarea
               ref={inputRef}
             value={label}
@@ -483,7 +499,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
               onBlur={() => {
                 lastBlurTimeRef.current = Date.now();
                 setIsEditing(false);
-                onLabelChange(id, label || '');
+                handleLabelChangeFn(id, label || '');
               }}
               placeholder={selected || !label ? "Add text" : ""}
             style={{
@@ -508,9 +524,9 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
                 whiteSpace: 'pre-wrap',
                 wordWrap: 'break-word',
                 flexShrink: 0
-              }}
+            }}
               className="node-text-input"
-            />
+          />
           </div>
         ) : (
           <div
@@ -555,7 +571,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
             {label && label.trim() && (
               <div style={{ width: '100%' }}>
                 {label}
-              </div>
+                </div>
             )}
           </div>
         )}

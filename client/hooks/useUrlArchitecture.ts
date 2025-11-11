@@ -6,6 +6,7 @@
 import { useCallback, useRef } from 'react';
 import { anonymousArchitectureService, AnonymousArchitecture } from '../services/anonymousArchitectureService';
 import { EMBED_PENDING_ARCH_PREFIX } from '../utils/anonymousSave';
+import { isEmbedToCanvasTransition, getCurrentConversation, normalizeChatMessages, mergeChatMessages } from '../utils/chatPersistence';
 import { Timestamp } from 'firebase/firestore';
 
 interface UseUrlArchitectureProps {
@@ -98,6 +99,34 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
         }
       }
 
+      if (!sharedArch && !fallbackData) {
+        console.warn('⚠️ [LOAD-SHARED] Shared architecture not found. Falling back to default architecture:', architectureId);
+        const defaultGraph = {
+          id: 'root',
+          children: [
+            {
+              id: 'quickstart_node',
+              labels: [{ text: 'Quickstart Node' }],
+              children: [],
+              edges: [],
+              data: { label: 'Quickstart Node', icon: 'browser_client' },
+            },
+          ],
+          edges: [],
+        };
+
+        sharedArch = {
+          id: architectureId,
+          name: 'Quickstart Architecture',
+          rawGraph: defaultGraph,
+          sessionId: 'default-fallback',
+          timestamp: Timestamp.now(),
+          isAnonymous: true,
+          userPrompt: '',
+          chatMessages: [],
+        } as AnonymousArchitecture;
+      }
+
       if (!sharedArch && fallbackData?.rawGraph) {
         console.log('🔥 [LOAD-SHARED] Using local fallback architecture data:', {
           id: architectureId,
@@ -114,6 +143,7 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
           isAnonymous: true,
           userPrompt: fallbackData.userPrompt || '',
           chatMessages: fallbackData.chatMessages || [],
+          viewState: fallbackData.viewState || undefined,
         } as AnonymousArchitecture;
       } else if (sharedArch && fallbackData) {
         const hasChatInDoc = Array.isArray((sharedArch as any).chatMessages) && (sharedArch as any).chatMessages.length > 0;
@@ -124,6 +154,7 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
             ...sharedArch,
             chatMessages: fallbackChat,
             userPrompt: sharedArch.userPrompt || fallbackData.userPrompt || sharedArch.userPrompt,
+            viewState: sharedArch.viewState || fallbackData.viewState || undefined,
           } as AnonymousArchitecture;
         }
       }
@@ -151,15 +182,27 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
         
         // ALWAYS set chat messages from architecture (even if empty) to clear any stale localStorage data
         try {
-          const archChatMessages = (sharedArch as any).chatMessages || [];
-          localStorage.setItem('atelier_current_conversation', JSON.stringify(archChatMessages));
-          if (archChatMessages.length > 0) {
-            console.log('💬 [LOAD-SHARED] Restored', archChatMessages.length, 'chat messages from architecture');
+          const transitionedFromEmbed = isEmbedToCanvasTransition();
+          const existingConversation = getCurrentConversation();
+          const normalizedArchMessages = normalizeChatMessages((sharedArch as any).chatMessages);
+          const mergedConversation = mergeChatMessages(existingConversation, normalizedArchMessages);
+
+          const existingCount = existingConversation.length;
+          const incomingCount = normalizedArchMessages?.length || 0;
+
+          console.log('💬 [LOAD-SHARED] Architecture chat count:', incomingCount, 'existingMessagesCount:', existingCount, 'transitionedFromEmbed:', transitionedFromEmbed);
+
+          if (mergedConversation && mergedConversation.length > 0) {
+            localStorage.setItem('atelier_current_conversation', JSON.stringify(mergedConversation));
+            console.log('💬 [LOAD-SHARED] Stored merged conversation with', mergedConversation.length, 'messages');
+          } else if (existingCount > 0) {
+            console.log('💬 [LOAD-SHARED] Preserving existing conversation (no new messages to merge)');
           } else {
-            console.log('💬 [LOAD-SHARED] Cleared chat messages (architecture has no saved messages)');
+            localStorage.removeItem('atelier_current_conversation');
+            console.log('💬 [LOAD-SHARED] Cleared chat (no conversation present)');
           }
         } catch (error) {
-          console.warn('Failed to restore/clear chat messages:', error);
+          console.warn('Failed to restore/merge chat messages:', error);
         }
         
         // Check if we're in auth mode (user is authenticated)

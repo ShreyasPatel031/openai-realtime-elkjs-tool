@@ -10,7 +10,7 @@ import { generateNameWithFallback } from './naming';
 
 export interface AnonymousArchitectureService {
   getArchitectureIdFromUrl(): string | null;
-  saveAnonymousArchitecture(name: string, graph: any, userPrompt?: string): Promise<string>;
+  saveAnonymousArchitecture(name: string, graph: any, userPrompt?: string, viewState?: any): Promise<string>;
   updateAnonymousArchitecture(id: string, payload: any): Promise<void>;
 }
 
@@ -40,19 +40,23 @@ export async function ensureAnonymousSaved({
 
   try {
     const id = existingId ?? anonymousService.getArchitectureIdFromUrl();
-    let chatMessages: Array<{ id: string; content: string; timestamp: number; sender: 'user' | 'assistant' }> | undefined;
+    let chatMessages: Array<{ id: string; content: string; timestamp: number; sender: 'user' | 'assistant' | 'system' }> | undefined;
     if (typeof window !== 'undefined') {
       try {
-        const { getCurrentConversation } = await import('./chatPersistence');
-        const messages = getCurrentConversation();
-        if (Array.isArray(messages) && messages.length > 0) {
-          chatMessages = messages;
+        const { getCurrentConversation, normalizeChatMessages } = await import('./chatPersistence');
+        const rawConversation = getCurrentConversation();
+        console.log('💬 [ENSURE-ANON] Raw conversation before normalize:', rawConversation);
+        const normalized = normalizeChatMessages(rawConversation);
+        if (normalized) {
+          chatMessages = normalized;
         }
       } catch (error) {
         console.warn('⚠️ ensureAnonymousSaved: failed to load chat conversation for persistence', error);
       }
     }
     
+    const viewState = metadata?.viewState;
+
     if (id) {
       // Update existing anonymous architecture
       console.log('🔄 Updating existing anonymous architecture:', id);
@@ -80,7 +84,7 @@ export async function ensureAnonymousSaved({
     console.log('🤖 Generating name for new anonymous architecture');
     const name = await generateNameWithFallback(rawGraph, userPrompt);
 
-    const newId = await anonymousService.saveAnonymousArchitecture(name, rawGraph, userPrompt);
+    const newId = await anonymousService.saveAnonymousArchitecture(name, rawGraph, userPrompt, viewState);
     console.log('✅ New anonymous architecture saved with ID:', newId, 'with userPrompt:', userPrompt ? 'YES' : 'NO');
     return newId;
     
@@ -106,16 +110,20 @@ export async function createAnonymousShare({
   architectureName,
   rawGraph,
   anonymousService,
+  viewState,
 }: {
   architectureName: string;
   rawGraph: any;
   anonymousService: AnonymousArchitectureService;
+  viewState?: any;
 }) {
   console.log('📤 Creating anonymous share copy');
   
   const anonymousId = await anonymousService.saveAnonymousArchitecture(
     `${architectureName} (Shared)`,
-    rawGraph
+    rawGraph,
+    undefined,
+    viewState
   );
   
   console.log('✅ Anonymous share created with ID:', anonymousId);
@@ -129,9 +137,11 @@ export async function createAnonymousShare({
 export async function autoSaveAnonymous({
   rawGraph,
   anonymousService,
+  viewState,
 }: {
   rawGraph: any;
   anonymousService: AnonymousArchitectureService;
+  viewState?: any;
 }) {
   console.log('⏰ Auto-saving anonymous architecture...');
   
@@ -139,7 +149,9 @@ export async function autoSaveAnonymous({
     const architectureName = `Architecture ${new Date().toLocaleDateString()}`;
     const newArchId = await anonymousService.saveAnonymousArchitecture(
       architectureName,
-      rawGraph
+      rawGraph,
+      undefined,
+      viewState
     );
     
     console.log('✅ Auto-save completed with ID:', newArchId);

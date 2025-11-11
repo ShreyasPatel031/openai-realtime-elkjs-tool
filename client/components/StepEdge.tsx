@@ -92,7 +92,7 @@ const StepEdge: React.FC<EdgeProps> = ({
       edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
     } else if (sourceDir === 'horizontal' && targetDir === 'vertical') {
       // H-V: go horizontal to target-aligned X first, then vertical into target
-      edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
+    edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
     } else if (sourceDir === 'vertical' && targetDir === 'horizontal') {
       // V-H: go vertical to midY, then horizontal into target
       edgePath = `M ${sourceX} ${sourceY} L ${sourceX} ${midY} L ${targetX} ${midY} L ${targetX} ${targetY}`;

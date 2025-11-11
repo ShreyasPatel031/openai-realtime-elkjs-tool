@@ -108,7 +108,7 @@ export default function App() {
   return (
     <ViewModeProvider fallbackMode="auth">
       <NodeStyleProvider>
-        <AppContent />
+      <AppContent />
       </NodeStyleProvider>
     </ViewModeProvider>
   );

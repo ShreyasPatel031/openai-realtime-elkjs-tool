@@ -13,6 +13,7 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { normalizeChatMessages } from '../utils/chatPersistence';
 
 export interface SavedArchitecture {
   id?: string;
@@ -29,10 +30,11 @@ export interface SavedArchitecture {
     id: string;
     content: string;
     timestamp: number;
-    sender: 'user' | 'assistant';
+    sender: 'user' | 'assistant' | 'system';
   }>;
   isPublic?: boolean;
   tags?: string[];
+  viewState?: any;
 }
 
 export class ArchitectureService {
@@ -83,8 +85,18 @@ export class ArchitectureService {
     try {
       console.log('💾 Saving complete ELK architecture to Firebase...');
       
+      let normalizedChatMessages = normalizeChatMessages(architectureData.chatMessages);
+      if (!normalizedChatMessages && typeof window !== 'undefined') {
+        try {
+          const { getCurrentConversation } = await import('../utils/chatPersistence');
+          normalizedChatMessages = normalizeChatMessages(getCurrentConversation());
+        } catch (error) {
+          console.warn('⚠️ Failed to gather current conversation for architecture save:', error);
+        }
+      }
+      
       // Save the complete architecture data including ELK rawGraph
-      const completeData = {
+      const completeData: any = {
         name: architectureData.name, // No fallback - name must be provided
         description: architectureData.description || `Architecture with ${architectureData.nodes?.length || 0} components`,
         userId: architectureData.userId,
@@ -102,8 +114,13 @@ export class ArchitectureService {
         edgeCount: architectureData.edges?.length || 0,
         timestamp: architectureData.timestamp ? Timestamp.fromDate(new Date(architectureData.timestamp)) : Timestamp.now(),
         createdAt: architectureData.createdAt ? Timestamp.fromDate(new Date(architectureData.createdAt)) : Timestamp.now(),
-        lastModified: Timestamp.now() // Always update lastModified
+        lastModified: Timestamp.now(), // Always update lastModified
+        viewState: architectureData.viewState ? this.cleanFirestoreData(architectureData.viewState) : undefined
       };
+
+      if (normalizedChatMessages && normalizedChatMessages.length > 0) {
+        completeData.chatMessages = normalizedChatMessages;
+      }
       
       // Clean the data to remove undefined values and functions
       const cleanedData = this.cleanFirestoreData(completeData);
@@ -188,8 +205,28 @@ export class ArchitectureService {
       const docRef = doc(db, this.COLLECTION_NAME, architectureId);
       
       // Clean the update data
+      let updatesWithChat = { ...updates };
+      if ('chatMessages' in updatesWithChat) {
+        const normalizedChat = normalizeChatMessages(updatesWithChat.chatMessages as any);
+        if (normalizedChat && normalizedChat.length > 0) {
+          updatesWithChat.chatMessages = normalizedChat;
+        } else {
+          delete updatesWithChat.chatMessages;
+        }
+      } else if (typeof window !== 'undefined') {
+        try {
+          const { getCurrentConversation } = await import('../utils/chatPersistence');
+          const normalizedChat = normalizeChatMessages(getCurrentConversation());
+          if (normalizedChat && normalizedChat.length > 0) {
+            updatesWithChat.chatMessages = normalizedChat;
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to gather current conversation for architecture update:', error);
+        }
+      }
+
       const cleanedUpdates = ArchitectureService.cleanFirestoreData({
-        ...updates,
+        ...updatesWithChat,
         timestamp: Timestamp.now(),
         lastModified: Timestamp.now()
       });

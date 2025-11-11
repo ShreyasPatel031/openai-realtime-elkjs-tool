@@ -25,7 +25,7 @@ import ReactFlow, {
 } from "reactflow"
 import "reactflow/dist/style.css"
 import { cn } from "../../lib/utils"
-import { markEmbedToCanvasTransition, isEmbedToCanvasTransition, clearEmbedToCanvasFlag, getChatMessages } from "../../utils/chatPersistence"
+import { markEmbedToCanvasTransition, isEmbedToCanvasTransition, clearEmbedToCanvasFlag, getChatMessages, getCurrentConversation, normalizeChatMessages, mergeChatMessages, saveChatMessage, EMBED_PENDING_CHAT_KEY, EMBED_CHAT_BROADCAST_CHANNEL, PersistedChatMessage } from "../../utils/chatPersistence"
 import ViewControls from "./ViewControls"
 
 // Import types from separate type definition files
@@ -47,14 +47,25 @@ import NotificationModal from "../canvas/NotificationModal"
 import { exportArchitectureAsPNG } from "../../utils/exportPng"
 import { copyToClipboard } from "../../utils/copyToClipboard"
 import { generateNameWithFallback, ensureUniqueName } from "../../utils/naming"
-import { ensureAnonymousSaved, createAnonymousShare, autoSaveAnonymous } from "../../utils/anonymousSave"
+import { ensureAnonymousSaved, createAnonymousShare } from "../../utils/anonymousSave"
 import { useUrlArchitecture } from "../../hooks/useUrlArchitecture"
 import { ensureEdgeVisibility, updateEdgeStylingOnSelection, updateEdgeStylingOnDeselection } from "../../utils/edgeVisibility"
 import { syncWithFirebase as syncWithFirebaseService } from "../../services/syncArchitectures"
 import { generateSVG, handleSvgZoom } from "../../utils/svgExport"
+import { sanitizeStoredViewState, restoreNodeVisuals, createEmptyViewState } from "../../utils/canvasLayout"
 import DraftGroupNode from "../node/DraftGroupNode"
 import StepEdge from "../StepEdge"
 import { createNodeID } from "../../types/graph"
+import { NodeInteractionContext } from "../../contexts/NodeInteractionContext"
+
+// Import extracted services and utilities
+import { CanvasArchitectureService } from "../../services/canvasArchitectureService"
+import { CanvasSaveService } from "../../services/canvasSaveService"
+import { CanvasChatService } from "../../services/canvasChatService"
+import { CanvasModalManager } from "../../utils/canvasModals"
+import { createViewStateSnapshot, saveCanvasSnapshot, restoreCanvasSnapshot, LOCAL_CANVAS_SNAPSHOT_KEY } from "../../utils/canvasPersistence"
+import { useCanvasState } from "../../hooks/useCanvasState"
+
 /**
  * READ ME: InteractiveCanvas is already very large. Do NOT add new interaction
  * logic or component code directly here. Add it in a dedicated helper/module and
@@ -136,42 +147,314 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Get ViewMode configuration
   const { config: viewModeConfig } = useViewMode();
   
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hasOpener = (() => {
+      try {
+        return !!window.opener && window.opener !== window;
+      } catch {
+        return false;
+      }
+    })();
+    const transitionedFromEmbed = isEmbedToCanvasTransition() || hasOpener;
+    if (!transitionedFromEmbed) return;
+
+    const hydrateConversation = (raw: any, source: string) => {
+      if (!raw) return false;
+
+      let parsed: any[] | null = null;
+
+      if (typeof raw === 'string') {
+        try {
+          const attempt = JSON.parse(raw);
+          parsed = Array.isArray(attempt) ? attempt : null;
+        } catch (error) {
+          console.warn(`Failed to parse chat snapshot from ${source}:`, error);
+          parsed = null;
+        }
+      } else if (Array.isArray(raw)) {
+        parsed = raw;
+      } else if (typeof raw === 'object' && Array.isArray((raw as any).conversation)) {
+        parsed = (raw as any).conversation;
+      }
+
+      const normalizedIncoming = normalizeChatMessages(parsed || undefined);
+      if (!normalizedIncoming || normalizedIncoming.length === 0) {
+        return false;
+      }
+
+      const merged = mergeChatMessages(getCurrentConversation(), normalizedIncoming);
+      if (!merged || merged.length === 0) {
+        return false;
+      }
+
+      try {
+        const serialized = JSON.stringify(merged);
+        localStorage.setItem('atelier_current_conversation', serialized);
+        (window as any).__atelierLastConversation = serialized;
+        console.log(`💬 [CHAT SYNC] Restored conversation from ${source}, messages=`, merged.length);
+        return true;
+      } catch (error) {
+        console.warn(`Failed to store chat snapshot from ${source}:`, error);
+        return false;
+      }
+    };
+
+    const handleEmbedChatSnapshot = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const message = event.data;
+      if (!message || typeof message !== 'object') return;
+      if (message.type !== 'embed-chat-snapshot') return;
+
+      hydrateConversation(message.conversation, 'embed message');
+    };
+
+    window.addEventListener('message', handleEmbedChatSnapshot);
+
+    let broadcastChannel: BroadcastChannel | null = null;
+    const handleBroadcastMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'chat-snapshot') {
+        hydrateConversation(data.conversation, 'broadcast channel');
+        if (data.prompt && typeof data.prompt === 'string' && data.prompt.trim().length > 0) {
+          try {
+            const existingConversation = getCurrentConversation();
+            const incoming = normalizeChatMessages([{ content: data.prompt, sender: 'user' as const, timestamp: Date.now(), id: crypto.randomUUID() }]);
+            const merged = mergeChatMessages(existingConversation, incoming);
+            if (merged && merged.length > 0) {
+              const serialized = JSON.stringify(merged);
+              localStorage.setItem('atelier_current_conversation', serialized);
+              (window as any).__atelierLastConversation = serialized;
+            }
+          } catch (error) {
+            console.warn('Failed to merge prompt from broadcast channel:', error);
+          }
+        }
+      }
+    };
+
+    if (typeof BroadcastChannel !== 'undefined') {
+      broadcastChannel = new BroadcastChannel(EMBED_CHAT_BROADCAST_CHANNEL);
+      embedChatChannelRef.current = broadcastChannel;
+      broadcastChannel.onmessage = handleBroadcastMessage;
+      console.log('📡 [CHAT SYNC] Broadcast channel connected in canvas');
+      broadcastChannel.postMessage({ type: 'chat-request' });
+    }
+
+    try {
+      if (window.opener && window.opener !== window) {
+        window.opener.postMessage({ type: 'embed-chat-request' }, window.location.origin);
+      }
+    } catch (error) {
+      console.warn('Failed to request chat snapshot from embed:', error);
+    }
+
+    try {
+      if (window.name && window.name.startsWith('embed-')) {
+        const encoded = window.name.slice('embed-'.length);
+        const decoded = decodeURIComponent(escape(window.atob(encoded)));
+        const payload = JSON.parse(decoded);
+
+        if (payload?.conversation) {
+          hydrateConversation(payload.conversation, 'window.name payload');
+        } else if (payload?.prompt) {
+          const prompt = String(payload.prompt);
+          if (prompt.trim().length > 0) {
+            hydrateConversation([{ content: prompt }], 'window.name prompt');
+          }
+        }
+
+        window.name = '';
+      }
+    } catch (error) {
+      console.warn('Failed to decode embed payload from window.name:', error);
+    }
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const embedChatSnapshotParam = params.get('embedChatSnapshot');
+      if (embedChatSnapshotParam) {
+        try {
+          const decodedSnapshot = decodeURIComponent(escape(window.atob(embedChatSnapshotParam)));
+          hydrateConversation(decodedSnapshot, 'URL snapshot parameter');
+        } catch (error) {
+          console.warn('Failed to decode embed chat snapshot parameter:', error);
+        }
+        params.delete('embedChatSnapshot');
+      }
+      const embedPromptParam = params.get('embedPrompt');
+      if (embedPromptParam) {
+        const decodedPrompt = embedPromptParam;
+        hydrateConversation([{ content: decodedPrompt }], 'URL parameter');
+        params.delete('embedPrompt');
+      }
+
+      const updatedSearch = params.toString();
+      const newUrl =
+        `${window.location.pathname}` +
+        (updatedSearch ? `?${updatedSearch}` : '') +
+        window.location.hash;
+      window.history.replaceState({}, '', newUrl);
+    } catch (error) {
+      console.warn('Failed to process embed parameters:', error);
+    }
+
+    return () => {
+      window.removeEventListener('message', handleEmbedChatSnapshot);
+      if (broadcastChannel) {
+        broadcastChannel.onmessage = null;
+        broadcastChannel.close();
+        embedChatChannelRef.current = null;
+      }
+    };
+  }, []);
+  
   // Clear chat localStorage on mount if NOT coming from embed
   useEffect(() => {
-    if (!isEmbedToCanvasTransition()) {
-      // User is visiting directly, not from embed - clear any stale chat
+    const transitionedFromEmbed = isEmbedToCanvasTransition();
+    let currentCount = 0;
+    try {
+      const currentMessagesRaw = localStorage.getItem('atelier_current_conversation');
+      currentCount = currentMessagesRaw ? (() => {
+        try {
+          const parsed = JSON.parse(currentMessagesRaw);
+          return Array.isArray(parsed) ? parsed.length : 0;
+        } catch {
+          return 0;
+        }
+      })() : 0;
+      console.log('[ChatInit] embedTransition=', transitionedFromEmbed, 'existingMessages=', currentCount);
+    } catch (error) {
+      console.warn('Failed to inspect chat messages on mount:', error);
+    }
+
+    if (currentCount === 0) {
+      try {
+        if (typeof window !== 'undefined' && window.opener && window.opener !== window) {
+          let openerConversation: string | null = null;
+          try {
+            openerConversation = window.opener.localStorage?.getItem('atelier_current_conversation') ?? null;
+          } catch (error) {
+            console.warn('Failed to read opener localStorage:', error);
+          }
+
+          console.log('[ChatInit] opener conversation length:', openerConversation ? openerConversation.length : 'none');
+          if (openerConversation) {
+            localStorage.setItem('atelier_current_conversation', openerConversation);
+            currentCount = (() => {
+              try {
+                const parsed = JSON.parse(openerConversation);
+                return Array.isArray(parsed) ? parsed.length : 0;
+              } catch {
+                return 0;
+              }
+            })();
+            console.log('🔄 [MOUNT] Restored chat from opener window, messages=', currentCount);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to read chat from opener window:', error);
+      }
+
+      try {
+        const fallbackChat =
+          sessionStorage.getItem(EMBED_PENDING_CHAT_KEY) ||
+          localStorage.getItem(EMBED_PENDING_CHAT_KEY);
+        if (fallbackChat) {
+          localStorage.setItem('atelier_current_conversation', fallbackChat);
+          currentCount = (() => {
+            try {
+              const parsed = JSON.parse(fallbackChat);
+              return Array.isArray(parsed) ? parsed.length : 0;
+            } catch {
+              return 0;
+            }
+          })();
+          console.log('🔄 [MOUNT] Restored embed chat snapshot, messages=', currentCount);
+          sessionStorage.removeItem(EMBED_PENDING_CHAT_KEY);
+          localStorage.removeItem(EMBED_PENDING_CHAT_KEY);
+        }
+      } catch (error) {
+        console.warn('Failed to restore embed chat snapshot:', error);
+      }
+    }
+
+    if (!transitionedFromEmbed && currentCount === 0) {
+      // User is visiting directly, not from embed, and no conversation exists - clear stale chat
       try {
         localStorage.removeItem('atelier_current_conversation');
-        // console.log('🧹 [MOUNT] Cleared stale chat messages (direct visit, not from embed)');
+        console.log('🧹 [MOUNT] Cleared stale chat messages (direct visit, no conversation)');
       } catch (error) {
         console.warn('Failed to clear chat on mount:', error);
       }
+    } else {
+      console.log('✅ [MOUNT] Preserving chat messages (embed transition or existing conversation)');
     }
   }, []); // Run once on mount
   
-  // State for DevPanel visibility
-  const [showDev, setShowDev] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
-  // Architecture data from saved architectures
-  const [savedArchitectures, setSavedArchitectures] = useState<any[]>(() => {
-    // Start with "New Architecture" as first tab
-    const newArchTab = {
-      id: 'new-architecture',
-      name: 'New Architecture',
-      timestamp: new Date(),
-      rawGraph: { id: "root", children: [], edges: [] },
-      isNew: true
-    };
-    // Only show the "New Architecture" tab initially - no mock architectures
-    return [newArchTab];
-  });
-  const [selectedArchitectureId, setSelectedArchitectureId] = useState<string>('new-architecture');
-  
-  // Pending architecture selection (for handling async state updates)
-  const [pendingArchitectureSelection, setPendingArchitectureSelection] = useState<string | null>(null);
-  
-  // State to lock agent operations to specific architecture during sessions
-  const [agentLockedArchitectureId, setAgentLockedArchitectureId] = useState<string | null>(null);
+  // Use extracted canvas state hook
+  const canvasState = useCanvasState();
+  const {
+    showDev, setShowDev,
+    sidebarCollapsed, setSidebarCollapsed,
+    savedArchitectures, setSavedArchitectures,
+    selectedArchitectureId, setSelectedArchitectureId,
+    pendingArchitectureSelection, setPendingArchitectureSelection,
+    agentLockedArchitectureId, setAgentLockedArchitectureId,
+    user, setUser,
+    isLoadingArchitectures, setIsLoadingArchitectures,
+    urlArchitectureProcessed, setUrlArchitectureProcessed,
+    justCreatedArchId, setJustCreatedArchId,
+    hasInitialSync, setHasInitialSync,
+    isSaving, setIsSaving,
+    saveSuccess, setSaveSuccess,
+    realtimeSyncId, setRealtimeSyncId,
+    isRealtimeSyncing, setIsRealtimeSyncing,
+    isSyncing, setIsSyncing,
+    currentChatName, setCurrentChatName,
+    agentBusy, setAgentBusy,
+    shareOverlay, setShareOverlay,
+    copyButtonState, setCopyButtonState,
+    inputOverlay, setInputOverlay,
+    deleteOverlay, setDeleteOverlay,
+    notification, setNotification,
+    architectureOperations, setArchitectureOperations,
+    selectedTool, setSelectedTool,
+    selectedNodes, setSelectedNodes,
+    selectedEdges, setSelectedEdges,
+    selectedNodeIds, setSelectedNodeIds,
+    useReactFlow, setUseReactFlow,
+    svgContent, setSvgContent,
+    svgZoom, setSvgZoom,
+    svgPan, setSvgPan,
+    showElkDebug, setShowElkDebug,
+    connectingFrom, setConnectingFrom,
+    connectingFromHandle, setConnectingFromHandle,
+    connectionMousePos, setConnectionMousePos,
+    syncTimeoutRef,
+    isHydratingRef,
+    expectedHydratedNodeCountRef,
+    hydratedArchitectureIdRef,
+    dirtySinceRef,
+    remoteSaveTimeoutRef,
+    restoredFromSnapshotRef,
+    pendingSelectionRef
+  } = canvasState;
+
+  // Initialize modal manager
+  const modalManager = useMemo(() => new CanvasModalManager({
+    setNotification,
+    setShareOverlay,
+    setInputOverlay,
+    setDeleteOverlay
+  }), [setNotification, setShareOverlay, setInputOverlay, setDeleteOverlay]);
+
+  // Helper functions from modal manager
+  const showNotification = modalManager.showNotification;
+  const hideNotification = modalManager.hideNotification;
+
+  // Architecture service will be initialized after useElkToReactflowGraphConverter hook
   
   // Initialize global architecture ID for agent targeting
   useEffect(() => {
@@ -228,10 +511,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     };
   }, []);
   
-  // State for auth flow
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoadingArchitectures, setIsLoadingArchitectures] = useState(false);
-  const [urlArchitectureProcessed, setUrlArchitectureProcessed] = useState(false);
+  // Auth flow state now managed by useCanvasState hook
 
   // Enhanced Firebase sync with cleanup - now handled by service
   const syncWithFirebase = useCallback(async (userId: string) => {
@@ -249,61 +529,29 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       }
     });
   }, [isPublicMode, urlArchitectureProcessed, selectedArchitectureId]);
-  const [justCreatedArchId, setJustCreatedArchId] = useState<string | null>(null);
-  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [hasInitialSync, setHasInitialSync] = useState(false);
+  // Sync state now managed by useCanvasState hook
 
   // Sync Firebase architectures ONLY when user changes (not when tabs change)
   useEffect(() => {
-    if (user?.uid && !hasInitialSync) {
-      // Don't sync immediately after creating an architecture
-      if (!justCreatedArchId) {
-        // Clear any existing timeout
-        if (syncTimeoutRef.current) {
-          clearTimeout(syncTimeoutRef.current);
-        }
-        
-        // Only sync once when user signs in
-        // Initial sync for user
-        syncWithFirebase(user.uid);
-        setHasInitialSync(true);
-      } else {
-        console.log('🚫 Skipping Firebase sync - just created architecture:', justCreatedArchId);
+    if (!user?.uid) return;
+    if (justCreatedArchId) {
+      // Clear any existing timeout
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
       }
-    } else if (!user?.uid) {
-      // Reset sync flag when user signs out
-      setHasInitialSync(false);
       
-      // User signed out - reset to clean state
-      const newArchTab = {
-        id: 'new-architecture',
-        name: 'New Architecture',
-        timestamp: new Date(),
-        rawGraph: { id: "root", children: [], edges: [] },
-        isNew: true
-      };
-      
-      // In public mode, only show "New Architecture"
-      if (isPublicMode) {
-        setSavedArchitectures([newArchTab]);
-      } else if (isLoadingArchitectures) {
-        // When loading, show only "New Architecture" but don't override if we already have architectures
-        console.log('🔄 User signed out but still loading - showing only New Architecture');
-        setSavedArchitectures([newArchTab]);
-      } else {
-        // Only show New Architecture when signed out (no mock architectures)
-        setSavedArchitectures([newArchTab]);
-      }
-      setSelectedArchitectureId('new-architecture');
+      // Only sync once when user signs in
+      // Initial sync for user
+      syncWithFirebase(user.uid);
+      setHasInitialSync(true);
     }
     
-    // Cleanup timeout on unmount
     return () => {
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current);
       }
     };
-  }, [user, justCreatedArchId, isPublicMode, hasInitialSync]);
+  }, [user, justCreatedArchId, syncWithFirebase]);
 
   // Handle pending architecture selection after savedArchitectures state is updated
   useEffect(() => {
@@ -334,90 +582,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   
   
-  // StreamViewer is now standalone and doesn't need refs
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  // UI state now managed by useCanvasState hook
   
-  // State for current chat name
-  const [currentChatName, setCurrentChatName] = useState<string>('New Architecture');
+  // Notification functions now provided by modal manager
   
-  // State for share overlay (for embedded version when clipboard fails)
-  const [shareOverlay, setShareOverlay] = useState<{ show: boolean; url: string; error?: string; copied?: boolean }>({ show: false, url: '' });
-  const [copyButtonState, setCopyButtonState] = useState<'idle' | 'copying' | 'success'>('idle');
-  const [inputOverlay, setInputOverlay] = useState<{ 
-    show: boolean; 
-    title: string; 
-    placeholder: string; 
-    defaultValue: string; 
-    onConfirm: (value: string) => void; 
-    onCancel: () => void; 
-  }>({ 
-    show: false, 
-    title: '', 
-    placeholder: '', 
-    defaultValue: '', 
-    onConfirm: () => {}, 
-    onCancel: () => {} 
-  });
-  const [deleteOverlay, setDeleteOverlay] = useState<{
-    show: boolean;
-    title: string;
-    message: string;
-    onConfirm: () => void;
-    onCancel: () => void;
-  }>({
-    show: false,
-    title: '',
-    message: '',
-    onConfirm: () => {},
-    onCancel: () => {}
-  });
-  
-  // Universal notification system (replaces all alert/confirm popups)
-  const [notification, setNotification] = useState<{
-    show: boolean;
-    type: 'success' | 'error' | 'info' | 'confirm';
-    title: string;
-    message: string;
-    onConfirm?: () => void;
-    onCancel?: () => void;
-    confirmText?: string;
-    cancelText?: string;
-  }>({ show: false, type: 'info', title: '', message: '' });
-  
-  // State for tracking operations per architecture
-  const [architectureOperations, setArchitectureOperations] = useState<Record<string, boolean>>({});
-  
-  // Helper function to show notifications (replaces alerts)
-  const showNotification = useCallback((
-    type: 'success' | 'error' | 'info' | 'confirm',
-    title: string,
-    message: string,
-    options?: {
-      onConfirm?: () => void;
-      onCancel?: () => void;
-      confirmText?: string;
-      cancelText?: string;
-    }
-  ) => {
-    setNotification({
-      show: true,
-      type,
-      title,
-      message,
-      onConfirm: options?.onConfirm,
-      onCancel: options?.onCancel,
-      confirmText: options?.confirmText || 'OK',
-      cancelText: options?.cancelText || 'Cancel'
-    });
-  }, []);
-
-  const hideNotification = useCallback(() => {
-    setNotification({ show: false, type: 'info', title: '', message: '' });
-  }, []);
-  
-  // Canvas tool selection state (FREE by default - selection tool)
-  const [selectedTool, setSelectedTool] = useState<"select" | "box" | "connector" | "group">("select");
+  // Tool selection state now managed by useCanvasState hook
   
   // Helper functions for operation tracking
   const setArchitectureOperationState = useCallback((architectureId: string, isRunning: boolean) => {
@@ -442,197 +611,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     return uniqueName;
   }, []);
   
-  // State for selected nodes and edges (for delete functionality)
-  const [selectedNodes, setSelectedNodes] = useState<Node[]>([]);
-  const [selectedEdges, setSelectedEdges] = useState<Edge[]>([]);
-
-  // Sidebar handlers for ellipsis menu
-  const handleDeleteArchitecture = async (architectureId: string) => {
-    if (architectureId === 'new-architecture') {
-      showNotification('error', 'Cannot Delete', 'Cannot delete the "New Architecture" tab');
-      return;
-    }
-
-    const architecture = savedArchitectures.find(arch => arch.id === architectureId);
-    if (!architecture) {
-      console.warn('⚠️ Architecture not found for deletion:', architectureId);
-      showNotification('error', 'Architecture Not Found', 'The selected architecture could not be found.');
-      return;
-    }
-
-    // Show delete confirmation overlay
-    setDeleteOverlay({
-      show: true,
-      title: 'Delete Architecture',
-      message: `Are you sure you want to delete "${architecture.name}"? This action cannot be undone.`,
-      onConfirm: async () => {
-        setDeleteOverlay(prev => ({ ...prev, show: false }));
-        
-      try {
-        // Always attempt to delete from Firebase if user is signed in
-        if (user?.uid) {
-          const firebaseId = architecture.firebaseId || architecture.id;
-          console.log('🗑️ Attempting to delete from Firebase:', firebaseId);
-          
-          try {
-            await ArchitectureService.deleteArchitecture(firebaseId);
-            console.log('✅ Architecture deleted from Firebase:', firebaseId);
-          } catch (firebaseError: any) {
-            if (firebaseError.code === 'not-found' || firebaseError.message?.includes('NOT_FOUND')) {
-              console.log('ℹ️ Architecture was not in Firebase, only removing locally');
-            } else {
-              console.error('❌ Failed to delete from Firebase:', firebaseError);
-              // Don't block local deletion if Firebase fails
-            }
-          }
-        }
-
-        // Remove from local state
-        setSavedArchitectures(prev => prev.filter(arch => arch.id !== architectureId));
-        
-        // If the deleted architecture was selected, switch to "New Architecture"
-        if (selectedArchitectureId === architectureId) {
-          setSelectedArchitectureId('new-architecture');
-          const emptyGraph = { id: "root", children: [], edges: [] };
-          setRawGraph(emptyGraph);
-        }
-
-        console.log('✅ Architecture deleted locally and from Firebase');
-          showNotification('success', 'Deleted', `Architecture "${architecture.name}" has been deleted`);
-        
-      } catch (error) {
-        console.error('❌ Error deleting architecture:', error);
-          showNotification('error', 'Delete Failed', `Failed to delete architecture: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
-      },
-      onCancel: () => {
-        setDeleteOverlay(prev => ({ ...prev, show: false }));
-    }
-    });
-  };
-
-  const handleShareArchitecture = async (architectureId: string) => {
-    const architecture = savedArchitectures.find(arch => arch.id === architectureId);
-    if (!architecture) {
-      console.warn('⚠️ Architecture not found for sharing:', architectureId);
-      showNotification('error', 'Architecture Not Found', 'The selected architecture could not be found.');
-      return;
-    }
-
-    try {
-      console.log('📤 Sharing architecture from sidebar:', architectureId, architecture.name);
-      
-      // Create a shareable anonymous copy so anonymous users can access it
-      console.log('📤 Creating shareable anonymous copy of architecture:', architecture.name);
-      
-      let anonymousId;
-      try {
-        anonymousId = await anonymousArchitectureService.saveAnonymousArchitecture(
-          `${architecture.name} (Shared)`,
-          architecture.rawGraph,
-          architecture.userPrompt  // Include userPrompt when sharing
-        );
-      } catch (error) {
-        console.warn('⚠️ Share creation throttled:', error.message);
-        showNotification('error', 'Share Throttled', 'Please wait a moment before sharing again.');
-        return;
-      }
-      
-      // Create shareable URL using the anonymous copy ID
-      if (typeof window === 'undefined') return;
-      const currentUrl = new URL(window.location.href);
-      currentUrl.searchParams.set('arch', anonymousId);
-      const shareUrl = currentUrl.toString();
-      
-      // Always show overlay, try clipboard as enhancement
-      const clipboardSuccess = await copyToClipboard(shareUrl, {
-        successMessage: 'Sidebar share link copied to clipboard',
-        errorMessage: 'Failed to copy sidebar share link',
-        showFeedback: false // Already logging ourselves
-      });
-      
-      // Always show overlay regardless of clipboard success
-      setShareOverlay({ show: true, url: shareUrl, copied: clipboardSuccess });
-      
-      console.log('✅ Architecture share link created:', shareUrl);
-    } catch (error) {
-      console.error('❌ Failed to share architecture:', error);
-      showNotification('error', 'Share Failed', 'Failed to create share link. Please try again.');
-    }
-  };
-
-  const handleEditArchitecture = (architectureId: string) => {
-    const architecture = savedArchitectures.find(arch => arch.id === architectureId);
-    if (!architecture) {
-      console.warn('⚠️ Architecture not found for editing:', architectureId);
-      showNotification('error', 'Architecture Not Found', 'The selected architecture could not be found.');
-      return;
-    }
-
-    // Show input overlay for renaming
-    setInputOverlay({
-      show: true,
-      title: 'Rename Architecture',
-      placeholder: 'Enter architecture name',
-      defaultValue: architecture.name,
-      onConfirm: (newName: string) => {
-        setInputOverlay(prev => ({ ...prev, show: false }));
-        
-    if (newName && newName.trim() && newName !== architecture.name) {
-      // Ensure the new name is unique
-      const otherArchitectures = savedArchitectures.filter(arch => arch.id !== architectureId);
-      const uniqueName = ensureUniqueName(newName.trim(), otherArchitectures);
-      
-      if (uniqueName !== newName.trim()) {
-            showNotification('confirm', 'Name Already Exists', `The name "${newName.trim()}" already exists. Use "${uniqueName}" instead?`, {
-              onConfirm: () => {
-                hideNotification();
-                performRename(architectureId, uniqueName);
-              },
-              onCancel: hideNotification,
-              confirmText: 'Use New Name',
-              cancelText: 'Cancel'
-            });
-            return;
-          }
-          
-          performRename(architectureId, uniqueName);
-        }
-      },
-      onCancel: () => {
-        setInputOverlay(prev => ({ ...prev, show: false }));
-      }
-    });
-  };
-
-  const performRename = (architectureId: string, newName: string) => {
-    const architecture = savedArchitectures.find(arch => arch.id === architectureId);
-    if (!architecture) return;
-      
-      // Update locally
-      setSavedArchitectures(prev => prev.map(arch => 
-        arch.id === architectureId 
-        ? { ...arch, name: newName }
-          : arch
-      ));
-
-      // Update in Firebase if it exists there
-      if (architecture.isFromFirebase && user?.uid) {
-        const firebaseId = architecture.firebaseId || architecture.id;
-      ArchitectureService.updateArchitecture(firebaseId, { name: newName })
-        .then(() => {
-          console.log('✅ Architecture name updated in Firebase');
-          showNotification('success', 'Renamed Successfully', `Architecture renamed to "${newName}"`);
-        })
-        .catch(error => {
-          console.error('❌ Error updating name in Firebase:', error);
-          showNotification('error', 'Update Failed', 'Failed to update name in the cloud. Changes saved locally.');
-        });
-    } else {
-      showNotification('success', 'Renamed Successfully', `Architecture renamed to "${newName}"`);
-    }
-  };
-
   // Placeholder for handleChatSubmit - will be defined after rawGraph and handleGraphChange are available
 
   // Auth state listener moved to after config is defined
@@ -691,25 +669,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   //   }
   // };
   
-  // State for visualization mode (ReactFlow vs SVG)
-  const [useReactFlow, setUseReactFlow] = useState(true);
-  
-  // State for SVG content when in SVG mode
-  const [svgContent, setSvgContent] = useState<string | null>(null);
-  
-  // State for SVG zoom
-  const [svgZoom, setSvgZoom] = useState(1);
-  
-  // State for SVG pan
-  const [svgPan, setSvgPan] = useState({ x: 0, y: 0 });
-  
   const svgContainerRef = useRef<HTMLDivElement>(null);
-  
-  // New state for showing debug information
-  const [showElkDebug, setShowElkDebug] = useState(false);
-  
-  // State for sync button
-  const [isSyncing, setIsSyncing] = useState(false);
   
   // Function to extract only core structural data (no layout/rendering config)
   const getStructuralData = useCallback((graph: any) => {
@@ -806,6 +766,46 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     children: [],
     edges: []
   }, selectedTool);
+
+  // Use extracted ViewState snapshot utility
+  const getViewStateSnapshot = useCallback(() => {
+    return createViewStateSnapshot(nodes, viewStateRef, isHydratingRef);
+  }, [nodes, viewStateRef, isHydratingRef]);
+
+  // Initialize services after hooks are available
+  const architectureService = useMemo(() => new CanvasArchitectureService({
+    user,
+    savedArchitectures,
+    setSavedArchitectures,
+    selectedArchitectureId,
+    setSelectedArchitectureId,
+    setCurrentChatName,
+    setRawGraph,
+    viewStateRef,
+    getViewStateSnapshot,
+    showNotification,
+    hideNotification,
+    setDeleteOverlay,
+    setInputOverlay,
+    setShareOverlay
+  }), [user, savedArchitectures, setSavedArchitectures, selectedArchitectureId, setSelectedArchitectureId, setCurrentChatName, setRawGraph, viewStateRef, getViewStateSnapshot, showNotification, hideNotification, setDeleteOverlay, setInputOverlay, setShareOverlay]);
+
+  const handleDeleteArchitecture = architectureService.handleDeleteArchitecture;
+  const handleShareArchitecture = architectureService.handleShareArchitecture;
+  const handleEditArchitecture = architectureService.handleEditArchitecture;
+
+  const saveService = useMemo(() => new CanvasSaveService({
+    user,
+    selectedArchitectureId,
+    savedArchitectures,
+    setSavedArchitectures,
+    rawGraph,
+    isPublicMode,
+    getViewStateSnapshot,
+    isHydratingRef,
+    dirtySinceRef,
+    remoteSaveTimeoutRef
+  }), [user, selectedArchitectureId, savedArchitectures, setSavedArchitectures, rawGraph, isPublicMode, getViewStateSnapshot, isHydratingRef, dirtySinceRef, remoteSaveTimeoutRef]);
 
   // Canvas tool selection handler (defined after setNodes is available)
   const handleToolSelect = useCallback((tool: typeof selectedTool) => {
@@ -993,26 +993,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     }
   }, [isPublicMode, viewModeConfig.mode]);
 
-    // Real-time sync: Auto-save current canvas to Firebase when state changes
-  const [realtimeSyncId, setRealtimeSyncId] = useState<string | null>(null);
-  const [isRealtimeSyncing, setIsRealtimeSyncing] = useState(false);
-
-  // Auto-save for anonymous architectures (when not signed in)
-  useEffect(() => {
-    // Only auto-save when not signed in and when there's actual content
-    if (!user && rawGraph?.children && rawGraph.children.length > 0) {
-      // Debounce saves to prevent loops
-      const timeoutId = setTimeout(async () => {
-        await autoSaveAnonymous({
-          rawGraph,
-          anonymousService: anonymousArchitectureService
-        });
-      }, 2000); // 2 second debounce
-      
-      return () => clearTimeout(timeoutId);
-    }
-  }, [rawGraph, user]);
-
   // Reset real-time sync when switching away from "New Architecture"
   useEffect(() => {
     if (selectedArchitectureId !== 'new-architecture') {
@@ -1066,17 +1046,22 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         
         // Save as new architecture
         const now = new Date();
+        const chatMessages = normalizeChatMessages(getCurrentConversation()) ?? [];
+        const viewStateSnapshot = getViewStateSnapshot();
+        const rawGraphWithViewState = viewStateSnapshot ? { ...rawGraph, viewState: viewStateSnapshot } : rawGraph;
         const docId = await ArchitectureService.saveArchitecture({
           name: newChatName,
           userId: user.uid,
           userEmail: user.email || '',
-          rawGraph: rawGraph,
+          rawGraph: rawGraphWithViewState,
           nodes: [], // React Flow nodes will be generated
           edges: [], // React Flow edges will be generated
           userPrompt: userPrompt || 'Manually saved architecture',
           timestamp: now,
           createdAt: now,
-          lastModified: now
+          lastModified: now,
+          chatMessages,
+          viewState: viewStateSnapshot
         });
         
         console.log('✅ New architecture saved with ID:', docId);
@@ -1089,9 +1074,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           timestamp: now,
           createdAt: now,
           lastModified: now,
-          rawGraph: rawGraph,
+          rawGraph: rawGraphWithViewState,
           userPrompt: userPrompt || 'Manually saved architecture',
-          isFromFirebase: true
+          isFromFirebase: true,
+          chatMessages,
+          viewState: viewStateSnapshot
         };
         
         // Update architectures list - put newly saved architecture first
@@ -1120,20 +1107,35 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       const firebaseId = currentArch.firebaseId || currentArch.id;
 
       // Update Firebase
+      const chatMessages = normalizeChatMessages(getCurrentConversation()) ?? [];
+      const viewStateSnapshot = getViewStateSnapshot();
+      const rawGraphWithViewState = viewStateSnapshot ? { ...rawGraph, viewState: viewStateSnapshot } : rawGraph;
       await ArchitectureService.updateArchitecture(firebaseId, {
-        rawGraph: rawGraph,
+        rawGraph: rawGraphWithViewState,
         nodes: nodes,
         edges: edges,
+        chatMessages,
+        viewState: viewStateSnapshot,
       });
 
       console.log('✅ Architecture manually saved to Firebase');
+      setSavedArchitectures(prev => prev.map(arch =>
+        arch.id === selectedArchitectureId
+          ? { ...arch, chatMessages, rawGraph: rawGraphWithViewState, viewState: viewStateSnapshot }
+          : arch
+      ));
     } catch (error) {
       console.error('❌ Error manually saving architecture:', error);
       showNotification('error', 'Save Failed', `Failed to save: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSaving(false);
+      if (remoteSaveTimeoutRef.current) {
+        clearTimeout(remoteSaveTimeoutRef.current);
+        remoteSaveTimeoutRef.current = null;
+      }
+      dirtySinceRef.current = null;
     }
-  }, [user, selectedArchitectureId, savedArchitectures, rawGraph, nodes, edges]);
+  }, [user, selectedArchitectureId, savedArchitectures, rawGraph, nodes, edges, getViewStateSnapshot]);
 
   // Handler for canvas save - authenticate first, then save
   const handleCanvasSave = useCallback(async () => {
@@ -1193,10 +1195,13 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           const architectureName = await generateNameWithFallback(rawGraph, effectivePrompt);
           
           // Save as anonymous architecture and get shareable ID
+          const viewStateSnapshot = getViewStateSnapshot();
+          const rawGraphWithViewState = viewStateSnapshot ? { ...rawGraph, viewState: viewStateSnapshot } : rawGraph;
           const anonymousId = await ensureAnonymousSaved({
-            rawGraph,
+            rawGraph: rawGraphWithViewState,
             userPrompt: effectivePrompt,
-            anonymousService: anonymousArchitectureService
+            anonymousService: anonymousArchitectureService,
+            metadata: viewStateSnapshot ? { viewState: viewStateSnapshot } : undefined
           });
           console.log('✅ Anonymous architecture saved with ID:', anonymousId);
           
@@ -1260,8 +1265,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           // Create anonymous copy for sharing
           const anonymousId = await createAnonymousShare({
             architectureName: architecture.name,
-            rawGraph: architecture.rawGraph,
-            anonymousService: anonymousArchitectureService
+            rawGraph: architecture.viewState ? { ...architecture.rawGraph, viewState: architecture.viewState } : architecture.rawGraph,
+            anonymousService: anonymousArchitectureService,
+            viewState: architecture.viewState || (viewStateRef.current ? JSON.parse(JSON.stringify(viewStateRef.current)) : undefined),
           });
           console.log('✅ Shareable anonymous copy created:', anonymousId);
           
@@ -1329,7 +1335,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         showNotification('error', 'Share Failed', errorMessage);
       }
     }
-  }, [selectedArchitectureId, handleShareArchitecture, user, rawGraph, anonymousArchitectureService]);
+  }, [selectedArchitectureId, handleShareArchitecture, user, rawGraph, anonymousArchitectureService, getViewStateSnapshot]);
 
   // Initialize with empty canvas for "New Architecture" tab
   // Only reset when switching TO "new-architecture", not when already on it
@@ -1386,16 +1392,21 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       const architectureName = await generateNameWithFallback(rawGraph, effectivePrompt);
       
       // Prepare the architecture data for saving with validation
+      const chatMessages = normalizeChatMessages(getCurrentConversation()) ?? [];
+      const viewStateSnapshot = getViewStateSnapshot();
+      const rawGraphWithViewState = viewStateSnapshot ? { ...rawGraph, viewState: viewStateSnapshot } : rawGraph;
       const architectureData = {
         name: architectureName, // No fallback - must be AI-generated
         description: `Architecture with ${nodes.length} components and ${edges.length} connections`,
-        rawGraph: rawGraph || {},
+        rawGraph: rawGraphWithViewState || {},
         nodes: nodes || [],
         edges: edges || [],
         userId: user.uid,
         userEmail: user.email,
         isPublic: false, // Private by default
-        tags: [] // Could be enhanced to auto-generate tags based on content
+        tags: [], // Could be enhanced to auto-generate tags based on content
+        chatMessages,
+        viewState: viewStateSnapshot
       };
       
       console.log('📊 Saving architecture data:', {
@@ -1439,32 +1450,10 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       
       showNotification('error', 'Save Failed', errorMessage);
     }
-  }, [rawGraph, nodes, edges]);
+  }, [rawGraph, nodes, edges, getViewStateSnapshot]);
 
-  // Sidebar handlers
-  const handleNewArchitecture = useCallback(() => {
-    // Reset to "New Architecture" tab
-    console.log('🆕 [DEBUG] handleNewArchitecture called - clearing canvas');
-    console.trace('🆕 [DEBUG] Stack trace for handleNewArchitecture');
-    setSelectedArchitectureId('new-architecture');
-    setCurrentChatName('New Architecture');
-    
-    // Clear the canvas by setting empty graph
-    const emptyGraph = {
-      id: "root",
-      children: [],
-      edges: []
-    };
-    setRawGraph(emptyGraph);
-    
-    // Reset the "New Architecture" tab name in case it was changed
-    setSavedArchitectures(prev => prev.map(arch => 
-      arch.id === 'new-architecture' 
-        ? { ...arch, name: 'New Architecture', isNew: true, rawGraph: emptyGraph }
-        : arch
-    ));
-    
-  }, [setRawGraph]);
+  // Sidebar handlers now provided by service
+  const handleNewArchitecture = architectureService.handleNewArchitecture;
 
   // URL Architecture management
   const loadArchitectureFromUrl = useCallback((architecture: any, source: string) => {
@@ -1476,8 +1465,25 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     });
     
     if (architecture.rawGraph) {
+      let viewStateSnapshot = undefined;
+      if (architecture.viewState) {
+        try {
+          viewStateSnapshot = JSON.parse(JSON.stringify(architecture.viewState));
+        } catch (error) {
+          console.warn('⚠️ [URL-ARCH] Failed to clone viewState snapshot:', error);
+          viewStateSnapshot = architecture.viewState;
+        }
+        viewStateRef.current = viewStateSnapshot ?? { node: {}, group: {}, edge: {} };
+      } else {
+        viewStateRef.current = viewStateRef.current || { node: {}, group: {}, edge: {} };
+      }
+
+      const graphWithViewState = viewStateSnapshot
+        ? { ...architecture.rawGraph, viewState: viewStateSnapshot }
+        : architecture.rawGraph;
+
       // Set the content
-      setRawGraph(architecture.rawGraph);
+      setRawGraph(graphWithViewState);
       setCurrentChatName(architecture.name);
       
       // Create architecture object for tab (ensure it has proper structure)
@@ -1485,10 +1491,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         id: architecture.id,
         name: architecture.name,
         timestamp: architecture.timestamp || new Date(),
-        rawGraph: architecture.rawGraph,
+        rawGraph: graphWithViewState,
         userPrompt: architecture.userPrompt || '',
         firebaseId: architecture.firebaseId || architecture.id,
         isFromFirebase: true,
+        viewState: viewStateSnapshot,
         isFromUrl: true
       };
       
@@ -1524,9 +1531,11 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     // Save current architecture before switching (if it has content and is not the same architecture)
     if (selectedArchitectureId !== architectureId && rawGraph?.children && rawGraph.children.length > 0) {
       console.log('💾 Saving current architecture before switching:', selectedArchitectureId);
+      const viewStateSnapshot = getViewStateSnapshot();
+      const rawGraphWithViewState = viewStateSnapshot ? { ...rawGraph, viewState: viewStateSnapshot } : rawGraph;
       setSavedArchitectures(prev => prev.map(arch => 
         arch.id === selectedArchitectureId 
-          ? { ...arch, rawGraph: rawGraph, timestamp: new Date() }
+          ? { ...arch, rawGraph: rawGraphWithViewState, viewState: viewStateSnapshot, timestamp: new Date() }
           : arch
       ));
     }
@@ -1551,18 +1560,44 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       setCurrentChatName(architecture.name);
       console.log('🏷️ Updated chat name to:', architecture.name);
       console.log('🏷️ Selected architecture details:', { id: architecture.id, name: architecture.name, hasRawGraph: !!architecture.rawGraph });
+
+      if (architecture.chatMessages && architecture.chatMessages.length > 0) {
+        try {
+          const mergedConversation = mergeChatMessages(
+            getCurrentConversation(),
+            normalizeChatMessages(architecture.chatMessages)
+          );
+          if (mergedConversation && mergedConversation.length > 0) {
+            const serialized = JSON.stringify(mergedConversation);
+            localStorage.setItem('atelier_current_conversation', serialized);
+            (window as any).__atelierLastConversation = serialized;
+            console.log('💬 [ARCH-SELECT] Hydrated chat from architecture:', mergedConversation.length);
+          }
+        } catch (error) {
+          console.warn('⚠️ [ARCH-SELECT] Failed to hydrate chat for architecture:', error);
+        }
+      }
       
       // Use typed event system for architecture loading
+      const viewStateSnapshot = sanitizeStoredViewState(architecture.viewState);
+      viewStateRef.current = viewStateSnapshot ?? createEmptyViewState();
+
+      const rawGraphWithViewState = viewStateSnapshot
+        ? { ...architecture.rawGraph, viewState: viewStateSnapshot }
+        : architecture.rawGraph;
+
       dispatchElkGraph({
-        elkGraph: assertRawGraph(architecture.rawGraph, 'ArchitectureSelector'),
+        elkGraph: assertRawGraph(rawGraphWithViewState, 'ArchitectureSelector'),
         source: 'ArchitectureSelector',
-        reason: 'architecture-load'
+        reason: 'architecture-load',
+        viewState: viewStateSnapshot,
+        targetArchitectureId: architecture.id
       });
     } else {
       console.warn('⚠️ Architecture not found:', architectureId);
       console.warn('⚠️ Available architectures:', savedArchitectures.map(arch => ({ id: arch.id, name: arch.name })));
     }
-  }, [savedArchitectures, agentLockedArchitectureId, setCurrentChatName, selectedArchitectureId, rawGraph]);
+  }, [savedArchitectures, agentLockedArchitectureId, setCurrentChatName, selectedArchitectureId, rawGraph, getViewStateSnapshot]);
 
   // Ensure currentChatName stays in sync with selectedArchitectureId
   useEffect(() => {
@@ -1606,101 +1641,56 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     setSidebarCollapsed(prev => !prev);
   }, []);
 
+  // Save functions now provided by service
+  const flushRemoteSave = saveService.flushRemoteSave;
+  const requestRemoteSave = saveService.requestRemoteSave;
+  const markDirty = saveService.markDirty;
+
   // Handler for graph changes from DevPanel or manual interactions
-  const handleGraphChange = useCallback(async (newGraph: RawGraph) => {
+  const handleGraphChange = useCallback(async (
+    newGraph: RawGraph,
+    options: { source?: 'ai' | 'user' } = {}
+  ) => {
     console.group('[Graph Change] Manual/DevPanel Update');
     console.log('raw newGraph:', newGraph);
     console.log('Previous rawGraph had', rawGraph?.children?.length || 0, 'children');
     console.log('New graph has', newGraph?.children?.length || 0, 'children');
-    
-    // Update the local state immediately
-    setRawGraph(newGraph);
-    console.log('…called setRawGraph');
-    
-    // Save to Firebase (signed in) or anonymous storage (public mode)
-    if (user && selectedArchitectureId !== 'new-architecture') {
-      console.log('🔄 Updating Firebase for manual graph change...');
-      try {
-        const architecture = savedArchitectures.find(arch => arch.id === selectedArchitectureId);
-        console.log('🔍 Found architecture for update:', { 
-          id: architecture?.id, 
-          isFromFirebase: architecture?.isFromFirebase,
-          hasFirebaseId: !!architecture?.firebaseId 
-        });
-        
-        if (architecture) {
-          // Try to update in Firebase if this architecture exists there
-          const firebaseId = architecture.firebaseId || architecture.id;
-          console.log('🔄 Attempting Firebase update with ID:', firebaseId);
-          
-          try {
-            await ArchitectureService.updateArchitecture(firebaseId, {
-              rawGraph: newGraph
-            });
-            console.log('✅ Firebase updated for manual graph change');
-            
-            // Mark as from Firebase if update was successful
-            if (!architecture.isFromFirebase) {
-              setSavedArchitectures(prev => prev.map(arch => 
-                arch.id === selectedArchitectureId 
-                  ? { ...arch, isFromFirebase: true, firebaseId }
-                  : arch
-              ));
-            }
-          } catch (error: any) {
-            if (error.code === 'not-found' || error.message?.includes('NOT_FOUND')) {
-              console.log('📝 Architecture not in Firebase, creating new document...');
-              try {
-                const newDocId = await ArchitectureService.saveArchitecture({
-                  name: architecture.name,
-                  userId: user.uid,
-                  userEmail: user.email || '',
-                  rawGraph: newGraph,
-                  userPrompt: architecture.userPrompt || ''
-                });
-                console.log('✅ New Firebase document created:', newDocId);
-                
-                // Update local state with Firebase ID
-                setSavedArchitectures(prev => prev.map(arch => 
-                  arch.id === selectedArchitectureId 
-                    ? { ...arch, firebaseId: newDocId, isFromFirebase: true }
-                    : arch
-                ));
-              } catch (saveError) {
-                console.error('❌ Failed to create new Firebase document:', saveError);
-              }
-            } else {
-              throw error; // Re-throw if it's not a "not found" error
-            }
-          }
-        } else {
-          console.log('⚠️ Architecture not found for Firebase update');
-        }
-      } catch (error) {
-        console.error('❌ Error updating Firebase for manual graph change:', error);
+
+    let finalGraph: RawGraph;
+
+    if (options.source === 'ai') {
+      const aiGraph = structuredClone(newGraph) as RawGraph & { viewState?: unknown };
+      if ('viewState' in aiGraph) {
+        delete (aiGraph as any).viewState;
       }
-    } else if (isPublicMode && !user && newGraph?.children && newGraph.children.length > 0) {
-      // Save or update anonymous architecture in public mode when there's actual content
-      // But skip if user is signed in (architecture may have been transferred)
-      console.log('💾 Saving/updating anonymous architecture in public mode...');
-      const userPrompt = (window as any).originalChatTextInput || (window as any).chatTextInput || '';
-      
-      try {
-        await ensureAnonymousSaved({
-            rawGraph: newGraph,
-          userPrompt,
-          anonymousService: anonymousArchitectureService
-        });
-        console.log('✅ Anonymous architecture saved/updated successfully');
-      } catch (error) {
-        console.error('❌ Error saving/updating anonymous architecture:', error);
-      }
-    } else if (isPublicMode && user) {
-      console.log('🚫 DEBUG: Skipping anonymous architecture update in handleGraphChange - user is signed in, architecture may have been transferred');
+      viewStateRef.current = createEmptyViewState();
+      restoreNodeVisuals(aiGraph, rawGraph);
+      finalGraph = aiGraph;
+    } else {
+      const viewStateSnapshot = getViewStateSnapshot();
+      finalGraph = viewStateSnapshot ? { ...newGraph, viewState: viewStateSnapshot } : newGraph;
     }
     
+    // Update the local state immediately
+    setRawGraph(finalGraph, options.source === 'ai' ? 'ai' : undefined);
+    console.log('…called setRawGraph');
+
+    markDirty();
+    
     console.groupEnd();
-  }, [setRawGraph, rawGraph, user, selectedArchitectureId, savedArchitectures, isPublicMode]);
+  }, [setRawGraph, rawGraph, getViewStateSnapshot, markDirty]);
+
+  const chatService = useMemo(() => new CanvasChatService({
+    selectedArchitectureId,
+    setArchitectureOperationState: (id: string, isRunning: boolean) => {
+      setArchitectureOperations(prev => ({ ...prev, [id]: isRunning }));
+    },
+    rawGraph,
+    handleGraphChange: (graph: any) => {
+      handleGraphChange(graph, { source: 'ai' });
+    },
+    layoutError
+  }), [selectedArchitectureId, setArchitectureOperations, rawGraph, handleGraphChange, layoutError]);
 
   // Helper function to extract complete graph state for the agent
   const extractCompleteGraphState = (graph: any) => {
@@ -2096,13 +2086,18 @@ Adapt these patterns to your specific requirements while maintaining the overall
   
   // Ref to store ReactFlow instance for auto-zoom functionality
   const reactFlowRef = useRef<any>(null);
-  const pendingSelectionRef = useRef<{ id: string; size?: { width: number; height: number } } | null>(null);
+  const embedChatChannelRef = useRef<BroadcastChannel | null>(null);
   
-  // Note: Using nodes state directly in handleToolSelect instead of ref to avoid stale closures
+useEffect(() => {
+  return () => {
+    if (remoteSaveTimeoutRef.current) {
+      clearTimeout(remoteSaveTimeoutRef.current);
+      remoteSaveTimeoutRef.current = null;
+    }
+  };
+}, []);
 
-  // Removed individual tracking refs - now using unified fitView approach
-  // Track agent busy state to disable input while drawing
-  const [agentBusy, setAgentBusy] = useState(false);
+  // Note: Using nodes state directly in handleToolSelect instead of ref to avoid stale closures
 
   // Manual fit view function that can be called anytime
   const manualFitView = useCallback(() => {
@@ -2276,18 +2271,11 @@ Adapt these patterns to your specific requirements while maintaining the overall
     };
   }, [selectedNodes, selectedEdges, rawGraph, handleGraphChange]);
   
-  // Edge creation: track source node and handle when starting a connection
-  const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
-  const [connectingFromHandle, setConnectingFromHandle] = useState<string | null>(null);
-
-  // Track mouse position for edge preview
-  const [connectionMousePos, setConnectionMousePos] = useState<{ x: number; y: number } | null>(null);
+  // Edge creation handled by useCanvasState
 
   const handleConnectStart = useCallback((_e: any, params: OnConnectStartParams) => {
-    // DISABLED: We don't want ReactFlow's default drag-to-connect
-    // Only our custom click-to-connect via handleConnectorDotClick should work
-    // This prevents the bezier edge from appearing when dragging
-    return;
+    setConnectingFrom(params.nodeId ?? null);
+    setConnectingFromHandle(params.handleId ?? null);
   }, []);
 
   const handleConnectEnd = useCallback((event: any) => {
@@ -2343,9 +2331,13 @@ Adapt these patterns to your specific requirements while maintaining the overall
     }
     
     // Otherwise, start a new connection
+    const sourceHandleId = handleId.includes('target')
+      ? handleId.replace('target', 'source')
+      : handleId;
+
     setConnectingFrom(nodeId);
-    setConnectingFromHandle(handleId);
-    console.log('✅ [handleConnectorDotClick] Set connectingFrom:', { nodeId, handleId });
+    setConnectingFromHandle(sourceHandleId);
+    console.log('✅ [handleConnectorDotClick] Set connectingFrom:', { nodeId, handleId: sourceHandleId });
     
     // Track mouse movement to show edge preview (always show when connecting)
     const handleMouseMove = (e: MouseEvent) => {
@@ -2473,23 +2465,251 @@ Adapt these patterns to your specific requirements while maintaining the overall
 
   // Create node types with handlers - memoized to prevent recreation
   // Use useCallback for each node type component to prevent ReactFlow warnings
-  const CustomNodeWrapper = useCallback((props: any) => {
-    return <CustomNodeComponent {...props} onLabelChange={handleLabelChange} selectedTool={selectedTool} connectingFrom={connectingFrom} connectingFromHandle={connectingFromHandle} onConnectorDotClick={handleConnectorDotClick} />;
-  }, [handleLabelChange, selectedTool, connectingFrom, connectingFromHandle, handleConnectorDotClick]);
-  
-  const GroupNodeWrapper = useCallback(
-    (props: any) => <DraftGroupNode {...props} onAddNode={handleAddNodeToGroup} />,
-    [handleAddNodeToGroup]
+  const memoizedNodeTypes = useMemo(
+    () => ({
+      custom: CustomNodeComponent,
+      group: DraftGroupNode,
+    }),
+    []
   );
   
-  const memoizedNodeTypes = useMemo(() => {
-    return {
-      custom: CustomNodeWrapper,
-      group: GroupNodeWrapper,
-    };
-  }, [CustomNodeWrapper, GroupNodeWrapper]);
-  
   const memoizedEdgeTypes = useMemo(() => edgeTypes, []);
+
+  const nodeInteractionValue = useMemo(
+    () => ({
+      selectedTool,
+      connectingFrom,
+      connectingFromHandle,
+      handleConnectorDotClick,
+      handleLabelChange,
+      handleAddNodeToGroup,
+    }),
+    [
+      selectedTool,
+      connectingFrom,
+      connectingFromHandle,
+      handleConnectorDotClick,
+      handleLabelChange,
+      handleAddNodeToGroup,
+    ]
+  );
+
+  useEffect(() => {
+    const viewStateNodes = rawGraph?.viewState?.node;
+    const nodeCount = viewStateNodes ? Object.keys(viewStateNodes).length : 0;
+    if (
+      nodeCount > 0 &&
+      nodes.length === 0 &&
+      selectedArchitectureId &&
+      selectedArchitectureId !== hydratedArchitectureIdRef.current
+    ) {
+      isHydratingRef.current = true;
+      expectedHydratedNodeCountRef.current = nodeCount;
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[HYDRATION] Detected incoming viewState, waiting for stabilization', {
+          expectedNodes: nodeCount,
+          architectureId: selectedArchitectureId,
+        });
+      }
+    }
+  }, [rawGraph, nodes.length, selectedArchitectureId]);
+
+  useEffect(() => {
+    if (!isHydratingRef.current) return;
+    const expected = expectedHydratedNodeCountRef.current;
+    if (!expected) {
+      isHydratingRef.current = false;
+      hydratedArchitectureIdRef.current = selectedArchitectureId || null;
+      return;
+    }
+    if (nodes.length < expected) {
+      return;
+    }
+
+    const viewStateNodes = rawGraph?.viewState?.node || {};
+    const stabilized = nodes.every((node) => {
+      const expectedView = viewStateNodes[node.id];
+      if (!expectedView) return true;
+      const roundedX = Math.round(node.position.x);
+      const roundedY = Math.round(node.position.y);
+      const expectedX = Math.round(expectedView.x);
+      const expectedY = Math.round(expectedView.y);
+      return roundedX === expectedX && roundedY === expectedY;
+    });
+
+    if (stabilized) {
+      isHydratingRef.current = false;
+      hydratedArchitectureIdRef.current = selectedArchitectureId || null;
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[HYDRATION] Nodes stabilized with viewState positions', {
+          nodes: nodes.map((node) => ({
+            id: node.id,
+            position: node.position,
+          })),
+        });
+      }
+    }
+  }, [nodes, rawGraph, selectedArchitectureId]);
+
+const geometriesDiffer = (prevState: Record<string, { x: number; y: number; w: number; h: number }> = {}, nextState: Record<string, { x: number; y: number; w: number; h: number }> = {}) => {
+  const prevKeys = Object.keys(prevState);
+  const nextKeys = Object.keys(nextState);
+  if (prevKeys.length !== nextKeys.length) {
+    return true;
+  }
+  for (const key of nextKeys) {
+    const prevGeom = prevState[key];
+    const nextGeom = nextState[key];
+    if (!prevGeom || !nextGeom) {
+      return true;
+    }
+    if (
+      prevGeom.x !== nextGeom.x ||
+      prevGeom.y !== nextGeom.y ||
+      prevGeom.w !== nextGeom.w ||
+      prevGeom.h !== nextGeom.h
+    ) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const extractDimension = (value: number | string | undefined, fallback: number) => {
+  if (typeof value === "number") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = parseFloat(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return fallback;
+};
+
+useEffect(() => {
+  if (restoredFromSnapshotRef.current) return;
+  if (typeof window === "undefined") return;
+  if (isEmbedToCanvasTransition()) return;
+  if (selectedArchitectureId && selectedArchitectureId !== "new-architecture") return;
+
+  const hasGraphContent =
+    (rawGraph?.children && rawGraph.children.length > 0) ||
+    (rawGraph?.edges && rawGraph.edges.length > 0);
+
+  if (hasGraphContent) return;
+
+  try {
+    const stored = localStorage.getItem(LOCAL_CANVAS_SNAPSHOT_KEY) || sessionStorage.getItem(LOCAL_CANVAS_SNAPSHOT_KEY);
+    if (!stored) return;
+
+    const parsed = JSON.parse(stored);
+    if (!parsed || !parsed.rawGraph || !parsed.rawGraph.children || parsed.rawGraph.children.length === 0) {
+      return;
+    }
+
+    const viewStateSnapshot = parsed.viewState || parsed.rawGraph.viewState;
+    if (viewStateSnapshot && viewStateRef) {
+      try {
+        viewStateRef.current = JSON.parse(JSON.stringify(viewStateSnapshot));
+      } catch (error) {
+        console.warn("⚠️ Failed to clone stored viewState snapshot:", error);
+        viewStateRef.current = viewStateSnapshot;
+      }
+    }
+
+    const graphWithViewState =
+      viewStateSnapshot && parsed.rawGraph
+        ? { ...parsed.rawGraph, viewState: viewStateSnapshot }
+        : parsed.rawGraph;
+
+    restoredFromSnapshotRef.current = true;
+    setRawGraph(graphWithViewState);
+    console.log("♻️ Restored canvas from local snapshot");
+  } catch (error) {
+    console.warn("⚠️ Failed to restore local canvas snapshot:", error);
+  }
+}, [rawGraph, setRawGraph, selectedArchitectureId, viewStateRef]);
+
+useEffect(() => {
+  if (!viewStateRef) {
+    return;
+  }
+
+  const nextNodeState: Record<string, { x: number; y: number; w: number; h: number }> = {};
+  const nextGroupState: Record<string, { x: number; y: number; w: number; h: number }> = {};
+
+  nodes.forEach((node) => {
+    const isGroup = (node as any).type === "group";
+    const fallbackWidth = isGroup ? 480 : 96;
+    const fallbackHeight = isGroup ? 320 : 96;
+    const width =
+      extractDimension(
+        (node.style as any)?.width,
+        extractDimension((node.data as any)?.width, fallbackWidth)
+      );
+    const height =
+      extractDimension(
+        (node.style as any)?.height,
+        extractDimension((node.data as any)?.height, fallbackHeight)
+      );
+    const geom = {
+      x: node.position?.x ?? 0,
+      y: node.position?.y ?? 0,
+      w: width,
+      h: height,
+    };
+    if (isGroup) {
+      nextGroupState[node.id] = geom;
+    } else {
+      nextNodeState[node.id] = geom;
+    }
+  });
+
+  const prevState = viewStateRef.current || { node: {}, group: {}, edge: {} };
+  const nodeChanged = geometriesDiffer(prevState.node || {}, nextNodeState);
+  const groupChanged = geometriesDiffer(prevState.group || {}, nextGroupState);
+
+  if (nodeChanged || groupChanged) {
+    viewStateRef.current = {
+      node: nextNodeState,
+      group: nextGroupState,
+      edge: prevState.edge || {},
+    };
+  }
+}, [nodes, viewStateRef]);
+
+useEffect(() => {
+  if (isHydratingRef.current) return;
+  if (typeof window === "undefined") return;
+  if (!rawGraph) return;
+
+  const hasContent =
+    (rawGraph.children && rawGraph.children.length > 0) ||
+    nodes.length > 0 ||
+    edges.length > 0;
+
+  if (!hasContent) {
+    return;
+  }
+
+  try {
+    const viewStateSnapshot = getViewStateSnapshot();
+    const payload = {
+      rawGraph: viewStateSnapshot ? { ...rawGraph, viewState: viewStateSnapshot } : rawGraph,
+      viewState: viewStateSnapshot,
+      selectedArchitectureId,
+      savedAt: Date.now(),
+    };
+    const serialized = JSON.stringify(payload);
+    localStorage.setItem(LOCAL_CANVAS_SNAPSHOT_KEY, serialized);
+    sessionStorage.setItem(LOCAL_CANVAS_SNAPSHOT_KEY, serialized);
+    markDirty();
+  } catch (error) {
+    console.warn("⚠️ Failed to persist local canvas snapshot:", error);
+  }
+}, [rawGraph, nodes, edges, getViewStateSnapshot, selectedArchitectureId, markDirty]);
   
   const {
     messages,
@@ -2514,7 +2734,7 @@ Adapt these patterns to your specific requirements while maintaining the overall
 
   // Typed event bridge: Listen for AI-generated graphs and apply them to canvas
   useEffect(() => {
-    const unsubscribe = onElkGraph(async ({ elkGraph, source, reason, version, ts, targetArchitectureId }) => {
+    const unsubscribe = onElkGraph(async ({ elkGraph, source, reason, version, ts, targetArchitectureId, viewState }) => {
       
       // Don't mark operation as complete here - wait for the final completion event
       
@@ -2532,7 +2752,13 @@ Adapt these patterns to your specific requirements while maintaining the overall
       
       if (shouldUpdateCanvas) {
         console.log('✅ Updating canvas for selected architecture');
-        setRawGraph(elkGraph);
+        const externalViewStateRaw = viewState ? (typeof viewState === 'object' ? JSON.parse(JSON.stringify(viewState)) : viewState) : undefined;
+        const externalViewState = sanitizeStoredViewState(externalViewStateRaw);
+        const graphForCanvas = externalViewState ? { ...elkGraph, viewState: externalViewState } : elkGraph;
+
+        viewStateRef.current = externalViewState ?? createEmptyViewState();
+
+        setRawGraph(graphForCanvas);
         
         // Save anonymous architecture in public mode when AI updates the graph
         // But skip if user is signed in (architecture may have been transferred)
@@ -2542,9 +2768,10 @@ Adapt these patterns to your specific requirements while maintaining the overall
             const userPrompt = (window as any).originalChatTextInput || (window as any).chatTextInput || '';
             
             await ensureAnonymousSaved({
-                rawGraph: elkGraph,
+              rawGraph: graphForCanvas,
               userPrompt,
-              anonymousService: anonymousArchitectureService
+              anonymousService: anonymousArchitectureService,
+              metadata: externalViewState ? { viewState: externalViewState } : undefined
             });
             console.log('✅ Anonymous architecture saved/updated after AI update');
           } catch (error) {
@@ -2568,9 +2795,12 @@ Adapt these patterns to your specific requirements while maintaining the overall
       
       // Always update the architecture data in savedArchitectures for all tabs (including new-architecture)
       if (targetArchitectureId) {
+        const viewStateSnapshot = sanitizeStoredViewState(externalViewState || getViewStateSnapshot());
+        const graphWithViewState = viewStateSnapshot ? { ...elkGraph, viewState: viewStateSnapshot } : elkGraph;
+
         setSavedArchitectures(prev => prev.map(arch => 
           arch.id === targetArchitectureId 
-            ? { ...arch, rawGraph: elkGraph, lastModified: new Date() }
+            ? { ...arch, rawGraph: graphWithViewState, viewState: viewStateSnapshot, lastModified: new Date() }
             : arch
         ));
       }
@@ -2609,11 +2839,14 @@ Adapt these patterns to your specific requirements while maintaining the overall
             if (newChatName !== baseChatName) {
               console.log('🔄 Name collision detected, using unique name:', newChatName);
             }
+            const chatMessages = normalizeChatMessages(getCurrentConversation()) ?? [];
+            const viewStateSnapshot = externalViewState || getViewStateSnapshot();
+            const elkGraphWithViewState = viewStateSnapshot ? { ...elkGraph, viewState: viewStateSnapshot } : elkGraph;
             
             // Update the "New Architecture" tab in place
             setSavedArchitectures(prev => prev.map(arch => 
               arch.id === 'new-architecture' 
-                ? { ...arch, name: newChatName, rawGraph: elkGraph, createdAt: new Date(), lastModified: new Date(), isNew: false, userPrompt }
+                ? { ...arch, name: newChatName, rawGraph: elkGraphWithViewState, viewState: viewStateSnapshot, createdAt: new Date(), lastModified: new Date(), isNew: false, userPrompt, chatMessages }
                 : arch
             ));
             setCurrentChatName(newChatName);
@@ -2623,18 +2856,20 @@ Adapt these patterns to your specific requirements while maintaining the overall
               try {
                 // Always use current timestamp for new architectures to ensure proper sorting
                 const now = new Date();
-                
+
                 const docId = await ArchitectureService.saveArchitecture({
                   name: newChatName,
                   userId: user.uid,
                   userEmail: user.email || '',
-                  rawGraph: elkGraph,
+                  rawGraph: elkGraphWithViewState,
                   nodes: [], // React Flow nodes will be generated
                   edges: [], // React Flow edges will be generated
                   userPrompt: userPrompt,
                   timestamp: now,
                   createdAt: now,
-                  lastModified: now
+                  lastModified: now,
+                  chatMessages,
+                  viewState: viewStateSnapshot
                 });
                 
                 // Update the tab with Firebase ID and move to top of list
@@ -2643,7 +2878,7 @@ Adapt these patterns to your specific requirements while maintaining the overall
                   
                   const updatedArchs = prev.map(arch => 
                     arch.id === 'new-architecture' 
-                      ? { ...arch, id: docId, firebaseId: docId, timestamp: now, createdAt: now, lastModified: now }
+                      ? { ...arch, id: docId, firebaseId: docId, timestamp: now, createdAt: now, lastModified: now, chatMessages, rawGraph: elkGraphWithViewState, viewState: viewStateSnapshot }
                       : arch
                   );
                   
@@ -2729,7 +2964,7 @@ Adapt these patterns to your specific requirements while maintaining the overall
             // Update local state
             setSavedArchitectures(prev => prev.map(arch => 
               arch.id === selectedArchitectureId 
-                ? { ...arch, rawGraph: elkGraph, lastModified: new Date() }
+                ? { ...arch, rawGraph: graphWithViewState, viewState: viewStateSnapshot, lastModified: new Date() }
                 : arch
             ));
             
@@ -2746,7 +2981,7 @@ Adapt these patterns to your specific requirements while maintaining the overall
     });
     
     return unsubscribe;
-  }, [setRawGraph, user, rawGraph, selectedArchitectureId, isPublicMode]);
+  }, [setRawGraph, user, rawGraph, selectedArchitectureId, isPublicMode, getViewStateSnapshot]);
 
   // Listen for final processing completion (sync with ProcessingStatusIcon)
   useEffect(() => {
@@ -2795,11 +3030,8 @@ Adapt these patterns to your specific requirements while maintaining the overall
     };
   }, [rawGraph]);
   
-  // State to track edge visibility (keeping minimal state for the fix)
-  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
-
   // Handle selection changes to ensure edges remain visible
-  const onSelectionChange = useCallback(({ nodes: selectedNodesParam, edges: selectedEdgesParam }: { nodes: Node[]; edges: Edge[] }) => {
+  const handleSelectionChange = useCallback(({ nodes: selectedNodesParam, edges: selectedEdgesParam }: { nodes: Node[]; edges: Edge[] }) => {
     console.log('🎯 [onSelectionChange] Called:', { 
       selectedNodes: selectedNodesParam.length, 
       selectedEdges: selectedEdgesParam.length,
@@ -2867,7 +3099,6 @@ Adapt these patterns to your specific requirements while maintaining the overall
       console.log('🎯 [onSelectionChange] Nothing selected, updating edge styling');
       // Nothing selected - still ensure edges are visible
       setEdges((currentEdges) => {
-        console.log('🎯 [onSelectionChange] setEdges (deselection) - currentEdges:', currentEdges.length, 'IDs:', currentEdges.map(e => e.id));
         // Hard reset any dotted styling
         const cleared = currentEdges.map(e => ({
           ...e,
@@ -2878,7 +3109,6 @@ Adapt these patterns to your specific requirements while maintaining the overall
           }
         }));
         const updated = updateEdgeStylingOnDeselection(cleared);
-        console.log('🎯 [onSelectionChange] setEdges (deselection) - updated:', updated.length, 'IDs:', updated.map(e => e.id));
         return updated;
       });
       
@@ -2890,12 +3120,7 @@ Adapt these patterns to your specific requirements while maintaining the overall
   useEffect(() => {
     // Function to ensure all edges are visible always
     const ensureEdgesVisible = () => {
-      setEdges((currentEdges) => {
-        console.log('👁️ [ensureEdgesVisible] setEdges - currentEdges:', currentEdges.length, 'IDs:', currentEdges.map(e => e.id));
-        const updated = ensureEdgeVisibility(currentEdges, { customZIndex: 3000 });
-        console.log('👁️ [ensureEdgesVisible] setEdges - updated:', updated.length, 'IDs:', updated.map(e => e.id));
-        return updated;
-      });
+      setEdges((currentEdges) => ensureEdgeVisibility(currentEdges, { customZIndex: 3000 }));
     };
     
     // Run the fix immediately
@@ -3084,6 +3309,9 @@ Adapt these patterns to your specific requirements while maintaining the overall
     pendingSelectionRef.current = null;
   }, [nodes, setNodes, setSelectedNodes]);
 
+  // Track connector dot hover to display preview
+  const [hoveredConnector, setHoveredConnector] = useState<{ nodeId: string; handleId: string } | null>(null);
+
   return (
     <div className="w-full h-full flex overflow-hidden bg-white dark:bg-black">
       
@@ -3136,6 +3364,7 @@ Adapt these patterns to your specific requirements while maintaining the overall
               );
             }}
           >
+            <NodeInteractionContext.Provider value={nodeInteractionValue}>
             <ReactFlow 
               ref={reactFlowRef}
               nodes={nodes} 
@@ -3154,7 +3383,7 @@ Adapt these patterns to your specific requirements while maintaining the overall
                 setConnectingFromHandle(null);
                 setConnectionMousePos(null);
               }}
-              onSelectionChange={onSelectionChange}
+              onSelectionChange={handleSelectionChange}
               onPaneClick={(event) => {
                 // Group tool: Create group when nodes are selected and user clicks on canvas
                 if (selectedTool === 'group') {
@@ -3417,6 +3646,7 @@ Adapt these patterns to your specific requirements while maintaining the overall
                 showInteractive={true}
               />
             </ReactFlow>
+            </NodeInteractionContext.Provider>
           </div>
         )}
         
@@ -3565,6 +3795,7 @@ Adapt these patterns to your specific requirements while maintaining the overall
           handleSave={handleSave}
           user={user} 
           onExport={handleExportPNG}
+          viewStateRef={viewStateRef}
         />
       </div>
     </div>

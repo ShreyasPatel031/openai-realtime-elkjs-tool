@@ -7,12 +7,14 @@ export interface PersistedChatMessage {
   id: string;
   content: string;
   timestamp: number;
-  sender: 'user' | 'assistant';
+  sender: 'user' | 'assistant' | 'system';
 }
 
 const CHAT_STORAGE_KEY = 'atelier_chat_messages';
 const CURRENT_CONVERSATION_KEY = 'atelier_current_conversation';
 const EMBED_TO_CANVAS_FLAG_KEY = 'atelier_embed_to_canvas';
+export const EMBED_PENDING_CHAT_KEY = 'embed_pending_chat';
+export const EMBED_CHAT_BROADCAST_CHANNEL = 'atelier_embed_chat_channel';
 
 /**
  * Mark that user is coming from embed view to canvas view (via Edit button)
@@ -53,7 +55,7 @@ export function clearEmbedToCanvasFlag(): void {
 /**
  * Save a chat message to localStorage - only keeps the current conversation
  */
-export function saveChatMessage(message: string, sender: 'user' | 'assistant' = 'user'): void {
+export function saveChatMessage(message: string, sender: 'user' | 'assistant' | 'system' = 'user'): void {
   try {
     const newMessage: PersistedChatMessage = {
       id: crypto.randomUUID(),
@@ -73,6 +75,12 @@ export function saveChatMessage(message: string, sender: 'user' | 'assistant' = 
       const updatedConversation = [...currentConversation, newMessage];
       localStorage.setItem(CURRENT_CONVERSATION_KEY, JSON.stringify(updatedConversation));
       console.log('💾 Added to current conversation:', newMessage);
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        (window as any).__atelierLastConversation = localStorage.getItem(CURRENT_CONVERSATION_KEY);
+        (window as any).__embedChatPayload = localStorage.getItem(CURRENT_CONVERSATION_KEY);
+      } catch {}
     }
   } catch (error) {
     console.warn('Failed to save chat message:', error);
@@ -120,6 +128,57 @@ export function getChatMessages(): PersistedChatMessage[] {
 }
 
 /**
+ * Normalize chat messages before persisting externally (e.g., Firestore).
+ * Filters out invalid entries and strips undefined fields.
+ */
+export function normalizeChatMessages(
+  messages: PersistedChatMessage[] | null | undefined
+): PersistedChatMessage[] | undefined {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return undefined;
+  }
+
+  const sanitized = messages
+    .filter((msg) => msg && typeof msg.content === 'string' && msg.content.trim().length > 0)
+    .map((msg) => ({
+      id: typeof msg.id === 'string' && msg.id ? msg.id : crypto.randomUUID(),
+      content: String(msg.content).trim(),
+      timestamp: typeof msg.timestamp === 'number' ? msg.timestamp : Date.now(),
+      sender: msg.sender === 'assistant' || msg.sender === 'system' ? msg.sender : 'user',
+    }));
+
+  return sanitized.length > 0 ? sanitized : undefined;
+}
+
+/**
+ * Merge two chat histories, avoiding duplicates and preserving chronological order.
+ */
+export function mergeChatMessages(
+  base: PersistedChatMessage[] | null | undefined,
+  incoming: PersistedChatMessage[] | null | undefined
+): PersistedChatMessage[] | undefined {
+  const normalizedBase = normalizeChatMessages(base) ?? [];
+  const normalizedIncoming = normalizeChatMessages(incoming);
+
+  if (!normalizedIncoming || normalizedIncoming.length === 0) {
+    return normalizedBase.length ? normalizedBase : undefined;
+  }
+
+  const combined = [...normalizedBase];
+  const seenIds = new Set(normalizedBase.map((msg) => msg.id));
+
+  normalizedIncoming.forEach((msg) => {
+    if (!seenIds.has(msg.id)) {
+      combined.push(msg);
+      seenIds.add(msg.id);
+    }
+  });
+
+  combined.sort((a, b) => a.timestamp - b.timestamp);
+  return combined.length ? combined : undefined;
+}
+
+/**
  * Get the most recent chat message
  */
 export function getLastChatMessage(): PersistedChatMessage | null {
@@ -135,6 +194,8 @@ export function clearChatMessages(): void {
     localStorage.removeItem(CURRENT_CONVERSATION_KEY);
     localStorage.removeItem(CHAT_STORAGE_KEY); // Clear legacy storage too
     localStorage.removeItem(EMBED_TO_CANVAS_FLAG_KEY); // Clear embed-to-canvas flag
+    localStorage.removeItem(EMBED_PENDING_CHAT_KEY);
+    sessionStorage.removeItem(EMBED_PENDING_CHAT_KEY);
     console.log('🗑️ Chat messages and embed-to-canvas flag cleared');
   } catch (error) {
     console.warn('Failed to clear chat messages:', error);

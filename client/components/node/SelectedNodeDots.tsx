@@ -83,7 +83,7 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
         // Bottom dot: X at center, Y = nodeHeight + GAP + halfHeight (8px away from bottom border)
         // Left dot: X = 0 - GAP - halfWidth (8px away from left border), Y at center
         // Right dot: X = nodeWidth + GAP + halfWidth (8px away from right border), Y at center
-        if (key === 'top') {
+            if (key === 'top') {
           baseSmallCx = NODE_CENTER_X;     // X: always centered
           baseSmallCy = 0 - GAP - smallHalfH;      // Y: top border - gap - half height
           baseLargeCx = NODE_CENTER_X;     // X: always centered (same as small)

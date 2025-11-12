@@ -72,7 +72,7 @@ test.describe('InteractiveCanvas Rendering', () => {
     await page.waitForLoadState('networkidle');
     console.log('✅ Page loaded successfully');
     
-    await page.waitForTimeout(1000);
+        await page.waitForTimeout(1000);
     console.log('ℹ️ Interaction smoke check complete');
   });
 });

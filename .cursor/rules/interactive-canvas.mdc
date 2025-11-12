@@ -1,0 +1,17 @@
+## InteractiveCanvas.tsx Hard Guard
+
+```
+/**
+ * CRITICAL REPOSITORY RULE — DO NOT SKIP
+ *
+ * InteractiveCanvas.tsx is already too large. Do NOT add new logic or components here.
+ * - Only orchestrate and wire references to helpers/modules.
+ * - Put new interactions (e.g., tools, gestures, policies) in dedicated files
+ *   under client/components/ui/ (e.g., canvasInteractions.ts) and import them.
+ * - Keep this file as a thin coordinator to protect maintainability and testability.
+ */
+```
+
+- Treat `InteractiveCanvas.tsx` strictly as orchestration glue.
+- New logic lives in dedicated helpers/services; import and wire only.
+- Reject changes that expand business logic or component trees inside `InteractiveCanvas.tsx`.

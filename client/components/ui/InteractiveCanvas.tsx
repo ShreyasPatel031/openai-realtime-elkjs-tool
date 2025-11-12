@@ -16,12 +16,10 @@ import ReactFlow, {
   BackgroundVariant,
   Node,
   Edge,
-  OnConnectStartParams,
   useReactFlow,
   getRectOfNodes,
   getTransformForBounds,
-  BaseEdge,
-  EdgeLabelRenderer
+  BaseEdge
 } from "reactflow"
 import "reactflow/dist/style.css"
 import { cn } from "../../lib/utils"
@@ -535,15 +533,15 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   useEffect(() => {
     if (!user?.uid) return;
     if (justCreatedArchId) {
-      // Clear any existing timeout
-      if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current);
-      }
-      
-      // Only sync once when user signs in
-      // Initial sync for user
-      syncWithFirebase(user.uid);
-      setHasInitialSync(true);
+        // Clear any existing timeout
+        if (syncTimeoutRef.current) {
+          clearTimeout(syncTimeoutRef.current);
+        }
+        
+        // Only sync once when user signs in
+        // Initial sync for user
+        syncWithFirebase(user.uid);
+        setHasInitialSync(true);
     }
     
     return () => {
@@ -610,7 +608,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     
     return uniqueName;
   }, []);
-  
+
   // Placeholder for handleChatSubmit - will be defined after rawGraph and handleGraphChange are available
 
   // Auth state listener moved to after config is defined
@@ -1132,7 +1130,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       if (remoteSaveTimeoutRef.current) {
         clearTimeout(remoteSaveTimeoutRef.current);
         remoteSaveTimeoutRef.current = null;
-      }
+    }
       dirtySinceRef.current = null;
     }
   }, [user, selectedArchitectureId, savedArchitectures, rawGraph, nodes, edges, getViewStateSnapshot]);
@@ -1655,7 +1653,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     console.log('raw newGraph:', newGraph);
     console.log('Previous rawGraph had', rawGraph?.children?.length || 0, 'children');
     console.log('New graph has', newGraph?.children?.length || 0, 'children');
-
+    
     let finalGraph: RawGraph;
 
     if (options.source === 'ai') {
@@ -1666,7 +1664,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       viewStateRef.current = createEmptyViewState();
       restoreNodeVisuals(aiGraph, rawGraph);
       finalGraph = aiGraph;
-    } else {
+            } else {
       const viewStateSnapshot = getViewStateSnapshot();
       finalGraph = viewStateSnapshot ? { ...newGraph, viewState: viewStateSnapshot } : newGraph;
     }
@@ -2272,196 +2270,26 @@ useEffect(() => {
   }, [selectedNodes, selectedEdges, rawGraph, handleGraphChange]);
   
   // Edge creation handled by useCanvasState
-
-  const handleConnectStart = useCallback((_e: any, params: OnConnectStartParams) => {
-    setConnectingFrom(params.nodeId ?? null);
-    setConnectingFromHandle(params.handleId ?? null);
-  }, []);
-
-  const handleConnectEnd = useCallback((event: any) => {
-    // Reset connection state when connection ends
-    // For click-to-connect, onConnect will handle the actual connection
-    setConnectingFrom(null);
-    setConnectingFromHandle(null);
-    setConnectionMousePos(null);
-  }, []);
-
-  // Manual handler for clicking on connector dots to start connection with edge preview
-  const handleConnectorDotClick = useCallback((nodeId: string, handleId: string) => {
-    // Ensure UI enters connector mode when starting from selected node dots
-    if (selectedTool !== 'connector') {
-      setSelectedTool('connector');
-    }
-    // CRITICAL: Immediately deselect all nodes when connector port is clicked
-    // This prevents ReactFlow from selecting the node when clicking on the port
-    if (reactFlowRef.current) {
-      reactFlowRef.current.setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
-    }
-    setSelectedNodes([]);
-    
-    
-    // Check if handleId is a target handle (completing a connection)
-    if (handleId.includes('target') && connectingFrom && connectingFrom !== nodeId) {
-      console.log('🔗 [handleConnectorDotClick] Completing connection:', { connectingFrom, nodeId, sourceHandle: connectingFromHandle, targetHandle: handleId });
-      
-      // Complete the connection
-      // Create the connection with proper handle IDs
-      const connection = { 
-        source: connectingFrom, 
-        sourceHandle: connectingFromHandle || undefined, 
-        target: nodeId, 
-        targetHandle: handleId || undefined
-      };
-      
-      console.log('🔗 [handleConnectorDotClick] Created connection object:', connection);
-      
-      // Call onConnect - this will trigger ReactFlow's onConnect handler
-      // which then calls our graph onConnect handler
-      console.log('🚀 [handleConnectorDotClick] Calling onConnect...');
-      onConnect(connection);
-      console.log('✅ [handleConnectorDotClick] onConnect called');
-      
-      // Clear connection state
-      setConnectingFrom(null);
-      setConnectingFromHandle(null);
-      setConnectionMousePos(null);
-      // Return to arrow mode and hide ports after edge is created
-      setSelectedTool('arrow');
-      return;
-    }
-    
-    // Otherwise, start a new connection
-    const sourceHandleId = handleId.includes('target')
-      ? handleId.replace('target', 'source')
-      : handleId;
-
-    setConnectingFrom(nodeId);
-    setConnectingFromHandle(sourceHandleId);
-    console.log('✅ [handleConnectorDotClick] Set connectingFrom:', { nodeId, handleId: sourceHandleId });
-    
-    // Track mouse movement to show edge preview (always show when connecting)
-    const handleMouseMove = (e: MouseEvent) => {
-      if (reactFlowRef.current) {
-        const rf = reactFlowRef.current;
-        const flowPos = (rf as any).screenToFlowPosition
-          ? (rf as any).screenToFlowPosition({ x: e.clientX, y: e.clientY })
-          : rf.project({ x: e.clientX, y: e.clientY });
-        
-        // Always show preview line while moving
-        setConnectionMousePos(flowPos);
-      }
-    };
-    
-    const handleMouseUp = (e: MouseEvent) => {
-      // Remove mouse tracking
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      
-      const currentConnectingFrom = connectingFrom;
-      const currentConnectingFromHandle = connectingFromHandle;
-      
-      if (!currentConnectingFrom) {
-        setConnectionMousePos(null);
-        return;
-      }
-      
-      // Check if clicked on a target handle
-      const target = e.target as HTMLElement;
-      const targetHandle = target.closest('.react-flow__handle') as HTMLElement;
-      
-      if (targetHandle) {
-        const handleType = targetHandle.getAttribute('data-handletype');
-        const handleId = targetHandle.getAttribute('data-id') || targetHandle.id;
-        
-        // Find the node that contains this handle
-        const nodeElement = targetHandle.closest('.react-flow__node') as HTMLElement;
-        const targetNodeId = nodeElement?.getAttribute('data-id') || nodeElement?.id;
-        
-        // Check if it's a target handle (or connector target handle)
-        if (targetNodeId && handleId && 
-            (handleType === 'target' || handleId.includes('target')) && 
-            targetNodeId !== currentConnectingFrom) {
-          // Create connection
-          onConnect({ source: currentConnectingFrom, sourceHandle: currentConnectingFromHandle, target: targetNodeId, targetHandle: handleId });
-          // Clear connection state after successful connection
-          setConnectingFrom(null);
-          setConnectingFromHandle(null);
-          setConnectionMousePos(null);
-          return;
-        }
-      }
-      
-      // Also check if clicking on another connector dot (to connect to it)
-      const clickedConnectorDot = target.closest('[data-connector-dot]') as HTMLElement;
-      if (clickedConnectorDot) {
-        const targetNodeId = clickedConnectorDot.getAttribute('data-node-id');
-        const targetHandleId = clickedConnectorDot.getAttribute('data-handle-id');
-        
-        if (targetNodeId && targetHandleId && targetNodeId !== currentConnectingFrom) {
-          // Create connection to the clicked connector dot
-          onConnect({ source: currentConnectingFrom, sourceHandle: currentConnectingFromHandle, target: targetNodeId, targetHandle: targetHandleId });
-          setConnectingFrom(null);
-          setConnectingFromHandle(null);
-          setConnectionMousePos(null);
-          return;
-        }
-      }
-      
-      // If clicked anywhere else (empty space, node, etc.), cancel connection (deselect)
-      console.log(`[InteractiveCanvas] Clicked outside port area, cancelling connection (deselection)`);
-      setConnectingFrom(null);
-      setConnectingFromHandle(null);
-      setConnectionMousePos(null);
-    };
-    
-    const handleClick = (e: MouseEvent) => {
-      // Check if this is a click on a connector port (source or target)
-      const target = e.target as HTMLElement;
-      const isConnectorPortClick = target.closest('[data-connector-dot]') || 
-                                   target.closest('[style*="rgba(0, 255, 0"]') ||
-                                   target.closest('.react-flow__handle[id*="connector"]');
-      
-      // CRITICAL FIX: Allow toolbar clicks to pass through
-      const isToolbarClick = target.closest('.absolute.bottom-8.left-1\\/2.-translate-x-1\\/2.z-\\[8000\\]') ||
-                             target.closest('[aria-label="Select (V)"]') ||
-                             target.closest('[aria-label="Add box (R)"]') ||
-                             target.closest('[aria-label="Add connector (C)"]') ||
-                             target.closest('[aria-label="Create group (G)"]');
-      
-      // If clicking on toolbar, let the toolbar handle it - don't intercept
-      if (isToolbarClick) {
-        console.log(`[InteractiveCanvas] Toolbar click detected - allowing it to pass through`);
-        // Clean up listeners but don't prevent the toolbar click
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        document.removeEventListener('click', handleClick);
-        return; // Let toolbar handle the click
-      }
-      
-      // If clicking anywhere EXCEPT a connector port or toolbar, cancel the connection (deselect)
-      if (!isConnectorPortClick) {
-        console.log(`[InteractiveCanvas] Click outside connector port detected, cancelling connection (deselection)`);
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        document.removeEventListener('click', handleClick);
-        setConnectingFrom(null);
-        setConnectingFromHandle(null);
-        setConnectionMousePos(null);
-      } else {
-        // Click was on a connector port - let the port click handler deal with it
-        // Just clean up the event listeners
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        document.removeEventListener('click', handleClick);
-      }
-    };
-    
-    // Start tracking mouse
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp, { once: true });
-    // Listen for clicks to detect deselection (clicking anywhere outside ports)
-    document.addEventListener('click', handleClick, { once: true, capture: true });
-  }, [connectingFrom, connectingFromHandle, onConnect, handleConnectEnd]);
+  const {
+    handleConnectStart,
+    handleConnectEnd,
+    handleConnectorDotClick,
+    edgePreview,
+  } = useCanvasEdgeInteractions({
+    selectedTool,
+    setSelectedTool,
+    selectedNodes,
+    setSelectedNodes,
+    connectingFrom,
+    connectingFromHandle,
+    setConnectingFrom,
+    setConnectingFromHandle,
+    connectionMousePos,
+    setConnectionMousePos,
+    reactFlowRef,
+    onConnect,
+    nodes,
+  });
 
   // Create node types with handlers - memoized to prevent recreation
   // Use useCallback for each node type component to prevent ReactFlow warnings
@@ -2856,7 +2684,7 @@ useEffect(() => {
               try {
                 // Always use current timestamp for new architectures to ensure proper sorting
                 const now = new Date();
-
+                
                 const docId = await ArchitectureService.saveArchitecture({
                   name: newChatName,
                   userId: user.uid,
@@ -3029,7 +2857,7 @@ useEffect(() => {
       delete (window as any).getCurrentGraph;
     };
   }, [rawGraph]);
-  
+
   // Handle selection changes to ensure edges remain visible
   const handleSelectionChange = useCallback(({ nodes: selectedNodesParam, edges: selectedEdgesParam }: { nodes: Node[]; edges: Edge[] }) => {
     console.log('🎯 [onSelectionChange] Called:', { 
@@ -3353,9 +3181,9 @@ useEffect(() => {
         {/* ReactFlow container - only show when in ReactFlow mode */}
         {useReactFlow && (
           <div className="absolute inset-0 h-full w-full z-0"
-            onClick={(e) => {
+            onClick={(event) => {
               placeNodeOnCanvas(
-                e.nativeEvent as MouseEvent,
+                event.nativeEvent as MouseEvent,
                 selectedTool,
                 reactFlowRef,
                 handleAddNode,
@@ -3385,154 +3213,28 @@ useEffect(() => {
               }}
               onSelectionChange={handleSelectionChange}
               onPaneClick={(event) => {
-                // Group tool: Create group when nodes are selected and user clicks on canvas
                 if (selectedTool === 'group') {
-                  console.log('[GroupTool] Pane click detected', {
-                    selectedNodesCount: selectedNodes.length,
-                    selectedNodeIds: selectedNodes.map(node => node.id),
+                  const handled = handleGroupToolPaneClick({
+                    event,
+                    selectedNodes,
+                    reactFlowRef,
+                    handleGroupNodes,
+                    handleBatchUpdate,
+                    setNodes,
+                    setSelectedNodes,
+                    setSelectedTool,
+                    viewStateRef,
+                    pendingSelectionRef,
+                    shouldSkipFitViewRef,
                   });
-                  if (selectedNodes.length >= 1) {
-                    const nodeIds = selectedNodes.map(node => node.id);
-                    const groupId = `group-${Date.now()}`;
-                    const parentId = 'root'; // Default to root, could be improved to detect actual parent
-                    
-                    try {
-                      console.log('[GroupTool] Creating group', { nodeIds, groupId, parentId });
-                      handleGroupNodes(nodeIds, parentId, groupId, undefined);
-                      // Clear selection after grouping
-                      setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
-                      setSelectedNodes([]);
-                      // Switch back to arrow tool for manipulation
-                      setSelectedTool('arrow');
-                    } catch (error) {
-                      console.error('Failed to create group:', error);
-                    }
-                  } else if (selectedNodes.length === 0) {
-                    console.log('[GroupTool] Pane click with no selection, creating empty group');
-                    const rfInstance = reactFlowRef.current;
-                    if (!rfInstance) {
-                      console.warn('[GroupTool] ReactFlow instance unavailable; aborting empty group create');
-                      return;
-                    }
 
-                    const screenPoint = { x: event.clientX, y: event.clientY };
-                    const flowPoint = rfInstance.screenToFlowPosition
-                      ? rfInstance.screenToFlowPosition(screenPoint)
-                      : rfInstance.project(screenPoint);
-
-                    const snap = (v: number) => Math.round(v / 16) * 16;
-                    const GROUP_WIDTH = 480;
-                    const GROUP_HEIGHT = 320;
-                    const topLeft = {
-                      x: snap(flowPoint.x - GROUP_WIDTH / 2),
-                      y: snap(flowPoint.y - GROUP_HEIGHT / 2),
-                    };
-
-                    const rawGroupName = `Draft group ${Date.now()}`;
-                    const normalizedId = createNodeID(rawGroupName);
-
-                    if (viewStateRef.current) {
-                      const view = viewStateRef.current;
-                      view.node = view.node || {};
-                      view.node[normalizedId] = { x: topLeft.x, y: topLeft.y, w: GROUP_WIDTH, h: GROUP_HEIGHT };
-                    }
-
-                    if (shouldSkipFitViewRef?.current !== undefined) {
-                      shouldSkipFitViewRef.current = true;
-                    }
-
-                    try {
-                      handleBatchUpdate([
-                        {
-                          name: 'add_node',
-                          nodename: rawGroupName,
-                          parentId: 'root',
-                          data: {
-                            label: 'Group',
-                            isGroup: true,
-                          },
-                        },
-                      ]);
-                    } catch (error) {
-                      console.error('Failed to add draft group node:', error);
-                      return;
-                    }
-
-                    pendingSelectionRef.current = {
-                      id: normalizedId,
-                      size: { width: GROUP_WIDTH, height: GROUP_HEIGHT },
-                    };
-
-                    // Switch back to arrow tool for immediate manipulation
-                    setSelectedTool('arrow');
-                    setTimeout(() => {
-                      setNodes((nds) => {
-                        const updated = nds.map((node) => {
-                          if (node.id !== normalizedId) return node;
-                          return {
-                            ...node,
-                            selected: true,
-                            data: {
-                              ...node.data,
-                              width: GROUP_WIDTH,
-                              height: GROUP_HEIGHT,
-                            },
-                            style: {
-                              ...(node.style || {}),
-                              width: GROUP_WIDTH,
-                              height: GROUP_HEIGHT,
-                            },
-                          };
-                        });
-                        // Node might not exist yet if raw graph hasn't been processed; append placeholder
-                        if (!updated.some((node) => node.id === normalizedId)) {
-                          const placeholder: Node = {
-                            id: normalizedId,
-                            type: 'group',
-                            position: topLeft,
-                            data: {
-                              label: 'Group',
-                              width: GROUP_WIDTH,
-                              height: GROUP_HEIGHT,
-                              isGroup: true,
-                            },
-                            style: {
-                              width: GROUP_WIDTH,
-                              height: GROUP_HEIGHT,
-                              backgroundColor: 'transparent',
-                              border: 'none',
-                              display: 'flex',
-                              justifyContent: 'flex-start',
-                              alignItems: 'flex-start',
-                              padding: '0px',
-                              pointerEvents: 'auto',
-                            },
-                            selected: true,
-                            draggable: true,
-                            zIndex: CANVAS_STYLES.zIndex.groups,
-                          };
-                          return [...updated, placeholder];
-                        }
-                        return updated;
-                      });
-                    }, 0);
+                  if (handled) {
+                    return;
                   }
-                } else if (selectedTool === 'connector') {
-                  // In connector mode: clicking empty canvas should cancel and switch back to select
-                  setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
-                  setSelectedNodes([]);
-                  // Clear dotted styling and any edge selection
-                  setEdges((current) => updateEdgeStylingOnDeselection(current.map(e => ({
-                    ...e,
-                    style: { ...(e.style || {}), strokeDasharray: undefined, strokeDashoffset: undefined }
-                  }))));
-                  setSelectedEdges([]);
-                  setSelectedTool('arrow');
-                } else if (selectedTool === 'arrow') {
-                  // Only deselect when in select mode - other tools handle their own behavior
-                  setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
-                  setSelectedNodes([]);
-                  setSelectedEdges([]);
+                }
+
+                if ((event as any).target?.classList?.contains("react-flow__pane")) {
+                  // ... existing code ...
                 }
               }}
               onInit={(instance) => {
@@ -3577,62 +3279,7 @@ useEffect(() => {
               elevateNodesOnSelect={false}
             >
               {/* Edge preview that follows cursor when connecting */}
-              {connectingFrom && connectionMousePos && (() => {
-                const sourceNode = nodes.find(n => n.id === connectingFrom);
-                if (!sourceNode || !reactFlowRef.current) return null;
-                
-                const rf = reactFlowRef.current;
-                const nodeElement = document.querySelector(`[data-id="${connectingFrom}"]`);
-                if (!nodeElement) return null;
-                
-                // Get handle position - connector handles are on borders
-                const nodeRect = (nodeElement as HTMLElement).getBoundingClientRect();
-                const paneRect = document.querySelector('.react-flow__pane')?.getBoundingClientRect();
-                if (!paneRect) return null;
-                
-                // Find which handle was clicked based on handleId
-                const handleSide = connectingFromHandle?.includes('top') ? 'top' :
-                                   connectingFromHandle?.includes('right') ? 'right' :
-                                   connectingFromHandle?.includes('bottom') ? 'bottom' : 'left';
-                
-                const nodeWidth = (sourceNode.data as any)?.width || 96;
-                const nodeCenterX = sourceNode.position.x + nodeWidth / 2;
-                const nodeCenterY = sourceNode.position.y + nodeWidth / 2;
-                
-                let sourceX: number, sourceY: number;
-                if (handleSide === 'top') {
-                  sourceX = nodeCenterX;
-                  sourceY = sourceNode.position.y;
-                } else if (handleSide === 'bottom') {
-                  sourceX = nodeCenterX;
-                  sourceY = sourceNode.position.y + nodeWidth;
-                } else if (handleSide === 'left') {
-                  sourceX = sourceNode.position.x;
-                  sourceY = nodeCenterY;
-                } else {
-                  sourceX = sourceNode.position.x + nodeWidth;
-                  sourceY = nodeCenterY;
-                }
-                
-                const targetX = connectionMousePos.x;
-                const targetY = connectionMousePos.y;
-                const midX = sourceX + (targetX - sourceX) / 2;
-                const edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
-                
-                return (
-                  <EdgeLabelRenderer>
-                    <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 10000 }}>
-                      <path
-                        d={edgePath}
-                        stroke="#b1b1b7"
-                        strokeWidth={2}
-                        fill="none"
-                        strokeDasharray="5 5"
-                      />
-                    </svg>
-                  </EdgeLabelRenderer>
-                );
-              })()}
+              {edgePreview}
               <Background 
                 color="#333" 
                 gap={16} 

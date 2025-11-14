@@ -38,6 +38,13 @@ export function placeNodeOnCanvas(
       const vs = viewStateRef.current;
       vs.node = vs.node || {};
       vs.node[id] = { x: topLeft.x, y: topLeft.y, w: NODE_SIZE, h: NODE_SIZE };
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[FREE Mode] Wrote node viewState', {
+          nodeId: id,
+          position: vs.node[id],
+          existingNodeCount: Object.keys(vs.node).length,
+        });
+      }
     }
   } catch (error) {
     console.error(`[canvasInteractions] Error writing to viewState:`, error);

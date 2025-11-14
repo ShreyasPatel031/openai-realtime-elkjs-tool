@@ -1,5 +1,11 @@
 import { test, expect, Page, Locator } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  page.on("console", (message) => {
+    console.log(`[browser:${message.type()}] ${message.text()}`);
+  });
+});
+
 interface NodeSnapshot {
   id: string;
   rect: { x: number; y: number; width: number; height: number };

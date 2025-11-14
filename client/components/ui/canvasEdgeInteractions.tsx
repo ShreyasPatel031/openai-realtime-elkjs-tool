@@ -1,7 +1,7 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef, useEffect, useState } from "react";
 import type { Connection, Node, OnConnectStartParams, ReactFlowInstance } from "reactflow";
-import { EdgeLabelRenderer } from "reactflow";
 import type { MutableRefObject } from "react";
+import { CANVAS_STYLES } from "../graph/styles/canvasStyles";
 
 interface Coordinate {
   x: number;
@@ -39,6 +39,30 @@ export const useCanvasEdgeInteractions = ({
   onConnect,
   nodes,
 }: EdgeInteractionParams) => {
+  const sourceScreenPosRef = useRef<Coordinate | null>(null);
+  const sourceElementRef = useRef<HTMLElement | null>(null);
+  const [previewTick, setPreviewTick] = useState(0);
+
+  useEffect(() => {
+    if (!connectingFrom) {
+      return;
+    }
+
+    let rafId: number | null = null;
+    const tick = () => {
+      setPreviewTick((prev) => (prev + 1) % Number.MAX_SAFE_INTEGER);
+      rafId = requestAnimationFrame(tick);
+    };
+
+    tick();
+
+    return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [connectingFrom]);
+
   const handleConnectStart = useCallback(
     (_event: any, params: OnConnectStartParams) => {
       setConnectingFrom(params.nodeId ?? null);
@@ -84,21 +108,41 @@ export const useCanvasEdgeInteractions = ({
         ? handleId.replace("target", "source")
         : handleId;
 
-      setConnectingFrom(nodeId);
-      setConnectingFromHandle(sourceHandleId);
+      const startNodeId = nodeId;
+      const startHandleId = sourceHandleId;
+
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("[EdgeInteractions] Start connector drag", {
+          nodeId: startNodeId,
+          handleId: startHandleId,
+        });
+      }
+
+      setConnectingFrom(startNodeId);
+      setConnectingFromHandle(startHandleId);
+
+      // Capture the actual screen position of the handle element
+      const connectorSelector = `[data-connector-dot][data-node-id="${startNodeId}"][data-handle-id="${startHandleId}"]`;
+      const handleSelector = `.react-flow__handle[data-nodeid="${startNodeId}"][data-handleid="${startHandleId}"]`;
+      const connectorElement = document.querySelector(connectorSelector) as HTMLElement | null;
+      const handleElement = document.querySelector(handleSelector) as HTMLElement | null;
+      const sourceElement = connectorElement || handleElement;
+      sourceElementRef.current = sourceElement;
+
+      if (sourceElement) {
+        const rect = sourceElement.getBoundingClientRect();
+        const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        sourceScreenPosRef.current = center;
+        // Set initial mouse position to the handle center (in SCREEN coordinates)
+        setConnectionMousePos(center);
+      } else {
+        // Fallback: calculate from node position in flow coordinates and convert to screen
+        sourceScreenPosRef.current = null;
+      }
 
       const handleMouseMove = (e: MouseEvent) => {
         if (!reactFlowRef.current) return;
-        const rf = reactFlowRef.current as ReactFlowInstance & {
-          screenToFlowPosition?: (pos: Coordinate) => Coordinate;
-          project: (pos: Coordinate) => Coordinate;
-        };
-
-        const flowPos = rf.screenToFlowPosition
-          ? rf.screenToFlowPosition({ x: e.clientX, y: e.clientY })
-          : rf.project({ x: e.clientX, y: e.clientY });
-
-        setConnectionMousePos(flowPos);
+        setConnectionMousePos({ x: e.clientX, y: e.clientY });
       };
 
       const handleMouseUp = (e: MouseEvent) => {
@@ -106,10 +150,7 @@ export const useCanvasEdgeInteractions = ({
         document.removeEventListener("mouseup", handleMouseUp);
         document.removeEventListener("click", handleClick);
 
-        const currentConnectingFrom = connectingFrom;
-        const currentConnectingFromHandle = connectingFromHandle;
-
-        if (!currentConnectingFrom) {
+        if (!startNodeId) {
           setConnectionMousePos(null);
           return;
         }
@@ -127,11 +168,19 @@ export const useCanvasEdgeInteractions = ({
             targetNodeId &&
             targetHandleId &&
             (handleType === "target" || targetHandleId.includes("target")) &&
-            targetNodeId !== currentConnectingFrom
+            targetNodeId !== startNodeId
           ) {
+            if (process.env.NODE_ENV !== "production") {
+              console.debug("[EdgeInteractions] Completing connection via handle", {
+                source: startNodeId,
+                target: targetNodeId,
+                sourceHandle: startHandleId,
+                targetHandle: targetHandleId,
+              });
+            }
             onConnect({
-              source: currentConnectingFrom,
-              sourceHandle: currentConnectingFromHandle || undefined,
+              source: startNodeId,
+              sourceHandle: startHandleId || undefined,
               target: targetNodeId,
               targetHandle: targetHandleId || undefined,
             });
@@ -146,10 +195,18 @@ export const useCanvasEdgeInteractions = ({
         if (connectorDot) {
           const targetNodeId = connectorDot.getAttribute("data-node-id");
           const targetHandleId = connectorDot.getAttribute("data-handle-id");
-          if (targetNodeId && targetHandleId && targetNodeId !== currentConnectingFrom) {
+          if (targetNodeId && targetHandleId && targetNodeId !== startNodeId) {
+            if (process.env.NODE_ENV !== "production") {
+              console.debug("[EdgeInteractions] Completing connection via connector dot", {
+                source: startNodeId,
+                target: targetNodeId,
+                sourceHandle: startHandleId,
+                targetHandle: targetHandleId,
+              });
+            }
             onConnect({
-              source: currentConnectingFrom,
-              sourceHandle: currentConnectingFromHandle || undefined,
+              source: startNodeId,
+              sourceHandle: startHandleId || undefined,
               target: targetNodeId,
               targetHandle: targetHandleId || undefined,
             });
@@ -158,6 +215,10 @@ export const useCanvasEdgeInteractions = ({
             setConnectionMousePos(null);
             return;
           }
+        }
+
+        if (process.env.NODE_ENV !== "production") {
+          console.debug("[EdgeInteractions] Connection cancelled", { startNodeId, startHandleId });
         }
 
         setConnectingFrom(null);
@@ -172,12 +233,22 @@ export const useCanvasEdgeInteractions = ({
           targetElement.closest('[style*="rgba(0, 255, 0"]') ||
           targetElement.closest('.react-flow__handle[id*="connector"]');
 
-        const isToolbarClick =
-          targetElement.closest('.absolute.bottom-8.left-1\/2.-translate-x-1\/2.z-\\[8000\\]') ||
-          targetElement.closest('[aria-label="Select (V)"]') ||
-          targetElement.closest('[aria-label="Add box (R)"]') ||
-          targetElement.closest('[aria-label="Add connector (C)"]') ||
-          targetElement.closest('[aria-label="Create group (G)"]');
+        const isToolbarClick = (() => {
+          const toolbarButton = targetElement.closest('[aria-label="Select (V)"]') ||
+            targetElement.closest('[aria-label="Add box (R)"]') ||
+            targetElement.closest('[aria-label="Add connector (C)"]') ||
+            targetElement.closest('[aria-label="Create group (G)"]');
+
+          const toolbarContainer = targetElement.closest('[data-canvas-toolbar]');
+
+          const result = Boolean(toolbarButton || toolbarContainer);
+
+          if (result) {
+            console.log('🛠️ [DEBUG] Toolbar click detected, cancelling connection.');
+          }
+
+          return result;
+        })();
 
         if (isToolbarClick) {
           document.removeEventListener("mousemove", handleMouseMove);
@@ -216,6 +287,7 @@ export const useCanvasEdgeInteractions = ({
       setConnectionMousePos,
       setSelectedNodes,
       setSelectedTool,
+      nodes,
     ]
   );
 
@@ -224,58 +296,69 @@ export const useCanvasEdgeInteractions = ({
       return null;
     }
 
-    const sourceNode = nodes.find((node) => node.id === connectingFrom);
-    if (!sourceNode) {
+    // Convert screen coordinates to flow coordinates, then apply viewport transform
+    if (!reactFlowRef.current) {
+      console.warn('❌ [DEBUG] ReactFlow instance unavailable for edge preview');
       return null;
     }
 
-    const nodeElement = document.querySelector(`[data-id="${connectingFrom}"]`) as HTMLElement | null;
-    const paneRect = document.querySelector(".react-flow__pane")?.getBoundingClientRect();
-    if (!nodeElement || !paneRect) {
+    let sourceScreen = sourceScreenPosRef.current;
+
+    let sourceElement = sourceElementRef.current;
+    if (!sourceElement || !document.contains(sourceElement)) {
+      const connectorSelector = `[data-connector-dot][data-node-id="${connectingFrom}"][data-handle-id="${connectingFromHandle}"]`;
+      const handleSelector = `.react-flow__handle[data-nodeid="${connectingFrom}"][data-handleid="${connectingFromHandle}"]`;
+      sourceElement = (document.querySelector(connectorSelector) as HTMLElement | null) ||
+        (document.querySelector(handleSelector) as HTMLElement | null) ||
+        null;
+      sourceElementRef.current = sourceElement;
+    }
+
+    if (sourceElement) {
+      const rect = sourceElement.getBoundingClientRect();
+      sourceScreen = {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      };
+      sourceScreenPosRef.current = sourceScreen;
+    }
+
+    if (!sourceScreen) {
       return null;
     }
 
-    const nodeWidth = (sourceNode.data as any)?.width || 96;
-    const nodeCenterX = sourceNode.position.x + nodeWidth / 2;
-    const nodeCenterY = sourceNode.position.y + nodeWidth / 2;
-
-    const handleSide = connectingFromHandle?.includes("top")
-      ? "top"
-      : connectingFromHandle?.includes("right")
-        ? "right"
-        : connectingFromHandle?.includes("bottom")
-          ? "bottom"
-          : "left";
-
-    let sourceX: number;
-    let sourceY: number;
-    if (handleSide === "top") {
-      sourceX = nodeCenterX;
-      sourceY = sourceNode.position.y;
-    } else if (handleSide === "bottom") {
-      sourceX = nodeCenterX;
-      sourceY = sourceNode.position.y + nodeWidth;
-    } else if (handleSide === "left") {
-      sourceX = sourceNode.position.x;
-      sourceY = nodeCenterY;
-    } else {
-      sourceX = sourceNode.position.x + nodeWidth;
-      sourceY = nodeCenterY;
-    }
-
+    const sourceX = sourceScreen.x;
+    const sourceY = sourceScreen.y;
     const targetX = connectionMousePos.x;
     const targetY = connectionMousePos.y;
     const midX = sourceX + (targetX - sourceX) / 2;
     const edgePath = `M ${sourceX} ${sourceY} L ${midX} ${sourceY} L ${midX} ${targetY} L ${targetX} ${targetY}`;
 
     return (
-      <EdgeLabelRenderer>
-        <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 10000 }}>
-          <path d={edgePath} stroke="#b1b1b7" strokeWidth={2} fill="none" strokeDasharray="5 5" />
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          pointerEvents: "none",
+          zIndex: 10000,
+        }}
+      >
+        <svg style={{ width: "100%", height: "100%", overflow: "visible" }}>
+          <path
+            d={edgePath}
+            stroke={CANVAS_STYLES.edges.default.stroke}
+            strokeWidth={CANVAS_STYLES.edges.default.strokeWidth}
+            fill="none"
+            strokeDasharray={CANVAS_STYLES.edges.selected.strokeDasharray}
+            strokeLinecap="round"
+          />
         </svg>
-      </EdgeLabelRenderer>
+      </div>
     );
-  }, [connectingFrom, connectingFromHandle, connectionMousePos, nodes, reactFlowRef]);
+  }, [connectingFrom, connectingFromHandle, connectionMousePos, nodes, previewTick]);
 
   return {
     handleConnectStart,

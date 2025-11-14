@@ -2,6 +2,8 @@ import { Node } from 'reactflow';
 
 export const LOCAL_CANVAS_SNAPSHOT_KEY = "atelier_canvas_last_snapshot_v1";
 
+let lastSnapshotDigest: string | null = null;
+
 export interface ViewStateGeometry {
   x: number;
   y: number;
@@ -108,12 +110,21 @@ export function createViewStateSnapshot(
   if (process.env.NODE_ENV !== 'production') {
     const nodeEntries = Object.entries(snapshot.node || {});
     const groupEntries = Object.entries(snapshot.group || {});
-    console.info('[VIEWSTATE DEBUG] createViewStateSnapshot', {
-      nodeCount: nodeEntries.length,
-      groupCount: groupEntries.length,
-      sampleNodes: nodeEntries.slice(0, 5).map(([id, geom]) => ({ id, ...geom })),
-      sampleGroups: groupEntries.slice(0, 5).map(([id, geom]) => ({ id, ...geom })),
-    });
+    const zeroPositionNodes = nodeEntries
+      .filter(([, geom]) => !geom || (geom.x === 0 && geom.y === 0))
+      .map(([id, geom]) => ({ id, ...geom }));
+    const digest = `${nodeEntries.length}:${groupEntries.length}:${zeroPositionNodes.length}`;
+
+    if (digest !== lastSnapshotDigest || zeroPositionNodes.length > 0) {
+      lastSnapshotDigest = digest;
+      console.info('[VIEWSTATE DEBUG] createViewStateSnapshot', {
+        nodeCount: nodeEntries.length,
+        groupCount: groupEntries.length,
+        zeroPositionSample: zeroPositionNodes.slice(0, 3),
+        sampleNodes: nodeEntries.slice(0, 3).map(([id, geom]) => ({ id, ...geom })),
+        sampleGroups: groupEntries.slice(0, 3).map(([id, geom]) => ({ id, ...geom })),
+      });
+    }
   }
 
   return snapshot;

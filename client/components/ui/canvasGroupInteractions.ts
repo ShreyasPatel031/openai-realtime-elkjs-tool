@@ -82,13 +82,32 @@ const createEmptyGroupAtPoint = ({
     y: snapToGrid(flowPoint.y - GROUP_HEIGHT / 2),
   };
 
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[GroupTool] Creating draft group", {
+      screenPoint,
+      flowPoint,
+      topLeft,
+    });
+  }
+
   const rawGroupName = `Draft group ${Date.now()}`;
   const normalizedId = createNodeID(rawGroupName);
 
   const view = viewStateRef.current ?? { node: {}, group: {}, edge: {} };
   view.node = view.node || {};
-  view.node[normalizedId] = { x: topLeft.x, y: topLeft.y, w: GROUP_WIDTH, h: GROUP_HEIGHT };
+  view.group = view.group || {};
+  const groupGeometry = { x: topLeft.x, y: topLeft.y, w: GROUP_WIDTH, h: GROUP_HEIGHT };
+  view.node[normalizedId] = groupGeometry;
+  view.group[normalizedId] = groupGeometry;
   viewStateRef.current = view;
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[GroupTool] Wrote group viewState", {
+      groupId: normalizedId,
+      geometry: groupGeometry,
+      nodeKeys: Object.keys(view.node),
+      groupKeys: Object.keys(view.group),
+    });
+  }
 
   if (shouldSkipFitViewRef?.current !== undefined) {
     shouldSkipFitViewRef.current = true;
@@ -98,11 +117,12 @@ const createEmptyGroupAtPoint = ({
     handleBatchUpdate([
       {
         name: "add_node",
-        nodename: rawGroupName,
+        nodename: normalizedId,
         parentId: "root",
         data: {
           label: "Group",
           isGroup: true,
+          originalName: rawGroupName,
         },
       },
     ]);
@@ -173,6 +193,12 @@ const createEmptyGroupAtPoint = ({
 };
 
 export const handleGroupToolPaneClick = (params: GroupToolPaneClickParams): boolean => {
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[GroupTool] handleGroupToolPaneClick invoked", {
+      selectedNodes: params.selectedNodes.length,
+      hasReactFlow: !!params.reactFlowRef.current,
+    });
+  }
   return groupSelectedNodes(params) || createEmptyGroupAtPoint(params);
 };
 

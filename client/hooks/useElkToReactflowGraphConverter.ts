@@ -232,33 +232,10 @@ const addEdgeWrapper = (edgeId: string, sourceId: string, targetId: string, labe
         : next;
 
       if (resolved && typeof resolved === 'object' && 'viewState' in resolved && resolved.viewState) {
-        if (process.env.NODE_ENV !== 'production') {
-          const vsNodeEntries = Object.entries(resolved.viewState.node || {});
-          const vsGroupEntries = Object.entries(resolved.viewState.group || {});
-          console.info('[ELK DEBUG] setRawGraph (incoming graph)', {
-            hasViewState: !!resolved.viewState,
-            viewStateNodes: vsNodeEntries.length,
-            viewStateGroups: vsGroupEntries.length,
-            children: resolved.children?.length || 0,
-            sampleNodePositions: vsNodeEntries.slice(0, 5).map(([id, geom]) => ({ id, ...geom })),
-            sampleGroupPositions: vsGroupEntries.slice(0, 5).map(([id, geom]) => ({ id, ...geom })),
-          });
-        }
-        viewStateRef.current = cloneViewState(resolved.viewState) ?? { node: {}, group: {}, edge: {} };
-      } else if (viewStateRef.current && Object.keys(viewStateRef.current.node || {}).length > 0) {
-        if (process.env.NODE_ENV !== 'production') {
-          const existingNodeEntries = Object.entries(viewStateRef.current.node || {});
-          const existingGroupEntries = Object.entries(viewStateRef.current.group || {});
-          console.info('[ELK DEBUG] setRawGraph (no new viewState) reusing existing snapshot', {
-            existingViewStateNodes: existingNodeEntries.length,
-            existingViewStateGroups: existingGroupEntries.length,
-            sampleNodePositions: existingNodeEntries.slice(0, 5).map(([id, geom]) => ({ id, ...geom })),
-            sampleGroupPositions: existingGroupEntries.slice(0, 5).map(([id, geom]) => ({ id, ...geom })),
-          });
-        }
-        // Attach current viewState snapshot so downstream consumers (saves, reloads) retain geometry
-        resolved = { ...resolved, viewState: cloneViewState(viewStateRef.current) };
-      }
+         viewStateRef.current = cloneViewState(resolved.viewState) ?? { node: {}, group: {}, edge: {} };
+       } else if (viewStateRef.current && Object.keys(viewStateRef.current.node || {}).length > 0) {
+         resolved = { ...resolved, viewState: cloneViewState(viewStateRef.current) };
+       }
 
       const viewStateNodeCount = resolved?.viewState?.node ? Object.keys(resolved.viewState.node).length : 0;
       const viewStateGroupCount = resolved?.viewState?.group ? Object.keys(resolved.viewState.group).length : 0;
@@ -323,30 +300,11 @@ const addEdgeWrapper = (edgeId: string, sourceId: string, targetId: string, labe
         `vsGroup:${viewStateGroupCount}`,
       ].join('|');
 
-      if (lastElkReasonRef.current !== reasonKey) {
-        console.info('[ELK DEBUG] Running ELK', {
-          mutationSource: mutation?.source || 'unknown',
-          hashChanged: currentHash !== previousHash,
-          childCount: rawGraph.children?.length || 0,
-          viewStateNodeCount,
-          viewStateGroupCount,
-        });
-        lastElkReasonRef.current = reasonKey;
-      }
+      lastElkReasonRef.current = reasonKey;
     }
 
     
     if (!shouldRunELK) {
-      if (process.env.NODE_ENV !== 'production') {
-        const vsNodes = Object.keys(viewStateRef.current?.node || {}).length;
-        const vsGroups = Object.keys(viewStateRef.current?.group || {}).length;
-        console.info('[ELK DEBUG] Skipping ELK (FREE mode)', {
-          mutationSource: mutation?.source || 'unknown',
-          childCount: rawGraph.children?.length || 0,
-          viewStateNodes: vsNodes,
-          viewStateGroups: vsGroups,
-        });
-      }
       // User drew a node in FREE mode - create ReactFlow nodes directly from domain + ViewState
       try {
         // Create ReactFlow nodes from domain graph children using ViewState positions
@@ -371,7 +329,17 @@ const addEdgeWrapper = (edgeId: string, sourceId: string, targetId: string, labe
         (rawGraph.children || []).forEach((domainNode: any) => {
           const sourceViewState =
             (rawGraph as any)?.viewState?.node?.[domainNode.id] ||
-            viewStateRef.current?.node?.[domainNode.id];
+            (rawGraph as any)?.viewState?.group?.[domainNode.id] ||
+            viewStateRef.current?.node?.[domainNode.id] ||
+            viewStateRef.current?.group?.[domainNode.id];
+
+          if (!sourceViewState && process.env.NODE_ENV !== "production") {
+            console.debug("[FREE Mode] No viewState found for node", {
+              nodeId: domainNode.id,
+              availableViewStateKeys: Object.keys(viewStateRef.current?.node || {}),
+              availableGroupViewStateKeys: Object.keys(viewStateRef.current?.group || {}),
+            });
+          }
           const position = sourceViewState ? { x: sourceViewState.x, y: sourceViewState.y } : { x: 0, y: 0 };
           const widthFromView = sourceViewState?.w;
           const heightFromView = sourceViewState?.h;
@@ -441,39 +409,48 @@ const addEdgeWrapper = (edgeId: string, sourceId: string, targetId: string, labe
           });
         }
 
-        setNodes(rfNodes);
-        if (process.env.NODE_ENV !== 'production') {
-        console.info('[ELK DEBUG] FREE mode nodes applied', rfNodes.map(node => ({
-          id: node.id,
-          position: node.position,
-          width: node.data?.width,
-          height: node.data?.height,
-        })));
-        }
+        setNodes((currentNodes) => {
+          const currentMap = new Map(currentNodes.map((node) => [node.id, node]));
+          const nextNodes: Node[] = rfNodes.map((rfNode) => {
+            const existing = currentMap.get(rfNode.id);
+            const viewStateHasPosition = rfNode.position && (rfNode.position.x !== 0 || rfNode.position.y !== 0);
+            const fallbackPosition = rfNode.position ?? { x: 0, y: 0 };
+ 
+            const position = existing?.position ?? (viewStateHasPosition ? rfNode.position! : fallbackPosition);
+ 
+            return {
+              ...existing,
+              ...rfNode,
+              position,
+              data: { ...existing?.data, ...rfNode.data },
+              style: { ...existing?.style, ...rfNode.style },
+            };
+          });
+
+          return nextNodes;
+        });
+        
         // CRITICAL: Preserve existing edges when updating - merge with existing edges
         // This prevents edges from being lost when onSelectionChange updates styling
         setEdges((currentEdges) => {
-          // Create a map of edges from the graph (source of truth)
-          const graphEdgeMap = new Map(rfEdges.map(e => [e.id, e]));
-          
-          // Merge existing edges with graph edges, preserving styling
-          const existingEdgeMap = new Map(currentEdges.map(e => [e.id, e]));
-          const mergedEdges = rfEdges.map(newEdge => {
+          const existingEdgeMap = new Map(currentEdges.map((e) => [e.id, e]));
+
+          if (rfEdges.length === 0) {
+            return currentEdges;
+          }
+
+          const mergedEdges = rfEdges.map((newEdge) => {
             const existingEdge = existingEdgeMap.get(newEdge.id);
             if (existingEdge) {
-              // Preserve styling from existing edge, but update source/target/handles
               return {
                 ...existingEdge,
                 ...newEdge,
-                style: existingEdge.style, // Preserve styling
+                style: existingEdge.style,
               };
             }
             return newEdge;
           });
-          
-          // Also keep edges that exist in ReactFlow but not in graph (they might have been removed)
-          // Actually, we should remove edges that aren't in the graph anymore
-          // But preserve edges that are in the graph
+ 
           return mergedEdges;
         });
         
@@ -621,7 +598,56 @@ const addEdgeWrapper = (edgeId: string, sourceId: string, targetId: string, labe
         return ch;
       });
 
-      setNodes((nodesState) => applyNodeChanges(snappedChanges, nodesState));
+      setNodes((nodesState) => {
+        const updated = applyNodeChanges(snappedChanges, nodesState);
+
+        const nextViewState = viewStateRef.current
+          ? {
+              node: { ...(viewStateRef.current.node || {}) },
+              group: { ...(viewStateRef.current.group || {}) },
+              edge: { ...(viewStateRef.current.edge || {}) },
+            }
+          : { node: {}, group: {}, edge: {} };
+
+        updated.forEach((node) => {
+          const baseGeom = nextViewState.node[node.id] || {
+            w: (node.data as any)?.width ?? (node.style as any)?.width ?? 96,
+            h: (node.data as any)?.height ?? (node.style as any)?.height ?? 96,
+            x: node.position?.x ?? 0,
+            y: node.position?.y ?? 0,
+          };
+
+          const geometry = {
+            ...baseGeom,
+            x: node.position?.x ?? baseGeom.x ?? 0,
+            y: node.position?.y ?? baseGeom.y ?? 0,
+            w: baseGeom.w,
+            h: baseGeom.h,
+          };
+
+          nextViewState.node[node.id] = geometry;
+
+          if (node.type === 'group') {
+            nextViewState.group[node.id] = geometry;
+          }
+        });
+
+        viewStateRef.current = nextViewState;
+
+        if (process.env.NODE_ENV !== 'production') {
+          const movedIds = snappedChanges
+            .filter((ch) => ch.type === 'position' && (ch as any).id)
+            .map((ch: any) => ch.id);
+          if (movedIds.length > 0) {
+            console.debug('[FREE Mode] Updated viewState from node move', {
+              movedIds,
+              snapshot: movedIds.slice(0, 3).map((id) => nextViewState.node[id]),
+            });
+          }
+        }
+
+        return updated;
+      });
     },
     []
   );

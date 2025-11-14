@@ -806,72 +806,31 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     remoteSaveTimeoutRef
   }), [user, selectedArchitectureId, savedArchitectures, setSavedArchitectures, rawGraph, isPublicMode, getViewStateSnapshot, isHydratingRef, dirtySinceRef, remoteSaveTimeoutRef]);
 
+  // Ref to store ReactFlow instance for auto-zoom functionality
+  const reactFlowRef = useRef<any>(null);
+  const embedChatChannelRef = useRef<BroadcastChannel | null>(null);
+  
   // Canvas tool selection handler (defined after setNodes is available)
   const handleToolSelect = useCallback((tool: typeof selectedTool) => {
-    console.log('🛠️ [handleToolSelect] Switching tool:', { from: selectedTool, to: tool });
-    
     // CRITICAL: Use ReactFlow's API directly to deselect nodes IMMEDIATELY
     // This must happen BEFORE setting the tool state to prevent ReactFlow from re-selecting
     if (tool === 'connector' || tool === 'box') {
-      console.log('🛠️ [handleToolSelect] Deselecting nodes for tool:', tool);
-      
-      // Use ReactFlow's API directly - get current nodes from ReactFlow's internal state
-      // This is the source of truth, not our React state which might be stale
       if (reactFlowRef.current) {
-        const currentNodes = reactFlowRef.current.getNodes();
-        const selectedNodes = currentNodes.filter(n => n.selected);
-        
-        if (selectedNodes.length > 0) {
-          console.log('🛠️ [handleToolSelect] Found selected nodes via ReactFlow API:', selectedNodes.map(n => n.id));
-          
-          // Deselect immediately using ReactFlow's API - this is synchronous
-          reactFlowRef.current.setNodes((nds) => {
-            const updated = nds.map(node => ({ ...node, selected: false }));
-            console.log('🛠️ [handleToolSelect] Deselected via ReactFlow API, remaining selected:', updated.filter(n => n.selected).length);
-            return updated;
-          });
-        } else {
-          console.log('🛠️ [handleToolSelect] No selected nodes found via ReactFlow API');
-        }
-      } else {
-        console.warn('🛠️ [handleToolSelect] reactFlowRef.current is null!');
+        reactFlowRef.current.getNodes();
+        reactFlowRef.current.setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
       }
-      
-      // Also update our state for consistency (in case ReactFlow's state is out of sync)
-      const selectedNodesFromState = nodes.filter(n => n.selected);
-      if (selectedNodesFromState.length > 0) {
-        console.log('🛠️ [handleToolSelect] Also updating via setNodes:', selectedNodesFromState.map(n => n.id));
-        setNodes((nds) => {
-          return nds.map(node => ({ ...node, selected: false }));
-        });
-      }
-      
-      // Clear our selection state
+      // Also update React state for ReactFlow nodes so they stay in sync
+      setNodes(prevNodes => prevNodes.map(node => ({ ...node, selected: false })));
+    }
+ 
+    if (tool !== 'arrow' && tool !== 'hand') {
+      // Clear selection manually so ReactFlow doesn't try to keep previous selection
       setSelectedNodes([]);
       setSelectedEdges([]);
     }
-    
-    // Special case: If switching away from arrow tool while nodes are selected, deselect them
-    if (selectedTool === 'arrow' && tool !== 'arrow') {
-      const selectedNodesFromState = nodes.filter(n => n.selected);
-      if (selectedNodesFromState.length > 0) {
-        console.log('🛠️ [handleToolSelect] Switching away from select tool, deselecting nodes:', selectedNodesFromState.map(n => n.id));
-        
-        // Use ReactFlow's API directly
-        if (reactFlowRef.current) {
-          reactFlowRef.current.setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
-        }
-        
-        setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
-        setSelectedNodes([]);
-      }
-    }
-    
-    // Set the tool AFTER deselection - but synchronously, not in setTimeout
-    // The ReactFlow API call above should have already deselected, so we can set tool immediately
+ 
     setSelectedTool(tool);
-    console.log('🛠️ [handleToolSelect] Tool set to:', tool);
-  }, [selectedTool, nodes, setNodes, setSelectedNodes]);
+  }, [selectedTool, reactFlowRef, setNodes, selectedNodes, setSelectedNodes, setSelectedEdges]);
 
   // Listen for auth state changes (moved here after config is defined)
   useEffect(() => {
@@ -2083,18 +2042,14 @@ Adapt these patterns to your specific requirements while maintaining the overall
     }, 0);
   }, [rawGraph, handleGraphChange, setNodes]);
   
-  // Ref to store ReactFlow instance for auto-zoom functionality
-  const reactFlowRef = useRef<any>(null);
-  const embedChatChannelRef = useRef<BroadcastChannel | null>(null);
-  
-useEffect(() => {
-  return () => {
-    if (remoteSaveTimeoutRef.current) {
-      clearTimeout(remoteSaveTimeoutRef.current);
-      remoteSaveTimeoutRef.current = null;
-    }
-  };
-}, []);
+  useEffect(() => {
+    return () => {
+      if (remoteSaveTimeoutRef.current) {
+        clearTimeout(remoteSaveTimeoutRef.current);
+        remoteSaveTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // Note: Using nodes state directly in handleToolSelect instead of ref to avoid stale closures
 
@@ -2860,90 +2815,40 @@ useEffect(() => {
   }, [rawGraph]);
 
   // Handle selection changes to ensure edges remain visible
-  const handleSelectionChange = useCallback(({ nodes: selectedNodesParam, edges: selectedEdgesParam }: { nodes: Node[]; edges: Edge[] }) => {
-    console.log('🎯 [onSelectionChange] Called:', { 
-      selectedNodes: selectedNodesParam.length, 
-      selectedEdges: selectedEdgesParam.length,
+  const handleSelectionChange = useCallback((params: any) => {
+    console.log('🎯 [DEBUG] Selection change:', {
       selectedTool,
-      nodeIds: selectedNodesParam.map(n => n.id),
-      edgeIds: selectedEdgesParam.map(e => e.id)
+      params,
+      nodesCount: params?.nodes?.length || 0,
+      edgesCount: params?.edges?.length || 0
     });
-    
-    // CRITICAL: When connector or box tool is active, ignore node selections
-    // Box tool: nodes should not be selectable while placing new nodes
-    // Connector tool: nodes should not be selectable while connecting
-    if (selectedTool === 'box') {
-      console.log('🎯 [onSelectionChange] Tool is connector/box, ignoring selection');
-      // Clear node selection when these tools are active
-      // Use ReactFlow's API directly to ensure deselection happens immediately
-      if (selectedNodesParam.length > 0) {
-        console.log('🎯 [onSelectionChange] Force deselecting via ReactFlow API:', selectedNodesParam.map(n => n.id));
-        
-        // Use ReactFlow's API directly for immediate deselection
-        if (reactFlowRef.current) {
-          reactFlowRef.current.setNodes((nds) => {
-            const updated = nds.map(node => ({ ...node, selected: false }));
-            console.log('🎯 [onSelectionChange] Deselected via ReactFlow API, remaining selected:', updated.filter(n => n.selected).length);
-            return updated;
-          });
-        }
-        
-        // Also update our state for consistency
-        setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
-      }
-      setSelectedNodes([]);
-      setSelectedEdges(selectedEdgesParam);
+
+    if (!params) {
       return;
     }
-    
-    // Update selected nodes and edges state for delete functionality
-    setSelectedNodes(selectedNodesParam);
-    setSelectedEdges(selectedEdgesParam);
-    
-    // Log selection for debugging
-    if (selectedEdgesParam.length > 0) {
-      console.log(`🔗 Selected edges:`, selectedEdgesParam.map(edge => edge.id));
+ 
+    // Allow selection when using arrow tool, but prevent when actively using other tools
+    if (selectedTool === 'connector' || selectedTool === 'box') {
+      console.log('🚫 [DEBUG] Blocking selection due to active tool:', selectedTool);
+      return;
     }
-    if (selectedNodesParam.length > 0) {
+ 
+    // Don't force-deselect nodes - let ReactFlow handle natural selection
+    const newSelectedNodes = params.nodes || [];
+    const newSelectedEdges = params.edges || [];
+ 
+    console.log('✅ [DEBUG] Allowing selection:', {
+      newSelectedNodes: newSelectedNodes.length,
+      newSelectedEdges: newSelectedEdges.length
+    });
+
+    if (newSelectedNodes.length === 0 && newSelectedEdges.length === 0) {
+      setEdges((edges) => updateEdgeStylingOnDeselection(edges));
+      return;
     }
-    
-    if (selectedNodesParam.length > 0) {
-      const selectedIds = selectedNodesParam.map(node => node.id);
-      
-      // Is a group node selected?
-      const hasGroupNode = selectedNodesParam.some(node => node.type === 'group');
-      
-      console.log('🎯 [onSelectionChange] Nodes selected, updating edge styling');
-      // Force edge visibility regardless of node type, but especially for group nodes
-      setEdges((currentEdges) => {
-        console.log('🎯 [onSelectionChange] setEdges (selection) - currentEdges:', currentEdges.length, 'IDs:', currentEdges.map(e => e.id));
-        const updated = updateEdgeStylingOnSelection(currentEdges, selectedIds);
-        console.log('🎯 [onSelectionChange] setEdges (selection) - updated:', updated.length, 'IDs:', updated.map(e => e.id));
-        return updated;
-      });
-      
-      // Update selected nodes tracking
-      setSelectedNodeIds(selectedIds);
-    } else {
-      console.log('🎯 [onSelectionChange] Nothing selected, updating edge styling');
-      // Nothing selected - still ensure edges are visible
-      setEdges((currentEdges) => {
-        // Hard reset any dotted styling
-        const cleared = currentEdges.map(e => ({
-          ...e,
-          style: {
-            ...(e.style || {}),
-            strokeDasharray: undefined,
-            strokeDashoffset: undefined
-          }
-        }));
-        const updated = updateEdgeStylingOnDeselection(cleared);
-        return updated;
-      });
-      
-      setSelectedNodeIds([]);
-    }
-  }, [selectedTool, setNodes]);
+ 
+    setEdges((edges) => updateEdgeStylingOnSelection(edges, newSelectedNodes));
+  }, [selectedTool, setEdges]);
 
   // Critical fix to ensure edges remain visible at all times
   useEffect(() => {
@@ -3214,6 +3119,12 @@ useEffect(() => {
               }}
               onSelectionChange={handleSelectionChange}
               onPaneClick={(event) => {
+                if (process.env.NODE_ENV !== 'production') {
+                  console.debug('[InteractiveCanvas] onPaneClick', {
+                    selectedTool,
+                    targetClassList: (event?.target as Element)?.className,
+                  });
+                }
                 if (selectedTool === 'group') {
                   const handled = handleGroupToolPaneClick({
                     event,

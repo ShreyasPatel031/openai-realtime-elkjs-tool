@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CANVAS_STYLES } from '../graph/styles/canvasStyles';
 
 interface SelectedNodeDotsProps {
   nodeId: string;
@@ -36,10 +37,31 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
     isExpanded: false, isWhite: false, hoveredHandle: null
   });
 
+  // Track expanded handles globally to disable edge pointer events
+  useEffect(() => {
+    if (expandedHandles.size > 0) {
+      // Add class to body to disable edge interactions when dots are expanded
+      document.body.classList.add('dots-expanded');
+      return () => {
+        // Only remove if no other nodes have expanded dots
+        // Check all nodes with expanded dots
+        const allExpandedDots = document.querySelectorAll('[data-node-has-expanded-dots="true"]');
+        if (allExpandedDots.length === 1) { // Only this node
+          document.body.classList.remove('dots-expanded');
+        }
+      };
+    } else {
+      // Check if any other nodes have expanded dots
+      const otherExpandedDots = document.querySelectorAll('[data-node-has-expanded-dots="true"]:not([data-node-id="' + nodeId + '"])');
+      if (otherExpandedDots.length === 0) {
+        document.body.classList.remove('dots-expanded');
+      }
+    }
+  }, [expandedHandles, nodeId]);
+
   // Track mouse position on node for proximity detection
   useEffect(() => {
     if (!nodeEl) return;
-    let logCount = 0;
     const onMouseMove = (e: MouseEvent) => {
       const rect = nodeEl.getBoundingClientRect();
       const newPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
@@ -61,6 +83,13 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
 
   return (
     <>
+      {/* Marker to track if this node has expanded dots */}
+      <div 
+        data-node-has-expanded-dots={expandedHandles.size > 0 ? "true" : "false"}
+        data-node-id={nodeId}
+        style={{ display: 'none' }}
+        aria-hidden="true"
+      />
       {[
         { key: 'top', rotation: 0 },
         { key: 'right', rotation: 90 },
@@ -125,9 +154,18 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
           return isExpanded && hoveredHandle === key;
         }, [isExpanded, hoveredHandle, key]);
         
-        // DEBUG: Track every render and state change for top dot
+        // Track state changes for top dot
         if (key === 'top') {
           renderCountRef.current++;
+          const currentState = { isExpanded, isWhite, hoveredHandle };
+          const stateChanged = 
+            lastStateRef.current.isExpanded !== currentState.isExpanded ||
+            lastStateRef.current.isWhite !== currentState.isWhite ||
+            lastStateRef.current.hoveredHandle !== currentState.hoveredHandle;
+          
+          if (stateChanged) {
+            lastStateRef.current = currentState;
+          }
         }
         
         const hoverAreaCssCx = smallCssCx;
@@ -143,23 +181,26 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
         
         return (
           <React.Fragment key={key}>
-            {/* Fixed proximity detection area (green) - actual hover area for expansion */}
+            {/* Fixed proximity detection area - invisible hover area for expansion */}
             <div
+              data-dot-hover-area={`${nodeId}-${key}`}
+              ref={() => {}}
               style={{
                 position: 'absolute',
                 left: hoverAreaPos.left,
                 top: hoverAreaPos.top,
                 transform: 'translate(-50%, -50%)',
-                width: 64, // Larger hover area
-                height: 64,
-                background: isExpanded ? 'rgba(0, 255, 0, 0.15)' : 'rgba(0, 255, 0, 0.25)', // More visible green
+                width: 80, // Larger hover area to extend over edges
+                height: 80,
+                background: 'transparent', // Invisible - no green background
                 pointerEvents: 'auto',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                zIndex: 1000,
-                borderRadius: '8px' // Rounded corners for better visibility
+                zIndex: CANVAS_STYLES.zIndex.nodeDotsHoverArea, // Use centralized z-index, above edges
+                borderRadius: '8px', // Rounded corners for better visibility
+                opacity: 1 // Ensure fully visible
               }}
               onMouseEnter={() => {
                 const existingTimeout = timeoutRefs.current.get(`collapse-${key}`);
@@ -178,6 +219,22 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
                 setExpandedHandles(prev => new Set(prev).add(key));
               }}
               onMouseLeave={(e) => {
+                const relatedTarget = (e.nativeEvent as MouseEvent).relatedTarget as HTMLElement | null;
+                // Check for both edge interaction layer and edge path (visual edge)
+                const isEdgeElement = relatedTarget?.classList?.contains('react-flow__edge-interaction') || 
+                                     relatedTarget?.classList?.contains('react-flow__edge-path') ||
+                                     relatedTarget?.closest('.react-flow__edge-interaction') !== null ||
+                                     relatedTarget?.closest('.react-flow__edge-path') !== null ||
+                                     relatedTarget?.closest('.react-flow__edges') !== null;
+                
+                // Get current mouse position in global coordinates
+                const globalMousePos = { x: (e.nativeEvent as MouseEvent).clientX, y: (e.nativeEvent as MouseEvent).clientY };
+                
+                // If mouse is moving to an edge, ignore the mouseLeave - edges shouldn't collapse dots
+                if (isEdgeElement) {
+                  return;
+                }
+                
                 const existingTimeout = timeoutRefs.current.get(`collapse-${key}`);
                 if (existingTimeout) {
                   clearTimeout(existingTimeout);
@@ -188,7 +245,27 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
                   const currentHoveredHandle = hoveredHandle;
                   const currentExpandedHandles = expandedHandles;
                   
+                  // Get current mouse position at timeout
+                  let currentMouseOverEdge = false;
+                  try {
+                    // Use the last known mouse position or try to get current
+                    const testX = globalMousePos.x || 0;
+                    const testY = globalMousePos.y || 0;
+                    if (testX > 0 && testY > 0) {
+                      const elementAtMouse = document.elementFromPoint(testX, testY);
+                      currentMouseOverEdge = elementAtMouse?.classList?.contains('react-flow__edge-interaction') ||
+                                            elementAtMouse?.closest('.react-flow__edge-interaction') !== null;
+                    }
+                  } catch (e) {
+                    // Ignore errors
+                  }
+                  
                   if (currentHoveredHandle === key) {
+                    return;
+                  }
+                  
+                  // If mouse is over an edge, don't collapse
+                  if (currentMouseOverEdge) {
                     return;
                   }
                   
@@ -199,7 +276,7 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
                   }
                   
                   if (mousePos && nodeEl) {
-                    const greenAreaSize = 64; // Updated to match new hover area size
+                    const greenAreaSize = 80; // Updated to match new hover area size
                     const bigDotSize = 16 * nodeScale;
                     const greenCenterX = (typeof hoverAreaPos.left === 'number' ? hoverAreaPos.left : NODE_CENTER_X) * nodeScale;
                     const greenCenterY = (typeof hoverAreaPos.top === 'number' ? hoverAreaPos.top : NODE_CENTER_Y) * nodeScale;
@@ -210,9 +287,34 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
                     );
                     
                     const maxDistance = Math.max(greenAreaSize / 2, bigDotSize / 2) + 5;
+                    
+                    // Get current global mouse position
+                    const currentGlobalMouse = { x: 0, y: 0 }; // Will be updated by mousemove
+                    const updateGlobalMouse = (e: MouseEvent) => {
+                      currentGlobalMouse.x = e.clientX;
+                      currentGlobalMouse.y = e.clientY;
+                    };
+                    document.addEventListener('mousemove', updateGlobalMouse, { once: true });
+                    
+                    // Check if mouse is over an edge (check both interaction and path elements)
+                    const elementUnderMouse = document.elementFromPoint(currentGlobalMouse.x, currentGlobalMouse.y);
+                    const isOverEdge = elementUnderMouse?.classList?.contains('react-flow__edge-interaction') ||
+                                      elementUnderMouse?.classList?.contains('react-flow__edge-path') ||
+                                      elementUnderMouse?.closest('.react-flow__edge-interaction') !== null ||
+                                      elementUnderMouse?.closest('.react-flow__edge-path') !== null ||
+                                      elementUnderMouse?.closest('.react-flow__edges') !== null;
+                    
                     if (distFromGreenCenter <= maxDistance) {
+                      document.removeEventListener('mousemove', updateGlobalMouse);
                       return;
                     }
+                    
+                    if (isOverEdge) {
+                      document.removeEventListener('mousemove', updateGlobalMouse);
+                      return;
+                    }
+                    
+                    document.removeEventListener('mousemove', updateGlobalMouse);
                   }
                   
                   const collapseTime = Date.now();
@@ -241,13 +343,14 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
             
             {/* Wrapper div for positioning */}
             <div
+              ref={() => {}}
               style={{
                 position: 'absolute',
                 left: '50%',
                 top: '50%',
                 transform: 'translate(-50%, -50%)',
                 pointerEvents: isExpanded ? 'auto' : 'none',
-                zIndex: isExpanded ? 2000 : 1
+                zIndex: isExpanded ? CANVAS_STYLES.zIndex.nodeDotsExpanded : CANVAS_STYLES.zIndex.nodeDots // Use centralized z-index, above edges
               }}
             >
               {/* Visual dot */}
@@ -302,7 +405,7 @@ const SelectedNodeDots: React.FC<SelectedNodeDotsProps> = ({
                     setHoveredHandle(key);
                   }
                 }}
-                onMouseLeave={(e) => {
+                onMouseLeave={() => {
                   if (isExpanded) {
                     setHoveredHandle(null);
                   }

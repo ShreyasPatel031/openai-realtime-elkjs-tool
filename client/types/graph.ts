@@ -39,7 +39,7 @@ export interface ElkGraphNode {
   labels?: { text: string }[];
   children?: ElkGraphNode[];
   edges?: ElkGraphEdge[];
-  mode?: 'FREE' | 'LOCK';  // default FREE - controls auto-layout behavior
+  // Phase 4: mode removed from Domain Graph - now lives in ViewState.layout
   data?: {
     label?: string;
     icon?: string;

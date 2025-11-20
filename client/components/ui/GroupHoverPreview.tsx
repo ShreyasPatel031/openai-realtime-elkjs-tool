@@ -110,12 +110,17 @@ const GroupHoverPreview: React.FC<GroupHoverPreviewProps> = ({ reactFlowRef, gri
         width,
         height,
         borderRadius: 8 * zoom,
-        border: `${1 * zoom}px solid #e4e4e4`,
-        background: 'rgba(228,228,228,0.5)',
+        border: `1px solid #E4E4E4`, /* Grey border at 100% opacity */
+        outline: 'none', /* No outline */
+        outlineWidth: 0,
+        boxShadow: 'none', /* No shadow */
+        background: 'rgba(228, 228, 228, 0.5)', /* Grey fill at 50% opacity */
         boxSizing: 'border-box',
         pointerEvents: 'none',
         zIndex: 100,
       }}
+      className="group-hover-preview"
+      data-hover-preview="group"
     />
   );
 };

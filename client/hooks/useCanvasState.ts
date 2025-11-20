@@ -76,7 +76,7 @@ export function useCanvasState() {
   const [architectureOperations, setArchitectureOperations] = useState<Record<string, boolean>>({});
   
   // Canvas tool and interaction state
-  const [selectedTool, setSelectedTool] = useState<"select" | "box" | "connector" | "group">("select");
+  const [selectedTool, setSelectedTool] = useState<"arrow" | "hand" | "box" | "connector" | "group">("arrow");
   const [selectedNodes, setSelectedNodes] = useState<Node[]>([]);
   const [selectedEdges, setSelectedEdges] = useState<Edge[]>([]);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
@@ -102,6 +102,7 @@ export function useCanvasState() {
   const dirtySinceRef = useRef<number | null>(null);
   const remoteSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const restoredFromSnapshotRef = useRef<boolean>(false);
+  const skipPersistenceRef = useRef<boolean>(false);
   const pendingSelectionRef = useRef<{ id: string; size?: { width: number; height: number } } | null>(null);
   
   return {
@@ -190,6 +191,7 @@ export function useCanvasState() {
     dirtySinceRef,
     remoteSaveTimeoutRef,
     restoredFromSnapshotRef,
+    skipPersistenceRef,
     pendingSelectionRef,
   };
 }

@@ -202,23 +202,72 @@ test.describe('Canvas FREE-mode interactions', () => {
 
     const second = await createUserNode(page, pane, paneBox, rightPoint.relative);
 
+    // Wait for both nodes to be fully rendered and get fresh positions
+    await page.waitForFunction(
+      () => {
+        const nodes = document.querySelectorAll('.react-flow__node');
+        return nodes.length >= 2;
+      },
+      { timeout: 10000 }
+    );
+
+    // Get fresh node snapshots to ensure we have accurate positions
+    const freshSnapshots = await getNodeSnapshots(page);
+    const firstNode = freshSnapshots.find(n => {
+      const dist = Math.hypot(n.rect.x + n.rect.width/2 - first.clickPoint.x, n.rect.y + n.rect.height/2 - first.clickPoint.y);
+      return dist < 100;
+    });
+    const secondNode = freshSnapshots.find(n => {
+      const dist = Math.hypot(n.rect.x + n.rect.width/2 - second.clickPoint.x, n.rect.y + n.rect.height/2 - second.clickPoint.y);
+      return dist < 100;
+    });
+
+    expect(firstNode).toBeDefined();
+    expect(secondNode).toBeDefined();
+    if (!firstNode || !secondNode) return;
+
     const prevEdgeCount = await page.evaluate(() => document.querySelectorAll('.react-flow__edge').length);
 
     await page.click('button[aria-label="Add connector (C)"]', { timeout: 5000 });
-    await page.waitForSelector('[data-connector-dot], [style*="rgba(0, 255, 0"]', { timeout: 10000 });
+    
+    // Wait for connector dots to appear (green background indicates they're visible)
+    await page.waitForFunction(
+      () => {
+        const dots = Array.from(document.querySelectorAll('[style*="rgba(0, 255, 0"]'));
+        return dots.length >= 2; // At least 2 dots (one per node)
+      },
+      { timeout: 10000 }
+    );
 
+    // Get updated node positions after connector tool is activated
+    const updatedSnapshots = await getNodeSnapshots(page);
+    const updatedFirst = updatedSnapshots.find(n => n.id === firstNode.id);
+    const updatedSecond = updatedSnapshots.find(n => n.id === secondNode.id);
+
+    if (!updatedFirst || !updatedSecond) {
+      throw new Error('Could not find updated node positions');
+    }
+
+    // Calculate positions for connector dots - right side of first node, left side of second node
     const start = {
-      x: first.node.rect.x + first.node.rect.width + 16,
-      y: first.node.rect.y + first.node.rect.height / 2,
+      x: updatedFirst.rect.x + updatedFirst.rect.width + 16,
+      y: updatedFirst.rect.y + updatedFirst.rect.height / 2,
     };
     const end = {
-      x: second.node.rect.x - 16,
-      y: second.node.rect.y + second.node.rect.height / 2,
+      x: updatedSecond.rect.x - 16,
+      y: updatedSecond.rect.y + updatedSecond.rect.height / 2,
     };
 
-    await page.mouse.click(start.x, start.y);
-    await page.mouse.click(end.x, end.y);
+    // Click on the right connector dot of the first node
+    await page.mouse.click(start.x, start.y, { delay: 100 });
 
+    // Wait for connection state to be established
+    await page.waitForTimeout(500);
+
+    // Click on the left connector dot of the second node
+    await page.mouse.click(end.x, end.y, { delay: 100 });
+
+    // Wait for edge to appear
     await page.waitForFunction(
       (previous) => document.querySelectorAll('.react-flow__edge').length > previous,
       prevEdgeCount,

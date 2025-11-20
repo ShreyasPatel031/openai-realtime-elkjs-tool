@@ -277,10 +277,44 @@ async function handleArchitectureSelection(
     setSelectedArchitectureId(firstArch.id);
     setCurrentChatName(firstArch.name);
 
+    // Only load architecture content if canvas is empty (don't overwrite local storage restoration)
+    // Check if there's a recent local storage snapshot that might have been restored
+    try {
+      const stored = localStorage.getItem('atelier_canvas_last_snapshot_v1') || sessionStorage.getItem('atelier_canvas_last_snapshot_v1');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const storedHasContent = 
+          (parsed?.rawGraph?.children && parsed.rawGraph.children.length > 0) ||
+          (parsed?.rawGraph?.edges && parsed.rawGraph.edges.length > 0);
+        const storedAge = Date.now() - (parsed?.timestamp || 0);
+        
+        // If stored snapshot is recent (within 5 minutes) and has content, don't overwrite
+        if (storedHasContent && storedAge < 5 * 60 * 1000) {
+          console.log('📂 Skipping Firebase architecture load - local storage restoration detected', {
+            storedAge: Math.round(storedAge / 1000) + 's',
+            hasContent: storedHasContent
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      // Ignore errors checking local storage
+    }
+
     // Load the architecture content
     if (firstArch.rawGraph) {
-      console.log('📂 Loading existing architecture content to replace empty canvas');
+      const archChildrenCount = firstArch.rawGraph?.children?.length || 0;
+      const archEdgesCount = firstArch.rawGraph?.edges?.length || 0;
+      console.log('📂 [FIREBASE-SYNC-DEBUG] Loading existing architecture content', {
+        archId: firstArch.id,
+        archName: firstArch.name,
+        childrenCount: archChildrenCount,
+        edgesCount: archEdgesCount,
+        hasContent: archChildrenCount > 0 || archEdgesCount > 0
+      });
       setRawGraph(firstArch.rawGraph);
+    } else {
+      console.log('📂 [FIREBASE-SYNC-DEBUG] Architecture has no rawGraph, skipping load');
     }
   } else {
     console.log('📋 User has no existing architectures - will add New Architecture tab');

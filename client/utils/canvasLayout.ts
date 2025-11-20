@@ -1,16 +1,8 @@
 import { RawGraph } from "../components/graph/types";
+import type { ViewState } from "../core/viewstate/ViewState";
 
-export type ViewState = {
-  node?: Record<string, { x: number; y: number; w?: number; h?: number }>;
-  group?: Record<string, { x: number; y: number; w?: number; h?: number }>;
-  edge?: Record<string, unknown>;
-};
-
-export const createEmptyViewState = (): ViewState => ({
-  node: {},
-  group: {},
-  edge: {}
-});
+// Re-export ViewState type for backward compatibility
+export type { ViewState };
 
 const hasMeaningfulGeometry = (entries: [string, { x: number; y: number }][]) =>
   entries.some(([, geom]) => {

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useEffect, useState } from "react";
 import type { Connection, Node, OnConnectStartParams, ReactFlowInstance } from "reactflow";
 import type { MutableRefObject } from "react";
-import { CANVAS_STYLES } from "../graph/styles/canvasStyles";
+import { CANVAS_STYLES } from "../../components/graph/styles/canvasStyles";
 
 interface Coordinate {
   x: number;

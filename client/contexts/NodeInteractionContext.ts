@@ -8,6 +8,9 @@ export interface NodeInteractionContextValue {
   handleConnectorDotClick: (nodeId: string, handleId: string) => void
   handleLabelChange: (id: string, label: string) => void
   handleAddNodeToGroup: (groupId: string) => void
+  handleArrangeGroup?: (groupId: string) => void
+  handleCreateWrapperAndArrange?: (selectionIds: string[]) => void
+  selectedNodeIds: string[]
 }
 
 export const NodeInteractionContext = createContext<NodeInteractionContextValue | null>(null)

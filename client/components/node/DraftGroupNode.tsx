@@ -10,6 +10,7 @@ interface DraftGroupData {
   label: string;
   isDraft?: boolean;
   state?: DraftGroupState;
+  mode?: 'FREE' | 'LOCK'; // Group mode for arrange button state
   leftHandles?: string[];
   rightHandles?: string[];
   topHandles?: string[];
@@ -23,13 +24,24 @@ interface DraftGroupNodeProps extends NodeProps<DraftGroupData> {
 /**
  * DraftGroupNode - Figma-style group frame with resize handles and toolbar states.
  */
-const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, style, position, onAddNode }) => {
+const DraftGroupNode: React.FC<DraftGroupNodeProps> = (props) => {
+  const { data, selected, id, onAddNode } = props;
   const interactions = useNodeInteractions();
   const { setNodes, getNodes, screenToFlowPosition } = useReactFlow();
   const handleAddNodeToGroup = interactions?.handleAddNodeToGroup ?? onAddNode;
+  const handleArrangeGroup = interactions?.handleArrangeGroup;
   const [label, setLabel] = useState(data.label || 'Group');
+  
+  // Phase 1: Read mode from ViewState first, fallback to data.mode 
+  // TODO: Get ViewState from context/props when available
+  const mode = data.mode || 'FREE'; // Currently using Domain fallback
   const [hoveredCorner, setHoveredCorner] = useState<'nw' | 'ne' | 'sw' | 'se' | null>(null);
+  const [isHovered, setIsHovered] = useState(false);
+  const [arrangeButtonHovered, setArrangeButtonHovered] = useState(false);
+  const [arrangeButtonSelected, setArrangeButtonSelected] = useState(false);
+  const [plusButtonHovered, setPlusButtonHovered] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   const handleRefs = useRef<Record<'nw' | 'ne' | 'sw' | 'se', HTMLDivElement | null>>({
     nw: null,
     ne: null,
@@ -62,16 +74,8 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
   const GRAY_BORDER = '#E4E4E4';
   const snap = (value: number) => Math.round(value / 16) * 16;
 
-  const nodeWidth = style?.width
-    ? typeof style.width === 'number'
-      ? style.width
-      : parseFloat(style.width.toString())
-    : 480;
-  const nodeHeight = style?.height
-    ? typeof style.height === 'number'
-      ? style.height
-      : parseFloat(style.height.toString())
-    : 320;
+  const nodeWidth = (props as any).width || (props as any).style?.width || 480;
+  const nodeHeight = (props as any).height || (props as any).style?.height || 320;
 
   const handleResizeStart = useCallback(
     (e: MouseEvent | React.MouseEvent, corner: 'nw' | 'ne' | 'sw' | 'se') => {
@@ -85,20 +89,10 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
 
       const nodes = getNodes();
       const currentNode = nodes.find((n) => n.id === id);
-      const startPosX = currentNode?.position?.x ?? position?.x ?? 0;
-      const startPosY = currentNode?.position?.y ?? position?.y ?? 0;
-      const startWidth =
-        typeof currentNode?.style?.width === 'number'
-          ? currentNode.style.width
-          : typeof currentNode?.style?.width === 'string'
-          ? parseInt(currentNode.style.width, 10)
-          : nodeWidth;
-      const startHeight =
-        typeof currentNode?.style?.height === 'number'
-          ? currentNode.style.height
-          : typeof currentNode?.style?.height === 'string'
-          ? parseInt(currentNode.style.height, 10)
-          : nodeHeight;
+      const startPosX = currentNode?.position?.x ?? (props as any).xPos ?? 0;
+      const startPosY = currentNode?.position?.y ?? (props as any).yPos ?? 0;
+      const startWidth = currentNode?.width ?? nodeWidth;
+      const startHeight = currentNode?.height ?? nodeHeight;
 
       const { x: startPointerFlowX, y: startPointerFlowY } = screenToFlowPosition({
         x: (e as MouseEvent).clientX,
@@ -189,6 +183,8 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
                   ...node,
                   position: { x: newPosX, y: newPosY },
                   style: { ...node.style, width: newWidth, height: newHeight },
+                  width: newWidth,
+                  height: newHeight,
                 }
               : node
           )
@@ -204,7 +200,7 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [getNodes, id, nodeHeight, nodeWidth, position, screenToFlowPosition, setNodes]
+    [getNodes, id, nodeHeight, nodeWidth, props, screenToFlowPosition, setNodes]
   );
 
   const handleLabelChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -232,27 +228,26 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
     pointerEvents: 'auto',
   };
 
-  const frameStyles: React.CSSProperties = showSelection
-    ? {
-        width: '100%',
-        height: '100%',
-        background: '#FFFFFF',
-        border: `0.5px solid ${FIGMA_BLUE}`,
-        borderRadius: '4px',
-        position: 'relative',
-        boxSizing: 'border-box',
-        pointerEvents: 'auto',
-      }
-    : {
-        width: '100%',
-        height: '100%',
-        background: '#FFFFFF',
-        border: `1px solid ${GRAY_BORDER}`,
-        borderRadius: '4px',
-        position: 'relative',
-        boxSizing: 'border-box',
-        pointerEvents: 'auto',
-      };
+  // Calculate border color based on hover and selection state
+  const getBorderColor = () => {
+    if (showSelection) return 'rgba(66, 133, 244, 0.5)'; // Blue border when selected (same as selection border div for consistency)
+    if (isHovered) return '#D4D4DB'; // Hover color
+    return GRAY_BORDER; // Default color
+  };
+
+  const frameStyles: React.CSSProperties = {
+    width: '100%',
+    height: '100%',
+    background: '#FFFFFF',
+    // Always have a 1px border, just change the color (transparent when selected)
+    border: `1px solid ${getBorderColor()}`,
+    borderRadius: '4px',
+    position: 'relative',
+    boxSizing: 'border-box',
+    pointerEvents: 'auto',
+    // Smooth transition for border color changes
+    transition: 'border-color 0.15s ease-in-out',
+  };
 
   const renderTopBar = () => (
     <div
@@ -271,6 +266,8 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
         height: '40px',
         fontFamily: 'Inter, -apple-system, sans-serif',
         boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        zIndex: 9999, // Above resize handles (9998) so top bar can be clicked
+        pointerEvents: 'auto',
       }}
     >
       <button
@@ -286,6 +283,8 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
           background: 'transparent',
           flexShrink: 0,
           position: 'relative',
+          zIndex: 10000, // Above the bar container
+          pointerEvents: 'auto',
         }}
       >
         <div
@@ -298,6 +297,7 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
             height: '16px',
             flexShrink: 0,
             position: 'relative',
+            pointerEvents: 'none',
           }}
         >
           <div
@@ -306,6 +306,7 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
               height: '10px',
               flexShrink: 0,
               position: 'relative',
+              pointerEvents: 'none',
             }}
           >
             <LayoutDashboard size={10} style={{ color: '#515159' }} />
@@ -342,6 +343,8 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
           background: 'transparent',
           flexShrink: 0,
           position: 'relative',
+          zIndex: 10000, // Above the bar container
+          pointerEvents: 'auto',
         }}
       >
         <input
@@ -363,6 +366,7 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
             margin: '0',
             width: 'auto',
             cursor: 'pointer',
+            pointerEvents: 'auto',
           }}
           onClick={(e) => e.stopPropagation()}
           onFocus={(e) => e.target.select()}
@@ -371,28 +375,49 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
     </div>
   );
 
-  const renderSideToolbar = () => (
-    <div
-        style={{
-        position: 'absolute',
-        top: '0px',
-        right: '-48px',
-        background: '#FFFFFF',
-          border: '1px solid #E4E4E4',
-        borderRadius: '8px',
-        boxSizing: 'border-box',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '8px',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '8px',
-        width: '40px',
-        minHeight: '80px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-      }}
-    >
-      <button
+  const renderSideToolbar = () => {
+    // Note: Button should always be visible as it's the toggle mechanism
+    // The previous "hide in LOCK mode" logic was incorrect
+    const showArrangeButton = true;
+    
+    return (
+      <div
+          style={{
+          position: 'absolute',
+          top: '0px',
+          right: '-48px',
+          background: '#FFFFFF',
+            border: '1px solid #E4E4E4',
+          borderRadius: '8px',
+          boxSizing: 'border-box',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '8px',
+          width: '40px',
+          minHeight: '80px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          zIndex: 9999, // Above resize handles (9998) so side toolbar can be clicked
+          pointerEvents: 'auto',
+        }}
+      >
+        <button
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          setArrangeButtonSelected(!arrangeButtonSelected);
+          if (handleArrangeGroup) {
+            handleArrangeGroup(id);
+          }
+        }}
+        onMouseEnter={() => {
+          setArrangeButtonHovered(true);
+        }}
+        onMouseLeave={() => {
+          setArrangeButtonHovered(false);
+        }}
         style={{
           boxSizing: 'border-box',
           display: 'flex',
@@ -402,9 +427,13 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
           padding: '4px',
           cursor: 'pointer',
           border: 'none',
-          background: 'transparent',
+          background: (mode === 'LOCK' || arrangeButtonSelected) ? '#4285F4' : arrangeButtonHovered ? '#F5F5F5' : 'transparent',
           flexShrink: 0,
           position: 'relative',
+          zIndex: 10000, // Above the bar container
+          pointerEvents: 'auto',
+          borderRadius: '4px',
+          transition: 'none'
         }}
       >
         <div
@@ -417,6 +446,7 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
             height: '16px',
             flexShrink: 0,
             position: 'relative',
+            pointerEvents: 'none',
           }}
         >
           <div
@@ -425,9 +455,10 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
               height: '10px',
               flexShrink: 0,
               position: 'relative',
+              pointerEvents: 'none',
             }}
           >
-            <LayoutPanelLeft size={10} style={{ color: '#515159' }} />
+            <LayoutPanelLeft size={10} style={{ color: (mode === 'LOCK' || arrangeButtonSelected) ? '#FFFFFF' : '#515159' }} />
           </div>
         </div>
       </button>
@@ -459,6 +490,19 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
         </div>
       </div>
       <button
+        onClick={(e) => {
+          e.stopPropagation();
+          console.log('🟦 [PLUS] Plus button clicked for group:', id);
+          handleAddNodeToGroup?.(id);
+        }}
+        onMouseEnter={() => {
+          console.log('🟦 [PLUS] Hover enter on plus button for group:', id);
+          setPlusButtonHovered(true);
+        }}
+        onMouseLeave={() => {
+          console.log('🟦 [PLUS] Hover leave on plus button for group:', id);
+          setPlusButtonHovered(false);
+        }}
         style={{
           boxSizing: 'border-box',
           display: 'flex',
@@ -468,9 +512,13 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
           padding: '4px',
           cursor: 'pointer',
           border: 'none',
-          background: 'transparent',
+          background: plusButtonHovered ? '#F5F5F5' : 'transparent',
           flexShrink: 0,
           position: 'relative',
+          zIndex: 10000, // Above the bar container
+          pointerEvents: 'auto',
+          borderRadius: '4px',
+          transition: 'none'
         }}
       >
         <div
@@ -483,6 +531,7 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
             height: '16px',
             flexShrink: 0,
             position: 'relative',
+            pointerEvents: 'none',
           }}
         >
           <div
@@ -491,6 +540,7 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
               height: '10px',
               flexShrink: 0,
               position: 'relative',
+              pointerEvents: 'none',
             }}
           >
             <CirclePlus size={10} style={{ color: '#515159' }} />
@@ -498,7 +548,8 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
         </div>
       </button>
     </div>
-  );
+    );
+  };
 
   const registerHandleRef = useCallback(
     (corner: 'nw' | 'ne' | 'sw' | 'se') =>
@@ -534,13 +585,65 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
     };
   }, []);
 
+  const renderSelectionCornerSquares = () => {
+    // 8px squares for selection corners
+    const SQUARE_SIZE = 8;
+    const half = SQUARE_SIZE / 2; // 4px
+
+    const corners: Array<'nw' | 'ne' | 'sw' | 'se'> = ['nw', 'ne', 'sw', 'se'];
+
+    return (
+      <>
+        {corners.map((corner) => {
+          const baseStyle: React.CSSProperties = {
+            position: 'absolute',
+            width: `${SQUARE_SIZE}px`,
+            height: `${SQUARE_SIZE}px`,
+            borderRadius: '0px', // Square, no rounded corners
+            background: '#FFFFFF', // White fill
+            border: '1px solid rgba(66, 133, 244, 0.5)', // #4285F4 at 50% opacity
+            pointerEvents: 'none', // Non-interactive, visual only
+            zIndex: 10000, // Above selection border
+          };
+
+          switch (corner) {
+            case 'nw':
+              baseStyle.top = `${-half}px`; // -4px
+              baseStyle.left = `${-half}px`; // -4px
+              break;
+            case 'ne':
+              baseStyle.top = `${-half}px`; // -4px
+              baseStyle.right = `${-half}px`; // -4px
+              break;
+            case 'sw':
+              baseStyle.bottom = `${-half}px`; // -4px
+              baseStyle.left = `${-half}px`; // -4px
+              break;
+            case 'se':
+              baseStyle.bottom = `${-half}px`; // -4px
+              baseStyle.right = `${-half}px`; // -4px
+              break;
+          }
+
+          return (
+            <div
+              key={corner}
+              style={baseStyle}
+            />
+          );
+        })}
+      </>
+    );
+  };
+
   const renderCornerHandles = () => {
-    const HOVER_FILL = 'rgba(52, 211, 153, 0.22)';
-    const HOVER_BORDER = 'rgba(52, 211, 153, 0.48)';
-    const IDLE_FILL = 'rgba(52, 211, 153, 0.10)';
-    const IDLE_BORDER = 'rgba(52, 211, 153, 0.18)';
-    const MIN_SIZE = 48;
-    const MAX_SIZE = 112;
+    // CP1: Disable resize handles in LOCK mode
+    if (mode === 'LOCK') {
+      return null; // No resize handles in LOCK mode
+    }
+
+    const MIN_SIZE = 32;
+    const MAX_SIZE = 64;
 
     const zoomAwareSize = Math.min(
       MAX_SIZE,
@@ -559,9 +662,9 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
             width: `${zoomAwareSize}px`,
             height: `${zoomAwareSize}px`,
             cursor: getCursor(corner),
-            borderRadius: '12px',
-            background: isHovered ? HOVER_FILL : IDLE_FILL,
-            border: `1px solid ${isHovered ? HOVER_BORDER : IDLE_BORDER}`,
+            borderRadius: '0px', // Square, no rounded corners
+            background: 'transparent', // Invisible resize area
+            border: 'none', // No visible border
             transition: 'background 0.12s ease-out, border-color 0.12s ease-out',
             pointerEvents: 'auto',
             zIndex: 9998,
@@ -591,25 +694,10 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
               key={corner}
               ref={registerHandleRef(corner)}
               style={baseStyle}
+              data-resize-handle="true"
               onMouseEnter={() => setHoveredCorner(corner)}
               onMouseLeave={() => setHoveredCorner((prev) => (prev === corner ? null : prev))}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  width: '8px',
-                  height: '8px',
-                  background: '#FFFFFF',
-                  border: `1px solid ${FIGMA_BLUE}`,
-                  borderRadius: '1px',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  pointerEvents: 'none',
-                  boxShadow: isHovered ? '0 0 0 1px rgba(52, 211, 153, 0.5)' : 'none',
-                }}
-              />
-            </div>
+            />
           );
         })}
       </>
@@ -729,9 +817,38 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = ({ data, selected, id, sty
     </>
   );
 
+  // Attach hover listeners to ReactFlow wrapper
+  useEffect(() => {
+    if (frameRef.current) {
+      const reactFlowWrapper = frameRef.current.closest('.react-flow__node');
+      
+      if (reactFlowWrapper) {
+        const handleMouseEnter = () => {
+          setIsHovered(true);
+        };
+        const handleMouseLeave = () => {
+          setIsHovered(false);
+        };
+        
+        reactFlowWrapper.addEventListener('mouseenter', handleMouseEnter, true);
+        reactFlowWrapper.addEventListener('mouseleave', handleMouseLeave, true);
+        
+        return () => {
+          reactFlowWrapper.removeEventListener('mouseenter', handleMouseEnter, true);
+          reactFlowWrapper.removeEventListener('mouseleave', handleMouseLeave, true);
+        };
+      }
+    }
+  }, [id]);
+
   return (
     <div style={containerStyles}>
-      <div style={frameStyles}>
+      <div ref={frameRef} style={frameStyles}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        {/* Four corner squares for selection */}
+        {showSelection && renderSelectionCornerSquares()}
         {renderTopBar()}
         {showSelection && renderSideToolbar()}
         {showSelection && renderCornerHandles()}

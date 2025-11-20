@@ -1,12 +1,11 @@
 import { useCallback } from 'react';
 import { ReactFlowInstance } from 'reactflow';
-import { placeNodeOnCanvas } from '../components/ui/canvasInteractions';
+import { placeNodeOnCanvas } from '../utils/canvas/canvasInteractions';
 import { Tool } from './useToolSelection';
 
 interface UseCanvasInteractionsProps {
   selectedTool: Tool;
   reactFlowRef: React.RefObject<ReactFlowInstance>;
-  handleAddNode: (id: string, parentId: string, data: { label: string }) => void;
   viewStateRef: React.RefObject<any>;
   handleToolSelect: (tool: Tool) => void;
 }
@@ -14,7 +13,6 @@ interface UseCanvasInteractionsProps {
 export const useCanvasInteractions = ({
   selectedTool,
   reactFlowRef,
-  handleAddNode,
   viewStateRef,
   handleToolSelect
 }: UseCanvasInteractionsProps) => {
@@ -30,7 +28,6 @@ export const useCanvasInteractions = ({
           event.nativeEvent as MouseEvent,
           selectedTool,
           reactFlowRef,
-          handleAddNode,
           viewStateRef,
           (newTool: Tool) => handleToolSelect(newTool)
         );
@@ -45,7 +42,7 @@ export const useCanvasInteractions = ({
         // For other tools, do nothing on pane click
         break;
     }
-  }, [selectedTool, reactFlowRef, handleAddNode, viewStateRef, handleToolSelect]);
+  }, [selectedTool, reactFlowRef, viewStateRef, handleToolSelect]);
 
   return {
     onPaneClick

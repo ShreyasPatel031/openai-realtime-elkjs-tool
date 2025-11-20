@@ -1,5 +1,5 @@
 import type { RawGraph } from "../components/graph/types";
-import { createEmptyViewState, type ViewState } from "../utils/canvasLayout";
+import { createEmptyViewState, type ViewState } from "../core/viewstate/ViewState";
 
 const DEFAULT_GRID_SIZE = 8;
 

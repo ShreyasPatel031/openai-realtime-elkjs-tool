@@ -17,6 +17,7 @@ export default defineConfig({
   reporter: 'list',
   use: {
     baseURL: BASE_URL,
+    headless: true,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure'

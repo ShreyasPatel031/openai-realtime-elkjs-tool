@@ -56,6 +56,41 @@ const groupSelectedNodes = ({
   return true;
 };
 
+const createWrapperSectionFromSelection = ({
+  selectedNodes,
+  handleCreateWrapperAndArrange,
+  setNodes,
+  setSelectedNodes,
+  setSelectedTool,
+}: GroupToolPaneClickParams & {
+  handleCreateWrapperAndArrange?: (selectionIds: string[]) => void;
+}): boolean => {
+  if (selectedNodes.length < 2) {
+    console.warn("[WrapperTool] Need at least 2 nodes to create wrapper section");
+    return false;
+  }
+
+  if (!handleCreateWrapperAndArrange) {
+    console.error("[WrapperTool] handleCreateWrapperAndArrange not provided");
+    return false;
+  }
+
+  const nodeIds = selectedNodes.map((node) => node.id);
+
+  try {
+    handleCreateWrapperAndArrange(nodeIds);
+  } catch (error) {
+    console.error("[WrapperTool] Failed to create wrapper section from selection:", error);
+    return false;
+  }
+
+  setNodes((nodes) => nodes.map((node) => ({ ...node, selected: false })));
+  setSelectedNodes([]);
+  setSelectedTool("arrow");
+
+  return true;
+};
+
 const createEmptyGroupAtPoint = ({
   event,
   reactFlowRef,
@@ -200,5 +235,20 @@ export const handleGroupToolPaneClick = (params: GroupToolPaneClickParams): bool
     });
   }
   return groupSelectedNodes(params) || createEmptyGroupAtPoint(params);
+};
+
+export const handleWrapperSectionToolClick = (params: {
+  selectedNodes: any[];
+  handleCreateWrapperAndArrange?: (selectionIds: string[]) => void;
+  setNodes: any;
+  setSelectedNodes: any;
+  setSelectedTool: any;
+}): boolean => {
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("[WrapperTool] handleWrapperSectionToolClick invoked", {
+      selectedNodes: params.selectedNodes.length,
+    });
+  }
+  return createWrapperSectionFromSelection(params);
 };
 

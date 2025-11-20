@@ -46,7 +46,6 @@ const ProcessingStatusIcon: React.FC<ProcessingStatusIconProps> = ({ onClick }) 
     const remainingTime = Math.max(0, minDuration - elapsed);
 
     const updateState = () => {
-      console.log(`🔍 ProcessingStatusIcon: State changing from ${state} to ${newState}`);
       setState(newState);
       currentStateStartTime.current = Date.now();
       
@@ -68,12 +67,10 @@ const ProcessingStatusIcon: React.FC<ProcessingStatusIconProps> = ({ onClick }) 
 
   useEffect(() => {
     const handleUserRequirementsStart = () => {
-      console.log('🔍 ProcessingStatusIcon: userRequirementsStart event received');
       setStateWithMinDuration('search', 2000); // Minimum 2 seconds
     };
 
     const handleFunctionCall = () => {
-      console.log('🔍 ProcessingStatusIcon: functionCallStart event received');
       if (isFinalizingRef.current) return;
       
       // Clear any existing timeout to ensure immediate transition from search to function-call
@@ -85,7 +82,6 @@ const ProcessingStatusIcon: React.FC<ProcessingStatusIconProps> = ({ onClick }) 
     };
 
     const handleFinalComplete = () => {
-      console.log('🔍 ProcessingStatusIcon: allProcessingComplete event received');
       // Force completion regardless of current state or timing
       if (stateTimeoutRef.current) {
         clearTimeout(stateTimeoutRef.current);

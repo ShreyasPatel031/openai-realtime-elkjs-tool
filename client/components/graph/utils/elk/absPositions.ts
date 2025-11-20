@@ -21,9 +21,6 @@ export function computeAbsolutePositions(root: any): AbsMap {
       height: node.height ?? 100  // Fallback height if not set
     };
     
-    // Debug deeply nested positioning
-
-    
     (node.children || []).forEach((child: any) => 
       recurse(child, absX, absY)
     );

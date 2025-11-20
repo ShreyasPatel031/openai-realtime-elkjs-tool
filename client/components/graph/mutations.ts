@@ -23,7 +23,8 @@ import { getStyle } from "./styles";
 // ──────────────────────────────────────────────
 
 /** DFS yields *all* nodes inside a subtree (including the root). */
-const collectNodeIds = (n: ElkGraphNode, acc: Set<NodeID> = new Set()) => {
+const collectNodeIds = (n: ElkGraphNode | null, acc: Set<NodeID> = new Set()) => {
+  if (!n) return acc;
   acc.add(n.id);
   (n.children ?? []).forEach(c => collectNodeIds(c, acc));
   return acc;
@@ -68,7 +69,8 @@ const reattachEdgesForSubtree = (subRoot: ElkGraphNode, graph: ElkGraphNode) => 
 /**
  * Recursively finds a node by its id.
  */
-const findNodeById = (node: ElkGraphNode, id: NodeID): ElkGraphNode | null => {
+const findNodeById = (node: ElkGraphNode | null | undefined, id: NodeID): ElkGraphNode | null => {
+  if (!node) return null;
   if (node.id === id) return node;
   if (node.children) {
     for (const child of node.children) {
@@ -82,7 +84,7 @@ const findNodeById = (node: ElkGraphNode, id: NodeID): ElkGraphNode | null => {
 /**
  * Recursively finds the parent of a node by its id.
  */
-const findParentOfNode = (
+export const findParentOfNode = (
   root: ElkGraphNode,
   id: NodeID,
   parent: ElkGraphNode | null = null
@@ -118,7 +120,7 @@ const getPathToNode = (
 /**
  * Find the common ancestor of two nodes.
  */
-const findCommonAncestor = (
+export const findCommonAncestor = (
   layout: ElkGraphNode,
   id1: NodeID,
   id2: NodeID
@@ -134,6 +136,77 @@ const findCommonAncestor = (
       break;
     }
   }
+  return common;
+};
+
+/**
+ * Find Lowest Common Group (LCG) for N nodes.
+ * Generalizes findCommonAncestor to work with any number of nodes.
+ * Uses existing traversal approach - unoptimized but works.
+ * 
+ * Key semantic: LCG is the PARENT container that contains all selected items,
+ * never one of the selected items itself (even if it's a group).
+ * 
+ * @param graph - The root graph node
+ * @param ids - Array of node IDs to find LCG for
+ * @returns The lowest common group node, or null if not found
+ */
+export const findLCG = (
+  graph: ElkGraphNode,
+  ids: NodeID[]
+): ElkGraphNode | null => {
+  // Edge case: empty array
+  if (ids.length === 0) {
+    return null;
+  }
+
+  // Deduplicate IDs to handle duplicate selections
+  const uniqueIds = Array.from(new Set(ids));
+
+  // Edge case: single unique node - return its parent (or root if no parent)
+  if (uniqueIds.length === 1) {
+    const node = findNodeById(graph, uniqueIds[0]);
+    if (!node) return null;
+    const parent = findParentOfNode(graph, uniqueIds[0]);
+    return parent || graph;
+  }
+
+  // For 2+ nodes: get paths for all nodes
+  const paths = uniqueIds
+    .map(id => getPathToNode(graph, id))
+    .filter((path): path is ElkGraphNode[] => path !== null);
+
+  // If any node not found, return null
+  if (paths.length !== uniqueIds.length) {
+    return null;
+  }
+
+  // Find longest common prefix across all paths
+  if (paths.length === 0) {
+    return null;
+  }
+
+  let common: ElkGraphNode | null = null;
+  const minLength = Math.min(...paths.map(p => p.length));
+
+  for (let i = 0; i < minLength; i++) {
+    const firstId = paths[0][i].id;
+    // Check if all paths have the same node at this depth
+    if (paths.every(p => p[i].id === firstId)) {
+      common = paths[0][i];
+    } else {
+      // Paths diverge at this depth, stop here
+      break;
+    }
+  }
+
+  // Critical fix: Check if the common ancestor is one of the selected items
+  // If so, return its parent instead (LCG should be PARENT of selection, not part of it)
+  if (common && uniqueIds.includes(common.id)) {
+    const parent = findParentOfNode(graph, common.id);
+    return parent || graph;
+  }
+
   return common;
 };
 
@@ -209,11 +282,11 @@ export const addNode = (
   nodeName: string, 
   parentId: NodeID, 
   graph: RawGraph,
-  data?: { label?: string; icon?: string; style?: any }
+  data?: { label?: string; icon?: string; style?: any; isGroup?: boolean }
 ): RawGraph => {
   
   // Clone the graph to ensure React detects the state change
-  const clonedGraph = structuredClone(graph);
+  const clonedGraph = JSON.parse(JSON.stringify(graph));
 
   // Check for duplicate ID using normalized name
   const normalizedId = createNodeID(nodeName);
@@ -241,10 +314,12 @@ export const addNode = (
   }
   
   // Create the new node - using createNodeID to maintain ID creation consistency
+  // If isGroup is true, create a proper group structure with children and edges arrays
+  const isGroup = data?.isGroup === true;
   const newNode: ElkGraphNode = {
     id: normalizedId,
     labels: [{ text: data?.label || nodeName }],
-    children: []
+    ...(isGroup ? { children: [], edges: [] } : {})  // Only add children/edges for groups
   };
   
   // Add optional data properties
@@ -259,7 +334,9 @@ export const addNode = (
     
     newNode.data = {
       ...newNode.data,
-      ...data
+      ...data,
+      // Ensure isGroup flag is preserved
+      ...(isGroup ? { isGroup: true } : {})
     };
   }
   
@@ -281,11 +358,14 @@ export const deleteNode = (nodeId: NodeID, graph: RawGraph): RawGraph => {
     throw new Error(`Node '${nodeId}' not found or trying to remove root`);
   }
 
-  // 1. locate
-  const doomed = parent.children.find(c => c.id === nodeId)!;
+  // 1. locate (store reference for edge cleanup)
+  const doomed = parent.children.find(c => c.id === nodeId);
+  if (!doomed) {
+    throw new Error(`Node '${nodeId}' not found in parent's children`);
+  }
   
-  // 2. remove from parent
-  parent.children = parent.children.filter(c => c !== doomed);
+  // 2. remove from parent (filter by ID to ensure correct removal)
+  parent.children = parent.children.filter(c => c.id !== nodeId);
   
   // 3. purge every edge that pointed to it or descendants
   purgeEdgesReferencing(graph, collectNodeIds(doomed));
@@ -371,32 +451,24 @@ export const addEdge = (edgeId: EdgeID, sourceId: NodeID, targetId: NodeID, labe
  * Internal implementation of addEdge
  */
 const addEdgeInternal = (edgeId: EdgeID, sourceId: NodeID, targetId: NodeID, graph: RawGraph, label?: string, sourceHandle?: string, targetHandle?: string): RawGraph => {
-  console.log('🔧 [addEdgeInternal] Called:', { edgeId, sourceId, targetId, label, sourceHandle, targetHandle });
-  
   // Clone the graph to ensure React detects the state change
-  const clonedGraph = structuredClone(graph);
-  console.log('✅ [addEdgeInternal] Cloned graph, original edges:', graph.edges?.length || 0, 'cloned edges:', clonedGraph.edges?.length || 0);
+  const clonedGraph = JSON.parse(JSON.stringify(graph));
   
   // duplicate-ID check
   if (edgeIdExists(clonedGraph, edgeId)) {
-    console.error('❌ [addEdgeInternal] Edge ID already exists:', edgeId);
     throw new Error(`Edge id '${edgeId}' already exists`);
   }
-  console.log('✅ [addEdgeInternal] Edge ID does not exist, proceeding');
   
   // self-loop guard
   if (sourceId === targetId) {
-    console.error('❌ [addEdgeInternal] Self-loop detected:', sourceId);
     throw new Error(`Self-loop edges are not supported (source === target '${sourceId}')`);
   }
   
   // Find the common ancestor for edge placement
   let commonAncestor = findCommonAncestor(clonedGraph, sourceId, targetId);
-  console.log('🔍 [addEdgeInternal] Common ancestor:', commonAncestor ? { id: commonAncestor.id, hasEdges: !!commonAncestor.edges } : 'null');
   
   // If no common ancestor found, or it's null, default to root
   if (!commonAncestor) {
-    console.log('⚠️ [addEdgeInternal] No common ancestor found, attaching to root');
     // No common ancestor found, attach to root node instead
     const root = clonedGraph;
     
@@ -413,7 +485,6 @@ const addEdgeInternal = (edgeId: EdgeID, sourceId: NodeID, targetId: NodeID, gra
         sourceHandle,
         targetHandle
       };
-      console.log('✅ [addEdgeInternal] Added handle IDs to edge:', { sourceHandle, targetHandle });
     }
     
     // Add label if provided
@@ -424,12 +495,10 @@ const addEdgeInternal = (edgeId: EdgeID, sourceId: NodeID, targetId: NodeID, gra
     // Ensure the root has edges array
     if (!root.edges) {
       root.edges = [];
-      console.log('📝 [addEdgeInternal] Created edges array on root');
     }
     
     // Add the edge to the root
     root.edges.push(newEdge);
-    console.log('✅ [addEdgeInternal] Added edge to root, root now has', root.edges.length, 'edges');
     
     return clonedGraph;
   }
@@ -447,7 +516,6 @@ const addEdgeInternal = (edgeId: EdgeID, sourceId: NodeID, targetId: NodeID, gra
       sourceHandle,
       targetHandle
     };
-    console.log('✅ [addEdgeInternal] Added handle IDs to edge:', { sourceHandle, targetHandle });
   }
   
   // Add label if provided
@@ -458,12 +526,10 @@ const addEdgeInternal = (edgeId: EdgeID, sourceId: NodeID, targetId: NodeID, gra
   // Ensure the common ancestor has edges array
   if (!commonAncestor.edges) {
     commonAncestor.edges = [];
-    console.log('📝 [addEdgeInternal] Created edges array on common ancestor');
   }
   
   // Add the edge to the common ancestor
   commonAncestor.edges.push(newEdge);
-  console.log('✅ [addEdgeInternal] Added edge to common ancestor, ancestor now has', commonAncestor.edges.length, 'edges');
   
   return clonedGraph;
 };
@@ -497,8 +563,6 @@ export const deleteEdge = (edgeId: EdgeID, graph: RawGraph): RawGraph => {
     throw new Error(`Edge '${edgeId}' not found`);
   }
   
-  console.timeEnd("deleteEdge");
-  console.groupEnd();
   return graph;
 };
 
@@ -511,8 +575,9 @@ export const deleteEdge = (edgeId: EdgeID, graph: RawGraph): RawGraph => {
  * properly handling edge reattachment.
  */
 export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID, graph: RawGraph, style?: any): RawGraph => {
-  console.group(`[mutation] groupNodes '${groupId}' (${nodeIds.length} nodes) → parent '${parentId}'${style ? ' with style' : ''}`);
-  console.time("groupNodes");
+  if (!graph) {
+    throw new Error(`Cannot group nodes: graph is null or undefined`);
+  }
   
   // Check for duplicate ID using normalized group ID
   const normalizedGroupId = createNodeID(groupId);
@@ -528,7 +593,10 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
 
   // Prevent cycles: check if any node being grouped is a descendant of the parent or is the parent itself
   for (const id of nodeIds) {
-    const cand = findNodeById(graph, id)!;
+    const cand = findNodeById(graph, id);
+    if (!cand) {
+      throw new Error(`Node '${id}' not found in graph`);
+    }
     if (isDescendantOf(cand, parent) || cand.id === parentId) {
       throw new Error("Cannot group a node into one of its descendants (cycle)");
     }
@@ -538,8 +606,15 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
     id: normalizedGroupId,
     labels: [{ text: groupId }],
     children: [],
-    edges: []
+    edges: [],
+    // Phase 3: No longer write mode to Domain - mode lives in ViewState.layout
   };
+  
+  // Agent E: Prevent root from being locked
+  if (normalizedGroupId === 'root' || parentId === 'root') {
+    // Ensure root and groups created at root level are always FREE
+    // Phase 3: No longer write mode to Domain - mode will be set in ViewState.layout
+  }
   
   // Add style data if provided
   if (style) {
@@ -574,7 +649,6 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
     
     const actualParent = findParentOfNode(graph, nodeId);
     if (!actualParent || !actualParent.children) {
-      console.warn(`Parent of node ${nodeId} not found`);
       continue;
     }
     
@@ -595,9 +669,6 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
       .forEach(subRoot => reattachEdgesForSubtree(subRoot, graph));
   }
   
-  
-  console.timeEnd("groupNodes");
-  console.groupEnd();
   return graph;
 };
 
@@ -606,9 +677,6 @@ export const groupNodes = (nodeIds: NodeID[], parentId: NodeID, groupId: NodeID,
  * the group's own edges to its parent.  No extra helpers needed.
  */
 export const removeGroup = (groupId: NodeID, graph: RawGraph): RawGraph => {
-  console.group(`[mutation] removeGroup '${groupId}'`);
-  console.time("removeGroup");
-
   /* locate group & parent ------------------------------------------------ */
   const groupNode  = findNodeById(graph, groupId);
   if (!groupNode)          throw new Error(`Group '${groupId}' not found`);
@@ -632,9 +700,98 @@ export const removeGroup = (groupId: NodeID, graph: RawGraph): RawGraph => {
   /* 4. scrub edges that pointed *to* the deleted group itself ------------ */
   purgeEdgesReferencing(graph, new Set<NodeID>([groupId]));
 
-  console.timeEnd("removeGroup");
-  console.groupEnd();
   return graph;
+};
+
+/**
+ * Creates a wrapper section for multi-select auto-layout (CP1 Wave 2)
+ * 
+ * Finds LCG of selection, creates new wrapper under LCG,
+ * reparents ONLY selected nodes (no closure expansion)
+ * 
+ * @param selectionIds - Node IDs to wrap
+ * @param graph - Current graph
+ * @returns Updated graph and wrapper ID
+ */
+export const createWrapperSection = (
+  selectionIds: NodeID[], 
+  graph: RawGraph
+): { graph: RawGraph; wrapperId: NodeID } => {
+  if (!graph) {
+    throw new Error('Cannot create wrapper section: graph is null or undefined');
+  }
+  
+  if (selectionIds.length === 0) {
+    throw new Error('Cannot create wrapper section: no nodes selected');
+  }
+  
+  // 1. Find LCG of selection
+  const lcg = findLCG(graph, selectionIds);
+  if (!lcg) {
+    throw new Error('Cannot create wrapper section: no common ancestor found');
+  }
+  
+  // 2. Create wrapper ID
+  const wrapperId = createNodeID(`wrapper-${Date.now()}`);
+  
+  // 3. Create wrapper group node (always FREE mode)
+  const wrapperNode: ElkGraphNode = {
+    id: wrapperId,
+    labels: [{ text: 'Wrapper Section' }],
+    children: [],
+    edges: [],
+    // Phase 3: No longer write mode to Domain - mode will be set in ViewState.layout
+    data: {
+      label: 'Wrapper Section',
+      isGroup: true,
+      groupIcon: 'gcp_system'
+    }
+  };
+  
+  // 4. Deep clone graph to avoid mutations
+  const updatedGraph = JSON.parse(JSON.stringify(graph));
+  const updatedLcg = findNodeById(updatedGraph, lcg.id);
+  if (!updatedLcg || !updatedLcg.children) {
+    throw new Error(`LCG "${lcg.id}" not found in updated graph`);
+  }
+  
+  // 5. Find and move selected nodes into wrapper (reparent only explicit selection)
+  const movedNodeIds: NodeID[] = [];
+  
+  for (const nodeId of selectionIds) {
+    const node = findNodeById(updatedGraph, nodeId);
+    if (!node) {
+      console.warn(`[createWrapperSection] Node "${nodeId}" not found, skipping`);
+      continue;
+    }
+    
+    // Find actual parent and remove from parent
+    const actualParent = findParentOfNode(updatedGraph, nodeId);
+    if (actualParent && actualParent.children) {
+      actualParent.children = actualParent.children.filter(child => child.id !== nodeId);
+      
+      // Add to wrapper
+      if (!wrapperNode.children) wrapperNode.children = [];
+      wrapperNode.children.push(node);
+      movedNodeIds.push(nodeId);
+    }
+  }
+  
+  if (movedNodeIds.length === 0) {
+    throw new Error('No nodes were successfully moved to wrapper section');
+  }
+  
+  // 6. Add wrapper to LCG
+  updatedLcg.children.push(wrapperNode);
+  
+  // 7. Reattach edges for moved subtrees
+  if (movedNodeIds.length > 0) {
+    movedNodeIds
+      .map(id => findNodeById(updatedGraph, id)!)
+      .forEach(subRoot => reattachEdgesForSubtree(subRoot, updatedGraph));
+  }
+  
+  return { graph: updatedGraph, wrapperId };
 };
 
 /**
@@ -736,7 +893,8 @@ export const batchUpdate = (operations: Array<{
         break;
         
       default:
-        console.warn(`Unknown operation: ${name}`);
+        // Unknown operation - skip
+        break;
     }
   }
   

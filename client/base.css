@@ -16,6 +16,27 @@ body {
   }
 }
 
+/* Disable edge pointer events when dots are expanded to prevent edges from intercepting mouse events */
+body.dots-expanded .react-flow__edge-interaction,
+body.dots-expanded .react-flow__edge-path {
+  pointer-events: none !important;
+}
+
+/* Force edge SVG container to be below nodes when dots are expanded */
+body.dots-expanded .react-flow__edges {
+  z-index: 1000 !important; /* Below nodes (4000) and dots (10000) */
+}
+
+/* Ensure nodes with expanded dots are visually above edges */
+body.dots-expanded .react-flow__node.selected {
+  z-index: 4000 !important; /* Above edges (2000) but below dots (10000) */
+}
+
+/* Ensure the ReactFlow node wrapper is also above edges */
+body.dots-expanded .react-flow__node {
+  z-index: 4000 !important;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -126,4 +147,165 @@ input::placeholder {
 
 .ease-out {
   transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* 
+ * Node and Group Styling - Applied via CSS to complement centralized canvasStyles.ts
+ * These rules ensure ReactFlow's default styles don't override our centralized styling
+ * The actual values come from canvasStyles.ts - this is just enforcement
+ */
+
+/* Hover state - remove shadows and apply hover border color */
+/* Apply transition for smooth hover effects */
+.react-flow__node.selectable,
+/* Group nodes - no default border (they handle their own borders internally) */
+.react-flow__node-group,
+.react-flow__node-group.selectable,
+.react-flow__node-group.selectable > div[data-testid="react-flow-node"] {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Regular nodes get transitions */
+.react-flow__node.selectable > div[data-testid="react-flow-node"] {
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.react-flow__node.selectable:hover,
+.react-flow__node-default.selectable:hover,
+.react-flow__node-input.selectable:hover,
+.react-flow__node-output.selectable:hover,
+.react-flow__node.selectable:hover > div[data-testid="react-flow-node"] {
+  box-shadow: none !important;
+  border-color: #D4D4DB !important;
+}
+
+/* Group nodes handle their own hover state - don't apply ReactFlow hover styles */
+.react-flow__node-group.selectable:hover,
+.react-flow__node-group.selectable:hover > div[data-testid="react-flow-node"],
+.react-flow__node.react-flow__node-group.selectable:hover > div,
+.react-flow__node-group.selectable:hover div[data-testid="react-flow-node"],
+.react-flow__node.selectable:hover[class*="group"] > div,
+.group-node-hovered {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Selected state - apply gray border (only in arrow mode) with transition */
+.arrow-mode .react-flow__node.selectable.selected,
+.arrow-mode .react-flow__node-default.selectable.selected,
+.arrow-mode .react-flow__node-input.selectable.selected,
+.arrow-mode .react-flow__node-output.selectable.selected,
+.arrow-mode .react-flow__node.selectable.selected > div[data-testid="react-flow-node"] {
+  border-color: #D4D4DB !important; /* Gray border for selected nodes */
+  box-shadow: none !important;
+  transition: border-color 0.2s ease-in-out, opacity 0.2s ease-in-out !important;
+}
+
+/* Group nodes have their own selection UI, so don't apply border here */
+.react-flow__node-group.selectable.selected,
+.react-flow__node-group.selectable.selected > div[data-testid="react-flow-node"] {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Hide ReactFlow selection rectangles when NOT in arrow mode */
+.non-arrow-mode .react-flow__nodesselection,
+.non-arrow-mode .react-flow__nodesselection-rect {
+  display: none !important;
+}
+
+/* Hide ReactFlow selection rectangles for group nodes - they have their own selection UI */
+.react-flow__node-group + .react-flow__nodesselection,
+.react-flow__node-group ~ .react-flow__nodesselection,
+.react-flow__node[data-id*="group"] + .react-flow__nodesselection,
+.react-flow__node[data-id*="group"] ~ .react-flow__nodesselection {
+  display: none !important;
+}
+
+/* ReactFlow selection box styling - only show in arrow mode, transparent with blue stroke */
+.arrow-mode .react-flow__nodesselection-rect {
+  background: transparent !important;
+  border: 1px solid rgba(66, 133, 244, 0.5) !important;
+  border-style: solid !important;
+  border-radius: 0px !important; /* Rectangle, no rounded corners */
+  overflow: visible !important; /* Allow corner squares to be visible */
+  position: relative !important;
+  transition: opacity 0.2s ease-in-out !important;
+  /* DEBUG: Uncomment to see rect bounds and positioning */
+  /* box-shadow: inset 0 0 0 1px rgba(255, 0, 0, 0.3) !important; */
+}
+
+/* Four corner squares for ReactFlow selection box - 8px squares, 1px border, #4285F4 at 50% opacity */
+/* Using pseudo-elements on both container and rect to get all 4 corners */
+/* Only show in arrow mode */
+.arrow-mode .react-flow__nodesselection {
+  position: relative;
+}
+
+/* Top-right corner only - positioned directly on the rect element so it moves/zooms with it */
+/* The CENTER of the white rectangle should align with the corner of the selection box */
+.arrow-mode .react-flow__nodesselection-rect::before {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(66, 133, 244, 0.5) !important; /* #4285F4 at 50% opacity, 1px width */
+  background: white !important; /* White fill */
+  pointer-events: none;
+  z-index: 1;
+  /* Position so the center of the 8px square is at the top-right corner of the rect */
+  /* For an 8px square, center is 4px from each edge */
+  /* To center on corner: position top-right corner of square 4px away, then center is at corner */
+  top: -4px; /* Move up by half height (4px) so center aligns with top edge */
+  right: -4px; /* Move right by half width (4px) so center aligns with right edge */
+  box-sizing: border-box;
+  transition: opacity 0.2s ease-in-out;
+  /* Scale inversely to zoom to keep visual size constant */
+  /* Scale from center so the center stays aligned */
+  transform: scale(var(--corner-scale, 1));
+  transform-origin: center;
+}
+
+/* Hide all other corners */
+.arrow-mode .react-flow__nodesselection-rect::after {
+  display: none !important;
+}
+
+.arrow-mode .react-flow__nodesselection::before {
+  display: none !important;
+}
+
+.arrow-mode .react-flow__nodesselection::after {
+  display: none !important;
+}
+
+
+/* Group hover preview - border is set inline, don't override it */
+.group-hover-preview {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* DEBUG: Force resize handle hover areas to be green - override everything */
+[data-resize-handle="true"] {
+  background: rgba(0, 255, 0, 0.3) !important; /* Reduced opacity */
+  border: 2px solid rgba(0, 200, 0, 0.6) !important; /* Reduced opacity */
+}
+
+/* Ensure resize handle inner rectangles are white and have no border */
+[data-resize-handle="true"] > div {
+  border: none !important;
+  background: #FFFFFF !important;
+}
+
+/* ReactFlow node wrapper - only clip the selection rectangle, not the node content */
+/* Don't apply overflow hidden here as it clips the green hover areas and dots */
+.react-flow__node {
+  border-radius: 8px !important;
+}
+
+/* ReactFlow node selected state wrapper */
+.react-flow__node.selected {
+  border-radius: 8px !important;
 }

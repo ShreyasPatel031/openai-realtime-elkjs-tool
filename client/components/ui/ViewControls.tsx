@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, MutableRefObject } from 'react';
-import { Save, Edit, Check, Download } from 'lucide-react';
+import { Save, Edit, Check, Download, Layout } from 'lucide-react';
 import { useViewMode } from '../../contexts/ViewModeContext';
 import SaveAuth from '../auth/SaveAuth';
 import { markEmbedToCanvasTransition, EMBED_PENDING_CHAT_KEY, EMBED_CHAT_BROADCAST_CHANNEL, getCurrentConversation, normalizeChatMessages, mergeChatMessages, PersistedChatMessage, saveChatMessage } from '../../utils/chatPersistence';
@@ -20,6 +20,7 @@ interface ViewControlsProps {
   // Export props
   onExport?: () => void;
   viewStateRef?: MutableRefObject<any>;
+  
 }
 
 const ViewControls: React.FC<ViewControlsProps> = ({
@@ -77,7 +78,6 @@ const ViewControls: React.FC<ViewControlsProps> = ({
       (window as any).__embedChatPayload,
       (window as any).__atelierLastConversation,
     ];
-    console.log('📝 [EDIT] Snapshot sources lengths:', sources.map((src) => (typeof src === 'string' ? src.length : src ? -1 : 0)));
     for (const source of sources) {
       if (typeof source === 'string' && source.length > 0) {
         return source;
@@ -91,7 +91,6 @@ const ViewControls: React.FC<ViewControlsProps> = ({
       if (!channel) return;
       const snapshot = getLatestChatSnapshot();
       if (!snapshot) return;
-      console.log('📡 [EDIT] Broadcasting chat snapshot, length:', snapshot.length);
       channel.postMessage({
         type: 'chat-snapshot',
         conversation: snapshot,
@@ -111,7 +110,6 @@ const ViewControls: React.FC<ViewControlsProps> = ({
 
       const snapshot = getLatestChatSnapshot();
 
-      console.log('📬 [EDIT] Received chat request, responding with length:', snapshot ? snapshot.length : 'none');
 
       event.source?.postMessage(
         {
@@ -131,19 +129,16 @@ const ViewControls: React.FC<ViewControlsProps> = ({
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (typeof BroadcastChannel === 'undefined') {
-      console.log('📡 [EDIT] BroadcastChannel unavailable in this environment');
       return;
     }
 
     const channel = new BroadcastChannel(EMBED_CHAT_BROADCAST_CHANNEL);
-    console.log('📡 [EDIT] Broadcast channel connected in embed');
     embedChatChannelRef.current = channel;
 
     const handleChannelMessage = (event: MessageEvent) => {
       const data = event.data;
       if (!data || typeof data !== 'object') return;
       if (data.type === 'chat-request') {
-        console.log('📡 [EDIT] Received chat request via broadcast');
         emitChatSnapshot(channel, { prompt: data.prompt ?? null });
       }
     };
@@ -189,13 +184,6 @@ const ViewControls: React.FC<ViewControlsProps> = ({
         targetUrl = `${window.location.origin}/`;
       }
       
-      console.log('🔍 [EDIT] Edit button state check:', {
-        hasArchitectureId: !!urlArchId,
-        hasRawGraph: !!rawGraph,
-        hasChildren: !!(rawGraph && rawGraph.children),
-        childrenLength: rawGraph?.children?.length || 0,
-        currentSearch: window.location.search
-      });
       
       let finalArchId = urlArchId || null;
 
@@ -231,13 +219,11 @@ const ViewControls: React.FC<ViewControlsProps> = ({
           sessionStorage.setItem(EMBED_PENDING_CHAT_KEY, chatSnapshot);
           (window as any).__embedChatSnapshot = chatSnapshot;
           chatSnapshotRef.current = chatSnapshot;
-          console.log('✅ [EDIT] Stored embed chat snapshot for transition (pre-save), length:', chatSnapshot.length);
         } else {
           localStorage.removeItem(EMBED_PENDING_CHAT_KEY);
           sessionStorage.removeItem(EMBED_PENDING_CHAT_KEY);
           (window as any).__embedChatSnapshot = null;
           chatSnapshotRef.current = null;
-          console.log('ℹ️ [EDIT] No embed chat snapshot found to store');
         }
       } catch (error) {
         console.warn('⚠️ [EDIT] Failed to persist embed chat snapshot:', error);
@@ -276,7 +262,6 @@ const ViewControls: React.FC<ViewControlsProps> = ({
       };
 
       if (!finalArchId && hasGraphContent) {
-        console.log('💾 [EDIT] Ensuring architecture has a shareable ID...');
         try {
           finalArchId = await ensureArchitectureSaved();
         } catch (error) {
@@ -305,7 +290,6 @@ const ViewControls: React.FC<ViewControlsProps> = ({
             console.warn('⚠️ [EDIT] Unable to persist fallback to localStorage:', localError);
           }
           finalArchId = fallbackId;
-          console.log('🗄️ [EDIT] Stored fallback architecture in sessionStorage with ID:', fallbackId);
         } catch (storageError) {
           console.error('❌ [EDIT] Failed to persist fallback architecture:', storageError);
         }
@@ -331,13 +315,11 @@ const ViewControls: React.FC<ViewControlsProps> = ({
           const serialized = JSON.stringify(payload);
           try {
             sessionStorage.setItem(storageKey, serialized);
-            console.log('✅ [EDIT] Stored fallback payload in sessionStorage:', storageKey, 'chatCount:', chatMessagesSnapshot.length);
           } catch (error) {
             console.warn('⚠️ [EDIT] Failed to persist fallback architecture to sessionStorage:', error);
           }
           try {
             localStorage.setItem(storageKey, serialized);
-            console.log('✅ [EDIT] Stored fallback payload in localStorage:', storageKey, 'chatCount:', chatMessagesSnapshot.length);
           } catch (error) {
             console.warn('⚠️ [EDIT] Failed to persist fallback architecture to localStorage:', error);
           }
@@ -347,7 +329,6 @@ const ViewControls: React.FC<ViewControlsProps> = ({
               sessionStorage.setItem(EMBED_PENDING_CHAT_KEY, chatSnapshot);
               localStorage.setItem(EMBED_PENDING_CHAT_KEY, chatSnapshot);
               chatSnapshotRef.current = chatSnapshot;
-              console.log('✅ [EDIT] Stored embed chat snapshot for transition, length:', chatMessagesSnapshot.length);
             }
           } catch (error) {
             console.warn('⚠️ [EDIT] Failed to store embed chat snapshot:', error);
@@ -360,11 +341,9 @@ const ViewControls: React.FC<ViewControlsProps> = ({
       const urlObject = new URL(targetUrl);
       urlObject.searchParams.set('arch', finalArchId);
       if (userPromptForTransition) {
-        console.log('📝 [EDIT] userPromptForTransition:', userPromptForTransition);
         urlObject.searchParams.set('embedPrompt', userPromptForTransition);
       }
       const latestSnapshotForUrl = getLatestChatSnapshot();
-      console.log('📝 [EDIT] Latest snapshot length for URL:', latestSnapshotForUrl ? latestSnapshotForUrl.length : 0);
       if (latestSnapshotForUrl) {
         try {
           const encodedSnapshot = window.btoa(unescape(encodeURIComponent(latestSnapshotForUrl)));
@@ -376,7 +355,6 @@ const ViewControls: React.FC<ViewControlsProps> = ({
       targetUrl = urlObject.toString();
       (window as any).__targetUrlForEdit = targetUrl;
       
-      console.log('🚀 [EDIT] Opening main app:', targetUrl);
       // Ensure chat persistence exists for canvas validation
       try {
         const existing = collectChatMessages();
@@ -442,12 +420,13 @@ const ViewControls: React.FC<ViewControlsProps> = ({
   };
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-3" style={{ pointerEvents: 'auto', position: 'relative', zIndex: 10002 }}>
       {/* Export Button */}
       {config.allowExporting && onExport && (
         <button
           onClick={onExport}
           className="flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:shadow-md transition-all duration-200"
+          style={{ position: 'relative', zIndex: 10003 }}
           title="Export architecture"
         >
           <Download className="w-4 h-4" />
@@ -467,6 +446,7 @@ const ViewControls: React.FC<ViewControlsProps> = ({
                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 : 'bg-white text-gray-700 hover:bg-gray-50'
           }`}
+          style={{ position: 'relative', zIndex: 10003 }}
           title={
             isSaving ? 'Saving...' 
             : (!rawGraph || !rawGraph.children || rawGraph.children.length === 0) ? 'Create some content first to save'
@@ -486,6 +466,7 @@ const ViewControls: React.FC<ViewControlsProps> = ({
         <button
           onClick={handleEditClick}
           className="flex items-center gap-2 px-3 py-2 rounded-lg shadow-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:shadow-md transition-all duration-200"
+          style={{ position: 'relative', zIndex: 10003 }}
           title="Edit in full app"
         >
           <Edit className="w-4 h-4" />

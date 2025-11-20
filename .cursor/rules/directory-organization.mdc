@@ -1,0 +1,49 @@
+# Directory Organization Rules
+
+## Principle
+**Organize by domain, not by file type.** When hooks/utils folders get too large, create domain-specific subdirectories.
+
+## Rules
+
+### Hooks (`client/hooks/`)
+- **Root level**: Only general-purpose hooks used across multiple domains
+- **Domain folders**: Create `client/hooks/{domain}/` for domain-specific hooks
+  - Example: `client/hooks/canvas/` for canvas-related hooks
+  - Example: `client/hooks/graph/` for graph-related hooks
+- **When to create**: If a domain has 3+ hooks, create a dedicated folder
+
+### Utilities (`client/utils/`)
+- **Root level**: Only general-purpose utilities used across multiple domains
+- **Domain folders**: Create `client/utils/{domain}/` for domain-specific utilities
+  - Example: `client/utils/canvas/` for canvas-related utilities
+  - Example: `client/utils/graph/` for graph-related utilities
+- **When to create**: If a domain has 3+ utilities, create a dedicated folder
+
+### Components (`client/components/`)
+- Already organized by domain (ui/, graph/, node/, canvas/, etc.)
+- Keep this structure
+
+## Examples
+
+✅ **GOOD:**
+```
+client/hooks/canvas/useCanvasPersistence.ts
+client/hooks/canvas/useCanvasEdgeInteractions.tsx
+client/utils/canvas/canvasInteractions.ts
+client/utils/canvas/canvasDeleteInteractions.ts
+```
+
+❌ **BAD:**
+```
+client/hooks/useCanvasPersistence.ts
+client/hooks/useCanvasEdgeInteractions.tsx
+client/utils/canvasInteractions.ts
+client/utils/canvasDeleteInteractions.ts
+```
+
+## Migration
+When moving files:
+1. Create the domain folder if it doesn't exist
+2. Move files to the new location
+3. Update all imports (use relative paths from new location)
+4. Verify no broken imports remain

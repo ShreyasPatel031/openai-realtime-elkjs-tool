@@ -20,13 +20,14 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
 
   // Calculate absolute positions for all nodes in the graph
   const absolutePositions = computeAbsolutePositions(elkGraph);
-  console.log("🧮 [toReactFlow] Absolute positions map:", Object.entries(absolutePositions).map(([id, pos]) => ({
-    id,
-    x: pos.x,
-    y: pos.y,
-    width: pos.width,
-    height: pos.height,
-  })));
+  
+  // 🔍 Quick check: Are absolute positions being calculated?
+  const absPosSample = Object.entries(absolutePositions).slice(0, 3);
+  if (absPosSample.length > 0) {
+    console.log('🔍 [toReactFlow] Absolute positions sample:', 
+      absPosSample.map(([id, pos]) => ({ id, x: pos.x, y: pos.y }))
+    );
+  }
   
   // Build a map of edge connection points for each node
   const edgeConnectionPoints = buildNodeEdgePoints(elkGraph, absolutePositions);
@@ -39,7 +40,11 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
   const createNode = (node: any, parentAbsolutePosition = { x: 0, y: 0 }, parentId?: string) => {
     const absPosRaw = absolutePositions[node.id];
     const absPos = snapPos(absPosRaw);
-    const isGroupNode = (node.children?.length ?? 0) > 0 || node.data?.isGroup === true;
+    // Detect groups: has isGroup flag, has children array (even if empty), or has edges array
+    const isGroupNode = 
+      node.data?.isGroup === true || 
+      Array.isArray(node.children) ||  // Groups have children array (even if empty)
+      Array.isArray(node.edges);       // Groups have edges array (even if empty)
 
     // Quantize node sizes to grid so both start and end land on grid
     const quantizeSize = (v: number) => Math.max(GRID_SIZE, Math.round(v / GRID_SIZE) * GRID_SIZE);
@@ -53,10 +58,24 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
     const validParentId = parentId && parentId !== 'root' ? parentId : undefined;
 
 
+    // ReactFlow requires RELATIVE positions when parentId is set, ABSOLUTE positions when no parent
+    // ELK gives us relative positions (node.x, node.y), so we use those directly for child nodes
+    if (!absPosRaw) {
+      console.warn(`[toReactFlow] No absolute position found for node ${node.id}, using fallback`);
+    }
+    
+    // For nodes with a parent, use ELK's relative position (node.x, node.y)
+    // For top-level nodes (no parent), use absolute position
+    const elkRelativePos = { x: node.x ?? 0, y: node.y ?? 0 };
+    const finalPosition = validParentId 
+      ? snapPos(elkRelativePos)  // Child nodes: use relative position
+      : snapPos(absPosRaw || { x: 0, y: 0 });  // Top-level: use absolute position
+    
+    
     nodes.push({
       id: node.id,
       type: isGroupNode ? "group" : "custom",
-      position: validParentId ? snapPos({ x: node.x ?? 0, y: node.y ?? 0 }) : { x: absPos.x, y: absPos.y },
+      position: finalPosition,
       ...(validParentId && { parentId: validParentId }),
       zIndex: isGroupNode ? CANVAS_STYLES.zIndex.groups : CANVAS_STYLES.zIndex.nodes,
       selectable: true,
@@ -67,6 +86,10 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
         width: nodeWidth,
         height: nodeHeight,
         isParent: isGroupNode,
+        // Pass through mode for groups (FREE/LOCK state)
+        // Phase 4: Mode will be set from ViewState.layout when rendering via ReactFlowAdapter
+        // Default to FREE here - ReactFlowAdapter will override from ViewState
+        ...(isGroupNode && { mode: node.data?.mode || 'FREE' }),
         // Pass through icon if it exists in the node data
         ...(node.data?.icon && { icon: node.data.icon }),
         // Pass through style if it exists in the node data
@@ -89,7 +112,8 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
           const delta = snap(connectionPoint.x) - absPos.x;
           return delta;
         }),
-        position: { x: absPos.x, y: absPos.y }
+        // Store position in data - use relative for child nodes, absolute for top-level
+        position: validParentId ? finalPosition : { x: absPos.x, y: absPos.y }
       },
       style: isGroupNode ? {
         width: groupWidth,
@@ -114,12 +138,6 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
 
   // Start node creation from root's children (skip root itself)
   // Root represents the entire canvas and should not be rendered as a node
-  console.log('🏭 [toReactFlow] Creating nodes from elkGraph children:', {
-    rootId: elkGraph.id,
-    childrenCount: (elkGraph.children || []).length,
-    children: (elkGraph.children || []).map(c => ({ id: c.id, x: c.x, y: c.y, w: c.width, h: c.height }))
-  });
-  
   (elkGraph.children || []).forEach((childNode: any) => {
     createNode(childNode);
   });
@@ -225,7 +243,6 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
             zIndex: CANVAS_STYLES.zIndex.edges,
             sourceHandle: sourceHandle,
             targetHandle: targetHandle,
-            selectable: true,
             focusable: true,
             style: CANVAS_STYLES.edges.default,
             markerEnd: {
@@ -272,24 +289,6 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
   processEdges(elkGraph);
 
   // Final edge creation complete
-
-  console.log("🧭 [toReactFlow] Final nodes:", nodes.map(node => ({
-    id: node.id,
-    type: node.type,
-    position: node.position,
-    parentId: (node as any).parentId,
-    width: (node.data as any)?.width,
-    height: (node.data as any)?.height,
-  })));
-
-  console.log("🧭 [toReactFlow] Final edges:", edges.map(edge => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    sourceHandle: edge.sourceHandle,
-    targetHandle: edge.targetHandle,
-    type: edge.type,
-  })));
 
   return { nodes, edges };
 } 

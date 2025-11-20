@@ -5,6 +5,7 @@
 import React from 'react';
 import { ApiEndpointProvider } from '../client/contexts/ApiEndpointContext';
 import { ViewModeProvider } from '../client/contexts/ViewModeContext';
+import { CanvasAdapterProvider } from '../client/core/renderer/CanvasAdapterProvider';
 import App from '../client/components/App';
 
 export default function CanvasPage() {
@@ -12,7 +13,9 @@ export default function CanvasPage() {
     <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0 }}>
       <ApiEndpointProvider>
         <ViewModeProvider fallbackMode="canvas">
-          <App />
+          <CanvasAdapterProvider>
+            <App />
+          </CanvasAdapterProvider>
         </ViewModeProvider>
       </ApiEndpointProvider>
     </div>

@@ -1,3 +1,9 @@
+// Centralized ELK layout options
+// Used for both AI drawing and Arrange operations to ensure consistent spacing
+
+// Group frame padding (used in autoFitGroupFrame)
+export const GROUP_FRAME_PADDING = 30;
+
 export const ROOT_DEFAULT_OPTIONS = {
   layoutOptions: {
     "algorithm": "layered",
@@ -11,10 +17,9 @@ export const ROOT_DEFAULT_OPTIONS = {
     "spacing.edgeNode": 30,
     "spacing.nodeNode": 30,
     "spacing.edgeEdge": 30,
-    "spacing.edgeEdgeBetweenLayers": 30,
-    "spacing.nodeNodeBetweenLayers": 30,
-    "spacing.edgeNodeBetweenLayers": 30,
-
+    "spacing.edgeEdgeBetweenLayers": 50,  // Match NON_ROOT spacing for consistency
+    "spacing.nodeNodeBetweenLayers": 50,   // Match NON_ROOT spacing for consistency
+    "spacing.edgeNodeBetweenLayers": 50,   // Match NON_ROOT spacing for consistency
   }
 };
 

@@ -7,6 +7,7 @@ import { useCallback, useRef } from 'react';
 import { anonymousArchitectureService, AnonymousArchitecture } from '../services/anonymousArchitectureService';
 import { EMBED_PENDING_ARCH_PREFIX } from '../utils/anonymousSave';
 import { isEmbedToCanvasTransition, getCurrentConversation, normalizeChatMessages, mergeChatMessages } from '../utils/chatPersistence';
+import { restoreCanvasSnapshot } from '../utils/canvasPersistence';
 import { Timestamp } from 'firebase/firestore';
 
 interface UseUrlArchitectureProps {
@@ -32,11 +33,30 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
       return false;
     }
 
+    // CRITICAL: ALWAYS check localStorage FIRST before loading from URL
+    // Only load from URL if localStorage doesn't have a snapshot for this architecture
     const urlArchId = anonymousArchitectureService.getArchitectureIdFromUrl();
-    // console.log('🔍 [URL-ARCH] Checking for URL architecture ID:', urlArchId);
+    if (urlArchId && typeof window !== 'undefined') {
+      try {
+        const snapshot = restoreCanvasSnapshot();
+        if (snapshot && snapshot.selectedArchitectureId === urlArchId) {
+          const hasContent = 
+            (snapshot.rawGraph?.children && snapshot.rawGraph.children.length > 0) ||
+            (snapshot.rawGraph?.edges && snapshot.rawGraph.edges.length > 0);
+          
+          if (hasContent) {
+            console.log('[🔄 URL-ARCH] localStorage snapshot exists for URL architecture - skipping URL load:', urlArchId);
+            // Don't load from URL - let localStorage restoration handle it
+            return false;
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ [URL-ARCH] Error checking localStorage before URL load:', error);
+        // Continue with URL load if localStorage check fails
+      }
+    }
     
     if (urlArchId) {
-      console.log('🔄 [URL-ARCH] Loading shared architecture from URL');
       await loadSharedAnonymousArchitecture(urlArchId);
       return true;
     }
@@ -48,9 +68,30 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
    * Load a shared anonymous architecture by ID
    */
   const loadSharedAnonymousArchitecture = useCallback(async (architectureId: string) => {
-    console.log('🔥 [LOAD-SHARED] Starting to load shared architecture:', architectureId);
     
     try {
+      // CRITICAL: Check if localStorage has a snapshot for this architecture ID first
+      // If it does, skip loading from Firebase/URL - localStorage takes precedence (user's current state)
+      if (typeof window !== 'undefined') {
+        try {
+          const snapshot = restoreCanvasSnapshot();
+          if (snapshot && snapshot.selectedArchitectureId === architectureId) {
+            const hasContent = 
+              (snapshot.rawGraph?.children && snapshot.rawGraph.children.length > 0) ||
+              (snapshot.rawGraph?.edges && snapshot.rawGraph.edges.length > 0);
+            
+            if (hasContent) {
+              console.log('[🔄 URL-ARCH] Skipping URL load - localStorage snapshot exists for same architecture:', architectureId);
+              // Return early - let the localStorage restoration handle it
+              return true;
+            }
+          }
+        } catch (error) {
+          console.warn('⚠️ [LOAD-SHARED] Error checking localStorage snapshot:', error);
+          // Continue with normal load
+        }
+      }
+      
       let sharedArch = null;
       const isLocalFallback = architectureId.startsWith('local-');
 
@@ -128,11 +169,6 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
       }
 
       if (!sharedArch && fallbackData?.rawGraph) {
-        console.log('🔥 [LOAD-SHARED] Using local fallback architecture data:', {
-          id: architectureId,
-          createdAt: fallbackData.createdAt,
-          hasChatMessages: Array.isArray(fallbackData.chatMessages) && fallbackData.chatMessages.length > 0,
-        });
 
         sharedArch = {
           id: architectureId,
@@ -149,7 +185,6 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
         const hasChatInDoc = Array.isArray((sharedArch as any).chatMessages) && (sharedArch as any).chatMessages.length > 0;
         const fallbackChat = Array.isArray(fallbackData.chatMessages) ? fallbackData.chatMessages : [];
         if (!hasChatInDoc && fallbackChat.length > 0) {
-          console.log('🔥 [LOAD-SHARED] Enriching shared architecture with fallback chat messages');
           sharedArch = {
             ...sharedArch,
             chatMessages: fallbackChat,
@@ -173,12 +208,6 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
       }
       
       if (sharedArch && sharedArch.rawGraph) {
-        console.log('🔥 [LOAD-SHARED] ✅ Loaded shared architecture:', {
-          id: architectureId,
-          name: sharedArch.name,
-          nodeCount: sharedArch.rawGraph?.children?.length || 0,
-          hasChatMessages: !!(sharedArch as any).chatMessages?.length
-        });
         
         // ALWAYS set chat messages from architecture (even if empty) to clear any stale localStorage data
         try {
@@ -190,16 +219,12 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
           const existingCount = existingConversation.length;
           const incomingCount = normalizedArchMessages?.length || 0;
 
-          console.log('💬 [LOAD-SHARED] Architecture chat count:', incomingCount, 'existingMessagesCount:', existingCount, 'transitionedFromEmbed:', transitionedFromEmbed);
 
           if (mergedConversation && mergedConversation.length > 0) {
             localStorage.setItem('atelier_current_conversation', JSON.stringify(mergedConversation));
-            console.log('💬 [LOAD-SHARED] Stored merged conversation with', mergedConversation.length, 'messages');
           } else if (existingCount > 0) {
-            console.log('💬 [LOAD-SHARED] Preserving existing conversation (no new messages to merge)');
           } else {
             localStorage.removeItem('atelier_current_conversation');
-            console.log('💬 [LOAD-SHARED] Cleared chat (no conversation present)');
           }
         } catch (error) {
           console.warn('Failed to restore/merge chat messages:', error);
@@ -207,16 +232,13 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
         
         // Check if we're in auth mode (user is authenticated)
         const isAuthMode = config.requiresAuth || false;
-        console.log('🔥 [LOAD-SHARED] Auth mode:', isAuthMode);
         
         if (isAuthMode) {
           // In auth mode, we need to convert the anonymous architecture to a Firebase architecture
           // and set it as priority so it becomes the first tab
-          console.log('🔥 [LOAD-SHARED] 🔐 Processing URL architecture for authenticated user');
 
           // Check if user is authenticated
           if (!currentUserRef.current?.uid || !currentUserRef.current?.email) {
-            console.log('🔥 [LOAD-SHARED] ⚠️ User not authenticated yet - will process after sign-in');
             // Still load the architecture as anonymous for now
             loadArchitecture(sharedArch, 'url-shared-anonymous');
             return true;
@@ -237,28 +259,16 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
             let userPrompt = sharedArch.userPrompt || '';
 
             if (!userPrompt) {
-              console.log('🔥 [LOAD-SHARED] ⚠️ No userPrompt in architecture, trying chat messages...');
               const persistedMessages = getChatMessages();
               const lastUserMessage = persistedMessages.filter(msg => msg.sender === 'user').pop();
               userPrompt = lastUserMessage?.content || (window as any).originalChatTextInput || (window as any).chatTextInput || '';
 
-              console.log('🔥 [LOAD-SHARED] 📝 Chat messages for naming:', persistedMessages);
-              console.log('🔥 [LOAD-SHARED] 🔍 Fallback debug info:', {
-                messageCount: persistedMessages.length,
-                lastUserMessage: lastUserMessage?.content,
-                windowOriginalChat: (window as any).originalChatTextInput,
-                windowChatText: (window as any).chatTextInput,
-                finalPrompt: userPrompt
-              });
             } else {
-              console.log('🔥 [LOAD-SHARED] ✅ Using userPrompt from architecture:', userPrompt);
             }
 
-            console.log('🔥 [LOAD-SHARED] 🏷️ Final user prompt for naming:', userPrompt || '(empty - will use graph components)');
 
             // Generate name using backend API (will use componentsHintFromGraph if userPrompt is empty)
             const baseChatName = await generateNameWithFallback(sharedArch.rawGraph, userPrompt);
-            console.log('🔥 [LOAD-SHARED] 🎯 Generated architecture name:', baseChatName);
             
             // Save to Firebase
             const savedArchId = await ArchitectureService.saveArchitecture({
@@ -271,11 +281,9 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
               edges: []
             });
             
-            console.log('🔥 [LOAD-SHARED] 💾 Saved to Firebase with ID:', savedArchId);
             
             // Set as priority architecture so it appears as first tab
             localStorage.setItem('priority_architecture_id', savedArchId);
-            console.log('🔥 [LOAD-SHARED] 🏆 Set priority architecture ID:', savedArchId);
             
             // Create the architecture object for loading
             const firebaseArch = {
@@ -298,7 +306,6 @@ export function useUrlArchitecture({ loadArchitecture, config, currentUser }: Us
           }
         } else {
           // In canvas/embed mode, load directly as anonymous architecture
-          console.log('🔥 [LOAD-SHARED] 🌐 Loading as anonymous architecture (non-auth mode)');
           loadArchitecture(sharedArch, 'URL_SHARED');
         }
         

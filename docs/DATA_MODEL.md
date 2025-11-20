@@ -23,8 +23,10 @@ This document defines the **ironclad data structures** used throughout the appli
                           ↓
 ┌─────────────────────────────────────────────────────────┐
 │ Layer 3: VIEW STATE (Ephemeral Geometry)                │
-│ - NOT persisted to Firebase (computed on load)         │
-│ - Just positions: { nodes: {id: {x,y,w,h}}, edges: {}} │
+│ - Not persisted to Firebase                             │
+│ - Cached locally (localStorage) for reload/latency      │
+│ - Computed on load when no local snapshot exists        │
+│ - Geometry + layout.modes for groups                    │
 │ - Renderer reads from here (currently ReactFlow)        │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -95,7 +97,9 @@ type DomainGroup = {
 
 ## 2. View State (Ephemeral Geometry)
 
-This is **NOT persisted to Firebase** (computed on load). It contains **ALL** position, size, and layout information. It is computed fresh when loading a diagram based on the current layout algorithm.
+This is **NOT persisted to Firebase**. It contains **ALL** position, size, and layout information, and is:
+- Cached locally (localStorage) to enable reload without recomputation
+- Computed on load when no local snapshot exists (or snapshot invalid)
 
 ### ViewState
 
@@ -130,7 +134,7 @@ type ViewState = {
 }
 ```
 
-**Note**: The `layout` section stores FREE/LOCK modes for groups. This is **canvas-level** behavior that controls how layout algorithms are applied, not part of the structural domain graph.
+**Note**: The `layout` section stores FREE/LOCK modes for groups. This is **canvas-level** behavior that controls how layout algorithms are applied, not part of the structural domain graph. Modes are restored from the local snapshot when present.
 
 ---
 
@@ -147,10 +151,10 @@ type ViewState = {
 
 | **Saved to Firebase** | **Computed on Load** |
 |----------------------|---------------------|
-| Domain Graph structure | ViewState positions |
+| Domain Graph structure | ViewState positions (or restored from local snapshot) |
 | Node/Edge/Group IDs | Node/Group sizes |
 | Labels and icons | Edge waypoints |
-| Relationships | Layout modes (FREE/LOCK) |
+| Relationships | Layout modes (FREE/LOCK) [restored from local snapshot; not stored in Firebase] |
 
 ### No Origin Metadata
 
@@ -163,11 +167,15 @@ type ViewState = {
 When a user opens a diagram:
 
 1. **Load Domain Graph** from Firebase
-2. **Initialize ViewState** as empty `{}`
-3. **Run Layout Engine** (ELK or manual):
-   - If `layout[groupId].mode === 'LOCK'`: Run ELK, write positions to ViewState
-   - If `layout[groupId].mode === 'FREE'`: Use stored positions or place manually
-4. **Renderer** reads Domain + ViewState
+2. **If local snapshot exists for this architecture ID**:
+   - Hydrate **ViewState** (geometry + `layout.modes`) from local snapshot
+   - Skip initial ELK; render immediately from ViewState
+3. **Else**:
+   - Initialize ViewState as empty `{}`
+   - Run Layout Engine (ELK or manual policy):
+     - If `layout[groupId].mode === 'LOCK'`: Run ELK and write positions to ViewState
+     - If `layout[groupId].mode === 'FREE'`: Use manual placement/writes to ViewState
+4. **Renderer** reads ViewState only
 5. **Display** on screen (ReactFlow or any other renderer)
 
 ---
@@ -176,13 +184,14 @@ When a user opens a diagram:
 
 When a user saves/shares:
 
-1. **Serialize ONLY Domain Graph** (no ViewState)
-2. **Save to Firebase** (or generate share link)
-3. **ViewState is DISCARDED** (not saved)
+1. **Remote save**: Serialize ONLY Domain Graph (no ViewState) and save to Firebase (or generate share link)
+2. **Local snapshot**: Persist `{ Domain, ViewState }` to localStorage for the active architecture ID
+   - Includes ViewState geometry and `layout.modes`
+   - Local snapshot always takes precedence over URL/remote for the same architecture ID
 
-When someone loads that shared link:
+When someone loads that shared link on a new device:
 - They get the Domain Graph
-- ViewState is recomputed based on their layout algorithm and screen size
+- ViewState is computed on load (no local snapshot available)
 
 ---
 
@@ -301,5 +310,3 @@ const badNode = {
 
 - See `VIEW_STATE.md` (to be created) for ViewState architecture details
 - See `FIGJAM_REFACTOR.md` for implementation plan and phase breakdown
-
-

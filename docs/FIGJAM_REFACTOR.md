@@ -19,6 +19,61 @@
 
 ---
 
+## Architecture Dataflow (Authoritative)
+
+```
+┌─────────────────────────────────────────┐
+│ INPUT: User / AI actions                │
+└─────────────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────┐
+│ ORCHESTRATION (policy + sequencing)     │
+│ - Classify: geo-only | FREE-structural | AI/LOCK │
+│ - Pick scope: LCG(id…) / highest locked ancestor  │
+│ - Execute ordered steps (below)                   │
+│ - Emit render only after ViewState is valid       │
+└─────────────────────────────────────────┘
+     │                    │                          │
+     │ (G) Geo-only FREE  │ (F) FREE structural      │ (S) AI/LOCK structural
+     │                    │                          │
+     ▼                    ▼                          ▼
+(G)  ViewState.write  (F1) Domain.mutate        (S1) Domain.mutate
+     (pos/size/pts)   (reparent/group/edges)         (add/move/group/edges)
+     │                    │                          │
+     │              (F2) ViewState.adjust       (S2) Layout.run(scope, anchored)
+     │                   - preserve world x,y        - reads Domain
+     │                   - update relative coords    - computes geometry
+     │                    │                          │
+     │                    ▼                          ▼
+     └──────────────► VIEWSTATE (geometry SoT) ◄─────┘
+                        - positions/sizes/waypoints
+                        - writers: (G) orchestration; (F2) orchestration; (S2) layout
+                        - readers: renderer only
+                              │
+                              ▼
+┌──────────────────────────────┐
+│ RENDERER (ReactFlow adapter) │
+│ - reads VIEWSTATE only       │
+│ - builds RF nodes/edges      │
+│ - never reads ELK/DOMAIN     │
+└──────────────────────────────┘
+
+┌───────────────────────────┐           ┌───────────────────────────┐
+│ DOMAIN (pure structure)   │  ─────►   │ LAYOUT (ELK, scoped)      │
+│ - nodes/groups/edges/mode │  used by  │ - reads Domain            │
+│ - no geometry             │           │ - writes ViewState only   │
+└───────────────────────────┘           └───────────────────────────┘
+```
+
+Key invariants:
+- Domain never feeds the renderer directly; all structural changes route through ELK to ViewState.
+- Renderer reads geometry only from ViewState (no ELK/domain geometry, no fallbacks).
+- Orchestration is the sole place that sequences Domain mutations, ViewState updates, and Layout runs.
+- FREE structural reparent: Domain.mutate → ViewState.adjust (preserve world x,y) → Render (no ELK).
+
+---
+
 ## 1) Vocabulary (final)
 
 * **LCG(S)**: **L**owest **C**ommon **G**roup (deepest section/container that already contains every item in set S).
@@ -86,6 +141,12 @@ ViewState {
 * `pathToRoot(id): groupId[]` (for LCG)
 * R-tree/quad-tree for hit-testing & containment checks (sections).
 
+### 2.4 Reparenting and Domain Changes
+
+* Dragging a node across group boundaries updates the domain graph (the node’s parent changes).
+* Dragging a group across boundaries updates the domain graph (the group’s parent changes). If a group now fully contains other sections/nodes, those may be adopted; if items fall outside, they may be ejected per FREE rules.
+* Moving a LOCK group “as a whole” only translates geometry when parentage does not change. If the move crosses into a different parent (or creates/enters a wrapper), the domain changes (reparent), and ELK policy applies.
+
 ---
 
 ## 3) ELK Triggers Matrix
@@ -97,10 +158,17 @@ ViewState {
 | Toggle **FREE → LOCK** on a group                       | User     | that group's subtree                                                                      | **Yes** (normalize once)          |
 | Any structural change inside a **LOCK** group           | User     | **Highest locked ancestor** that encloses the change                                      | **Yes**                           |
 | Any AI mutation (add/move/group/edge)                   | **AI**   | The AI's chosen group scope (usually the target group or `LCG(selection)` it operates on) | **Yes** (always)                  |
-| Moving a **LOCK** group as a whole                      | User     | —                                                                                         | **No** (it translates as a block) |
+| Moving a **LOCK** group as a whole                      | User     | — (if parentage unchanged)                                                                | **No** (block translation only)   |
 
 > In **LOCK**, there's **no "Auto-layout" button**; lock **is** auto-layout.
 > In **FREE**, nothing auto-layouts unless the user explicitly asks or toggles the group to LOCK.
+
+### 3.1 Scope Resolution and Chain Locking
+
+When ELK runs (AI or LOCK cases):
+* Lock the entire ancestor chain of the edited scope up to (but not including) root. This stabilizes enclosing frames and prevents bumping into unlocked containers.
+* Choose the top‑most locked ancestor within that chain (under root) as the ELK scope.
+* Run anchored ELK on that scope (see §6.6). Other parts of the canvas remain unchanged.
 
 ---
 
@@ -118,6 +186,11 @@ ViewState {
 * **Domain:** create edge **in** `LCG({source, target})`.
 * **View:** draw connector immediately (orthogonal/manual, rubber-band while dragging).
 * **ELK:** **No**.
+
+#### 4.2.a Dragging across boundaries (reparent)
+* **Domain:** dragging nodes or groups across group boundaries changes parentage; after any reparent, recompute edge parentage via `LCG({u,v})` and move edges to their correct group.
+* **View:** update ViewState for positions; connectors rubber‑band during drag.
+* **ELK:** **No** in FREE unless user explicitly arranges or toggles to LOCK.
 
 ### 4.3 Create Section from multi-selection
 
@@ -213,7 +286,7 @@ ViewState {
 
 * **UX:** explicit drop target highlight decides reparent; **no full-containment requirement** here.
 * **Domain:** if dropped onto a highlighted section target → reparent under it; reattach edges.
-* **ELK:** winning locked scope runs.
+* **ELK:** resolve scope by locking the ancestor chain (up to but not including root) and running on the **top‑most locked ancestor (under root)** that encloses the edit; anchored.
 * **View:** anchored.
 
 ### 5.6 Resize Section
@@ -294,6 +367,7 @@ ViewState {
 
 ### 6.6 Anchoring ELK output
 
+* First lock the entire ancestor chain of the edited scope (up to but not including root), then pick the **top‑most locked ancestor (under root)** as the ELK scope.
 * Compute the pre-layout **scope bbox top-left**; after ELK, translate the output so that top-left stays the same.
 * Write `ViewState` for nodes/edges/groups within that scope.
 * Auto-fit the section frame to children.
@@ -303,9 +377,9 @@ ViewState {
 ## 7) AI vs User Integration
 
 * **AI:**
-  * Picks a target scope (a group or a wrapper it creates).
+  * Picks a target scope (a group or a wrapper it creates). If the target is **FREE**, AI first sets it to **LOCK** to maintain ELK‑first behavior.
   * Applies mutations (add/move/group/edges).
-  * **Always** triggers ELK for that scope immediately (ELK-first experience).
+  * **Always** triggers ELK immediately by locking the ancestor chain and running anchored ELK on the **top‑most locked ancestor (under root)** that encloses the edit.
   * Default mode: LOCK (but does not persist "createdBy").
 * **User:**
   * Works in **FREE** by default; all the FREE rules above apply.
@@ -581,3 +655,4 @@ For each overlapping obstacle O (fixed order: by distance from Sel's top-left; t
 ---
 
 This spec is ready for phased implementation. Start with Phase 0 (foundations) and test after each phase before proceeding.
+

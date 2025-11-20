@@ -48,18 +48,18 @@ function FramerEmbeddable({
   return (
     <ApiEndpointProvider apiEndpoint={apiEndpoint}>
       <ViewModeProvider fallbackMode="embed">
-        <div style={containerStyle}>
-          <InteractiveCanvas
-            isSessionActive={isSessionActive}
-            startSession={startSession}
-            stopSession={stopSession}
-            sendTextMessage={sendTextMessage}
-            sendClientEvent={sendClientEvent}
-            events={events}
-            apiEndpoint={apiEndpoint}
-            isPublicMode={true}
-          />
-        </div>
+          <div style={containerStyle}>
+            <InteractiveCanvas
+              isSessionActive={isSessionActive}
+              startSession={startSession}
+              stopSession={stopSession}
+              sendTextMessage={sendTextMessage}
+              sendClientEvent={sendClientEvent}
+              events={events}
+              apiEndpoint={apiEndpoint}
+              isPublicMode={true}
+            />
+          </div>
       </ViewModeProvider>
     </ApiEndpointProvider>
   );

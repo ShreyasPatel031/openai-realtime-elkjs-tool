@@ -3,8 +3,10 @@
  *
  * InteractiveCanvas.tsx is already too large. Do NOT add new logic or components here.
  * - Only orchestrate and wire references to helpers/modules.
- * - Put new interactions (e.g., tools, gestures, policies) in dedicated files
- *   under client/components/ui/ (e.g., canvasInteractions.ts) and import them.
+ * - Put new interactions (e.g., tools, gestures, policies) in dedicated files:
+ *   - Hooks → client/hooks/{domain}/ (e.g., client/hooks/canvas/)
+ *   - Utilities → client/utils/{domain}/ (e.g., client/utils/canvas/)
+ *   - If a domain folder doesn't exist, CREATE IT rather than adding to root hooks/utils
  * - Keep this file as a thin coordinator to protect maintainability and testability.
  */
 "use client"
@@ -29,12 +31,13 @@ import ViewControls from "./ViewControls"
 // Import types from separate type definition files
 import { InteractiveCanvasProps } from "../../types/chat"
 import { RawGraph } from "../graph/types/index"
-import { deleteNode, deleteEdge, addNode, addEdge, groupNodes, batchUpdate } from "../graph/mutations"
+import { deleteNode, deleteEdge, addNode, addEdge, groupNodes, batchUpdate, moveNode, createWrapperSection } from "../graph/mutations"
+import { initializeOrchestrator } from "../../core/orchestration/Orchestrator"
 import { CANVAS_STYLES, getEdgeStyle, getEdgeZIndex } from "../graph/styles/canvasStyles"
-import { useElkToReactflowGraphConverter } from "../../hooks/useElkToReactflowGraphConverter"
+import { useCanvasInitialization } from "../../hooks/canvas/useCanvasInitialization"
 import { useChatSession } from '../../hooks/useChatSession'
-import { elkGraphDescription, agentInstruction } from '../../realtime/agentConfig'
 import { addFunctionCallingMessage, updateStreamingMessage } from '../../utils/chatUtils'
+import { elkGraphDescription, agentInstruction } from '../../realtime/agentConfig'
 
 // Import extracted components
 import CustomNodeComponent from "../CustomNode"
@@ -48,33 +51,46 @@ import { generateNameWithFallback, ensureUniqueName } from "../../utils/naming"
 import { ensureAnonymousSaved, createAnonymousShare } from "../../utils/anonymousSave"
 import { useUrlArchitecture } from "../../hooks/useUrlArchitecture"
 import { ensureEdgeVisibility, updateEdgeStylingOnSelection, updateEdgeStylingOnDeselection } from "../../utils/edgeVisibility"
+import { findContainingGroup, findFullyContainedNodes } from "../../utils/containmentDetection"
 import { syncWithFirebase as syncWithFirebaseService } from "../../services/syncArchitectures"
-import { generateSVG, handleSvgZoom } from "../../utils/svgExport"
-import { sanitizeStoredViewState, restoreNodeVisuals, createEmptyViewState } from "../../utils/canvasLayout"
+import { sanitizeStoredViewState, restoreNodeVisuals } from "../../utils/canvasLayout"
+import { createEmptyViewState } from "../../core/viewstate/ViewState"
+import { CoordinateService } from "../../core/viewstate/CoordinateService"
 import DraftGroupNode from "../node/DraftGroupNode"
 import StepEdge from "../StepEdge"
+import { runScopeLayout } from "../../core/layout/ScopedLayoutRunner"
+import { mergeViewState } from "../../state/viewStateOrchestrator"
 import { createNodeID } from "../../types/graph"
 import { NodeInteractionContext } from "../../contexts/NodeInteractionContext"
+import { resolveElkScope, apply } from "../../core/orchestration/Orchestrator"
+import type { EditIntent } from "../../core/orchestration/types"
+import ELK from "elkjs/lib/elk.bundled.js"
+import { ensureIds } from "../graph/utils/elk/ids"
+import { generateSVG, handleSvgZoom } from "../../utils/svgExport"
 
 // Import extracted services and utilities
 import { CanvasArchitectureService } from "../../services/canvasArchitectureService"
 import { CanvasSaveService } from "../../services/canvasSaveService"
 import { CanvasChatService } from "../../services/canvasChatService"
 import { CanvasModalManager } from "../../utils/canvasModals"
-import { createViewStateSnapshot, saveCanvasSnapshot, restoreCanvasSnapshot, LOCAL_CANVAS_SNAPSHOT_KEY } from "../../utils/canvasPersistence"
+import { createViewStateSnapshot, saveCanvasSnapshot, LOCAL_CANVAS_SNAPSHOT_KEY } from "../../utils/canvasPersistence"
+import { logDeletionAndSave, logPageLoad, logUrlArchCheck, extractGroupIdsFromGraph } from "../../utils/viewstateDebug"
 import { useCanvasState } from "../../hooks/useCanvasState"
+import { setupWindowHelpers } from "../../utils/migrationTestHelpers"
 
 /**
  * READ ME: InteractiveCanvas is already very large. Do NOT add new interaction
  * logic or component code directly here. Add it in a dedicated helper/module and
  * import the reference. Keep this file as a thin orchestrator.
  */
-import DevPanel from "../DevPanel"
-import { placeNodeOnCanvas } from "./canvasInteractions"
+import { placeNodeOnCanvas } from "../../utils/canvas/canvasInteractions"
+import { handleGroupToolPaneClick } from "../../utils/canvas/canvasGroupInteractions"
+import { handleDeleteKey } from "../../utils/canvas/canvasDeleteInteractions"
+import { useCanvasPersistenceEffect } from "../../hooks/canvas/useCanvasPersistence"
 import NodeHoverPreview from "./NodeHoverPreview"
 import GroupHoverPreview from "./GroupHoverPreview"
 import CanvasToolbar from "./CanvasToolbar"
-import { useCanvasEdgeInteractions } from "./canvasEdgeInteractions"
+import { useCanvasEdgeInteractions } from "../../hooks/canvas/useCanvasEdgeInteractions"
 
 import Chatbox from "./Chatbox"
 import { ApiEndpointProvider } from '../../contexts/ApiEndpointContext'
@@ -92,10 +108,10 @@ import { anonymousArchitectureService } from "../../services/anonymousArchitectu
 import { SharingService } from "../../services/sharingService"
 import { architectureSearchService } from "../../utils/architectureSearchService"
 import ArchitectureSidebar from "./ArchitectureSidebar"
-import { onElkGraph, dispatchElkGraph } from "../../events/graphEvents"
 import { assertRawGraph } from "../../events/graphSchema"
 import { iconFallbackService } from "../../utils/iconFallbackService"
 import { useViewMode } from "../../contexts/ViewModeContext"
+import { onElkGraph, dispatchElkGraph } from "../../events/graphEvents"
 // import toast, { Toaster } from 'react-hot-toast' // Removed toaster
 
 // Relaxed typing to avoid prop mismatch across layers
@@ -323,7 +339,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           return 0;
         }
       })() : 0;
-      console.log('[ChatInit] embedTransition=', transitionedFromEmbed, 'existingMessages=', currentCount);
     } catch (error) {
       console.warn('Failed to inspect chat messages on mount:', error);
     }
@@ -338,7 +353,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             console.warn('Failed to read opener localStorage:', error);
           }
 
-          console.log('[ChatInit] opener conversation length:', openerConversation ? openerConversation.length : 'none');
           if (openerConversation) {
             localStorage.setItem('atelier_current_conversation', openerConversation);
             currentCount = (() => {
@@ -349,7 +363,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 return 0;
               }
             })();
-            console.log('🔄 [MOUNT] Restored chat from opener window, messages=', currentCount);
           }
         }
       } catch (error) {
@@ -370,7 +383,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               return 0;
             }
           })();
-          console.log('🔄 [MOUNT] Restored embed chat snapshot, messages=', currentCount);
           sessionStorage.removeItem(EMBED_PENDING_CHAT_KEY);
           localStorage.removeItem(EMBED_PENDING_CHAT_KEY);
         }
@@ -383,15 +395,14 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       // User is visiting directly, not from embed, and no conversation exists - clear stale chat
       try {
         localStorage.removeItem('atelier_current_conversation');
-        console.log('🧹 [MOUNT] Cleared stale chat messages (direct visit, no conversation)');
       } catch (error) {
         console.warn('Failed to clear chat on mount:', error);
       }
     } else {
-      console.log('✅ [MOUNT] Preserving chat messages (embed transition or existing conversation)');
     }
   }, []); // Run once on mount
   
+  // Use extracted canvas state hook
   // Use extracted canvas state hook
   const canvasState = useCanvasState();
   const {
@@ -438,6 +449,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     dirtySinceRef,
     remoteSaveTimeoutRef,
     restoredFromSnapshotRef,
+    skipPersistenceRef,
     pendingSelectionRef
   } = canvasState;
 
@@ -482,7 +494,27 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     (window as any).resetCanvas = () => {
       console.log('🔄 Resetting to empty root...');
       setRawGraph({ id: "root", children: [], edges: [] });
+      
+      // Reset viewport to center (access ref when called, not when defined)
+      setTimeout(() => {
+        const rfInstance = (window as any).__reactFlowInstance || reactFlowRef?.current;
+        if (rfInstance) {
+          rfInstance.setCenter(0, 0, { zoom: 1 });
+          console.log('📍 Viewport reset to center');
+        }
+      }, 100);
+      
+      // Clear local storage snapshot
+      try {
+        localStorage.removeItem(LOCAL_CANVAS_SNAPSHOT_KEY);
+        sessionStorage.removeItem(LOCAL_CANVAS_SNAPSHOT_KEY);
+        console.log('🗑️ Cleared local storage snapshot');
+      } catch (e) {
+        console.warn('Failed to clear local storage:', e);
+      }
+      
       console.log('✅ Canvas cleared - empty root loaded');
+      console.log('💡 Run resetCanvas() again if viewport needs reset');
     };
 
     // Legacy command for backward compatibility
@@ -729,22 +761,32 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   
   // StreamViewer is now standalone and doesn't need refs
   
-  // Use the new ElkFlow hook instead of managing ELK state directly
+  // Initialize canvas graph state and services
+  const canvasGraphState = useCanvasInitialization({
+    selectedTool,
+    user,
+    savedArchitectures,
+    setSavedArchitectures,
+    selectedArchitectureId,
+    setSelectedArchitectureId,
+    setCurrentChatName,
+    showNotification,
+    hideNotification,
+    setDeleteOverlay,
+    setInputOverlay,
+    setShareOverlay,
+    isPublicMode
+  });
+  
+  // Extract state and handlers from the initialization hook
   const {
-    // State
     rawGraph,
-    layoutGraph,
-    layoutError,
     nodes,
     edges,
     layoutVersion,
-    
-    // Setters
     setRawGraph,
     setNodes,
     setEdges,
-    
-    // Handlers
     onNodesChange,
     onEdgesChange,
     onConnect,
@@ -757,61 +799,84 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     handleGroupNodes,
     handleRemoveGroup,
     handleBatchUpdate,
-    
     viewStateRef,
     shouldSkipFitViewRef,
-  } = useElkToReactflowGraphConverter({
-    id: "root",
-    children: [],
-    edges: []
-  }, selectedTool);
-
-  // Use extracted ViewState snapshot utility
-  const getViewStateSnapshot = useCallback(() => {
-    return createViewStateSnapshot(nodes, viewStateRef, isHydratingRef);
-  }, [nodes, viewStateRef, isHydratingRef]);
-
-  // Initialize services after hooks are available
-  const architectureService = useMemo(() => new CanvasArchitectureService({
-    user,
-    savedArchitectures,
-    setSavedArchitectures,
-    selectedArchitectureId,
-    setSelectedArchitectureId,
-    setCurrentChatName,
-    setRawGraph,
-    viewStateRef,
     getViewStateSnapshot,
-    showNotification,
-    hideNotification,
-    setDeleteOverlay,
-    setInputOverlay,
-    setShareOverlay
-  }), [user, savedArchitectures, setSavedArchitectures, selectedArchitectureId, setSelectedArchitectureId, setCurrentChatName, setRawGraph, viewStateRef, getViewStateSnapshot, showNotification, hideNotification, setDeleteOverlay, setInputOverlay, setShareOverlay]);
+    architectureService,
+    saveService,
+    handleDeleteArchitecture,
+    handleShareArchitecture,
+    handleEditArchitecture,
+    skipPersistenceRef: graphSkipPersistenceRef,
+  } = canvasGraphState;
 
-  const handleDeleteArchitecture = architectureService.handleDeleteArchitecture;
-  const handleShareArchitecture = architectureService.handleShareArchitecture;
-  const handleEditArchitecture = architectureService.handleEditArchitecture;
+  // Create a ref for rawGraph since Orchestrator expects refs
+  const rawGraphRef = useRef(rawGraph);
+  
+  // Keep rawGraphRef in sync
+  useEffect(() => {
+    rawGraphRef.current = rawGraph;
+  }, [rawGraph]);
 
-  const saveService = useMemo(() => new CanvasSaveService({
-    user,
-    selectedArchitectureId,
-    savedArchitectures,
-    setSavedArchitectures,
-    rawGraph,
-    isPublicMode,
-    getViewStateSnapshot,
-    isHydratingRef,
-    dirtySinceRef,
-    remoteSaveTimeoutRef
-  }), [user, selectedArchitectureId, savedArchitectures, setSavedArchitectures, rawGraph, isPublicMode, getViewStateSnapshot, isHydratingRef, dirtySinceRef, remoteSaveTimeoutRef]);
+  // Initialize Orchestrator (moved from ELK hook for proper separation of concerns)
+  useEffect(() => {
+    const triggerRender = () => {
+      // This is only needed for AI/LOCK mode ELK triggers - not used for FREE mode
+    };
+    
+    const setGraph = (graph: RawGraph) => {
+      setRawGraph(graph, 'user');
+    };
+    
+    initializeOrchestrator(
+      rawGraphRef,
+      viewStateRef,
+      triggerRender,
+      setGraph,
+      setNodes,
+      setEdges
+    );
+    
+    console.log('[🔄 CANVAS] Orchestrator initialized from InteractiveCanvas');
+  }, [setRawGraph, setNodes, setEdges]); // Stable dependencies
 
   // Ref to store ReactFlow instance for auto-zoom functionality
   const reactFlowRef = useRef<any>(null);
   const embedChatChannelRef = useRef<BroadcastChannel | null>(null);
   
+  // Track recently created nodes/groups to skip containment detection
+  const recentlyCreatedNodesRef = useRef<Map<string, number>>(new Map());
+  
+  // Utility to validate and clean nodes before setting them
+  const validateNodes = useCallback((nodes: Node[]): Node[] => {
+    const nodeIdsSet = new Set(nodes.map(n => n.id));
+    const cleanedNodes = nodes.map(node => {
+      const parentId = (node as any).parentId;
+      if (parentId && !nodeIdsSet.has(parentId)) {
+        console.warn(`[VALIDATE] Removing invalid parentId '${parentId}' from node '${node.id}' - parent does not exist`);
+        const cleaned = { ...node };
+        delete (cleaned as any).parentId;
+        // Convert to absolute position if it was relative
+        if ((cleaned.data as any)?.position) {
+          cleaned.position = (cleaned.data as any).position;
+        }
+        return cleaned;
+      }
+      return node;
+    });
+    return cleanedNodes;
+  }, []);
+  
+  // State for tracking pending group add mode (when Plus button is clicked)
+  const [pendingGroupId, setPendingGroupId] = useState<string | null>(null);
+  
   // Canvas tool selection handler (defined after setNodes is available)
   const handleToolSelect = useCallback((tool: typeof selectedTool) => {
+    // Cancel pending group add mode when switching tools
+    if (pendingGroupId) {
+      setPendingGroupId(null);
+    }
+    
     // CRITICAL: Use ReactFlow's API directly to deselect nodes IMMEDIATELY
     // This must happen BEFORE setting the tool state to prevent ReactFlow from re-selecting
     if (tool === 'connector' || tool === 'box') {
@@ -819,8 +884,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         reactFlowRef.current.getNodes();
         reactFlowRef.current.setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
       }
-      // Also update React state for ReactFlow nodes so they stay in sync
-      setNodes(prevNodes => prevNodes.map(node => ({ ...node, selected: false })));
+      // Don't duplicate - ReactFlow ref call above handles deselection and maintains sync
     }
  
     if (tool !== 'arrow' && tool !== 'hand') {
@@ -828,9 +892,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       setSelectedNodes([]);
       setSelectedEdges([]);
     }
- 
+
     setSelectedTool(tool);
-  }, [selectedTool, reactFlowRef, setNodes, selectedNodes, setSelectedNodes, setSelectedEdges]);
+  }, [selectedTool, reactFlowRef, setNodes, selectedNodes, setSelectedNodes, setSelectedEdges, pendingGroupId]);
 
   // Listen for auth state changes (moved here after config is defined)
   useEffect(() => {
@@ -853,7 +917,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       (async () => {
         const urlArchFound = await checkAndLoadUrlArchitecture();
         if (urlArchFound) {
-          console.log('🔍 [URL-ARCH] URL architecture loaded in', viewModeConfig.mode, 'mode');
         }
       })();
     }
@@ -942,7 +1005,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           // Even when not signed in, check for URL architecture and load it
           const urlArchFound = await checkAndLoadUrlArchitecture();
           if (urlArchFound) {
-            console.log('🔍 [URL-ARCH] Non-authenticated user - URL architecture loaded');
           }
           }
         }
@@ -1322,7 +1384,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     // Graph state updated
   }, [rawGraph, selectedArchitectureId]);
 
-  // Handler for PNG export functionality  
+  // Handler for PNG export functionality
+
   const handleExportPNG = useCallback(async () => {
     await exportArchitectureAsPNG(nodes, {
       showNotification
@@ -1415,14 +1478,52 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   // URL Architecture management
   const loadArchitectureFromUrl = useCallback((architecture: any, source: string) => {
-    console.log('🔗 [URL-ARCH] Loading architecture from URL:', { 
-      id: architecture.id, 
-      name: architecture.name, 
-      source,
-      nodeCount: architecture.rawGraph?.children?.length || 0 
-    });
     
     if (architecture.rawGraph) {
+      // SIMPLE RULE: Always use localStorage if it exists for the same architecture ID
+      // Only load from URL if localStorage doesn't have this architecture
+      try {
+        const stored = localStorage.getItem(LOCAL_CANVAS_SNAPSHOT_KEY) || sessionStorage.getItem(LOCAL_CANVAS_SNAPSHOT_KEY);
+        
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const isSameArchitecture = parsed?.selectedArchitectureId === architecture.id;
+          const hasContent = 
+            (parsed?.rawGraph?.children && parsed.rawGraph.children.length > 0) ||
+            (parsed?.rawGraph?.edges && parsed.rawGraph.edges.length > 0);
+          
+          // If localStorage has the same architecture, ALWAYS use it (user's current state)
+          if (isSameArchitecture && hasContent) {
+            const storedAge = Date.now() - (parsed?.timestamp || 0);
+            // Still create the tab and select it, but don't overwrite the graph
+            const urlArch = {
+              id: architecture.id,
+              name: architecture.name,
+              timestamp: architecture.timestamp || new Date(),
+              rawGraph: architecture.rawGraph,
+              userPrompt: architecture.userPrompt || '',
+              firebaseId: architecture.firebaseId || architecture.id,
+              isFromFirebase: true,
+              viewState: architecture.viewState,
+              isFromUrl: true
+            };
+            setSavedArchitectures(prev => {
+              const exists = prev.some(arch => arch.id === architecture.id);
+              if (!exists) {
+                return [urlArch, ...prev];
+              }
+              return prev;
+            });
+            setSelectedArchitectureId(architecture.id);
+            return; // Exit early, don't overwrite the restored graph
+          } else {
+          }
+        } else {
+        }
+      } catch (e) {
+        console.error('❌ [URL-ARCH] Error checking localStorage:', e);
+      }
+
       let viewStateSnapshot = undefined;
       if (architecture.viewState) {
         try {
@@ -1441,6 +1542,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         : architecture.rawGraph;
 
       // Set the content
+      logPageLoad('URL', architecture.rawGraph, architecture.id);
       setRawGraph(graphWithViewState);
       setCurrentChatName(architecture.name);
       
@@ -1461,7 +1563,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       setSavedArchitectures(prev => {
         const exists = prev.some(arch => arch.id === architecture.id);
         if (!exists) {
-          console.log('📄 [URL-ARCH] Creating new tab for URL architecture:', architecture.name);
           return [urlArch, ...prev];
         }
         return prev;
@@ -1471,7 +1572,6 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       setSelectedArchitectureId(architecture.id);
       setPendingArchitectureSelection(null);
       
-      console.log('✅ [URL-ARCH] Architecture loaded successfully and added as new tab:', architecture.name);
     } else {
       console.warn('⚠️ [URL-ARCH] Architecture has no rawGraph content');
     }
@@ -1513,6 +1613,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     
     if (architecture && architecture.rawGraph) {
       console.log('📂 Loading architecture:', architecture.name);
+      logPageLoad('Firebase', architecture.rawGraph, architecture.id);
       
       // Update the current chat name to match the selected architecture
       setCurrentChatName(architecture.name);
@@ -1538,7 +1639,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       
       // Use typed event system for architecture loading
       const viewStateSnapshot = sanitizeStoredViewState(architecture.viewState);
-      viewStateRef.current = viewStateSnapshot ?? createEmptyViewState();
+      viewStateRef.current = viewStateSnapshot ?? { node: {}, group: {}, edge: {}, layout: {} };
 
       const rawGraphWithViewState = viewStateSnapshot
         ? { ...architecture.rawGraph, viewState: viewStateSnapshot }
@@ -1562,11 +1663,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     if (selectedArchitectureId && selectedArchitectureId !== 'new-architecture') {
       const architecture = savedArchitectures.find(arch => arch.id === selectedArchitectureId);
       if (architecture && architecture.name && currentChatName !== architecture.name) {
-        console.log('🔄 Syncing tab name with selected architecture:', architecture.name);
         setCurrentChatName(architecture.name);
       }
     } else if (selectedArchitectureId === 'new-architecture' && currentChatName !== 'New Architecture') {
-      console.log('🔄 Syncing tab name to New Architecture');
       setCurrentChatName('New Architecture');
     }
   }, [selectedArchitectureId, savedArchitectures, currentChatName]);
@@ -1609,10 +1708,22 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     newGraph: RawGraph,
     options: { source?: 'ai' | 'user' } = {}
   ) => {
-    console.group('[Graph Change] Manual/DevPanel Update');
-    console.log('raw newGraph:', newGraph);
-    console.log('Previous rawGraph had', rawGraph?.children?.length || 0, 'children');
-    console.log('New graph has', newGraph?.children?.length || 0, 'children');
+    const prevChildren = rawGraph?.children?.length || 0;
+    const prevEdges = rawGraph?.edges?.length || 0;
+    const newChildren = newGraph?.children?.length || 0;
+    const newEdges = newGraph?.edges?.length || 0;
+    
+    
+    // Prevent clearing graph with substantial content
+    if ((prevChildren > 5 || prevEdges > 5) && (newChildren === 0 && newEdges === 0)) {
+      console.error('❌ [handleGraphChange] BLOCKING - would clear graph with content!', {
+        prev: { children: prevChildren, edges: prevEdges },
+        new: { children: newChildren, edges: newEdges },
+        source: options.source
+      });
+      console.groupEnd();
+      return; // Don't clear if we have substantial content
+    }
     
     let finalGraph: RawGraph;
 
@@ -1623,7 +1734,65 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       }
       viewStateRef.current = createEmptyViewState();
       restoreNodeVisuals(aiGraph, rawGraph);
-      finalGraph = aiGraph;
+      
+      // Wrap AI-generated diagram in a numbered group (Group 1, Group 2, etc.)
+      const topLevelNodeIds = (aiGraph.children || []).map((child: any) => child.id);
+      
+      if (topLevelNodeIds.length > 0) {
+        // Find all existing group names to determine smallest available number
+        const findExistingGroupNumbers = (graph: RawGraph): Set<number> => {
+          const numbers = new Set<number>();
+          const traverse = (node: any) => {
+            if (node.labels && node.labels[0] && node.labels[0].text) {
+              const label = node.labels[0].text;
+              const match = label.match(/^Group (\d+)$/);
+              if (match) {
+                numbers.add(parseInt(match[1], 10));
+              }
+            }
+            if (node.children) {
+              node.children.forEach((child: any) => traverse(child));
+            }
+          };
+          traverse(graph);
+          return numbers;
+        };
+        
+        const existingNumbers = findExistingGroupNumbers(rawGraph || { id: 'root', children: [], edges: [] });
+        
+        // Find smallest available number
+        let groupNumber = 1;
+        while (existingNumbers.has(groupNumber)) {
+          groupNumber++;
+        }
+        
+        const groupName = `Group ${groupNumber}`;
+        // Use the display name as the groupId - groupNodes will normalize the ID but keep the label
+        const groupId = groupName;
+        
+        // Wrap all top-level nodes in the group
+        try {
+          finalGraph = groupNodes(topLevelNodeIds, 'root', groupId, aiGraph, undefined);
+          // Find the group node by checking labels (since ID might be normalized)
+          const groupNode = finalGraph.children?.find((child: any) => 
+            child.labels?.[0]?.text === groupName || child.id === createNodeID(groupId)
+          );
+          if (groupNode) {
+            // Ensure label and data.label are set correctly
+            groupNode.labels = [{ text: groupName }];
+            if (groupNode.data) {
+              groupNode.data.label = groupName;
+            } else {
+              groupNode.data = { label: groupName, isGroup: true };
+            }
+          }
+        } catch (error) {
+          console.error('Failed to wrap AI diagram in group:', error);
+          finalGraph = aiGraph; // Fallback to original if grouping fails
+        }
+      } else {
+        finalGraph = aiGraph;
+      }
             } else {
       const viewStateSnapshot = getViewStateSnapshot();
       finalGraph = viewStateSnapshot ? { ...newGraph, viewState: viewStateSnapshot } : newGraph;
@@ -1631,12 +1800,40 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     
     // Update the local state immediately
     setRawGraph(finalGraph, options.source === 'ai' ? 'ai' : undefined);
-    console.log('…called setRawGraph');
+
+    // CRITICAL FIX: Immediately persist viewstate to localStorage after any graph change
+    // This ensures that when page refreshes, the current state is preserved
+    try {
+      const currentViewState = getViewStateSnapshot();
+      
+      if (currentViewState && selectedArchitectureId) {
+        saveCanvasSnapshot(finalGraph, currentViewState, selectedArchitectureId);
+        
+        // Log what was saved
+        const savedGroups = extractGroupIdsFromGraph(finalGraph);
+      } else {
+        console.warn('⚠️ [handleGraphChange] Cannot persist - missing viewstate or architectureId:', {
+          hasViewState: !!currentViewState,
+          hasArchitectureId: !!selectedArchitectureId
+        });
+      }
+    } catch (error) {
+      console.error('❌ [handleGraphChange] Failed to immediately persist viewstate:', error);
+    }
 
     markDirty();
-    
-    console.groupEnd();
-  }, [setRawGraph, rawGraph, getViewStateSnapshot, markDirty]);
+  }, [setRawGraph, rawGraph, getViewStateSnapshot, markDirty, selectedArchitectureId]);
+
+  // Persist graph changes from Orchestrator (user-initiated structural changes)
+  // CRITICAL: Pass viewStateRef directly so persistence reads from Orchestrator's ViewState
+  // (not ReactFlow nodes, which might not be updated yet)
+  useCanvasPersistenceEffect({
+    rawGraph,
+    selectedArchitectureId,
+    getViewStateSnapshot,
+    viewStateRef,
+    skipPersistenceRef: graphSkipPersistenceRef
+  });
 
   const chatService = useMemo(() => new CanvasChatService({
     selectedArchitectureId,
@@ -1647,8 +1844,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     handleGraphChange: (graph: any) => {
       handleGraphChange(graph, { source: 'ai' });
     },
-    layoutError
-  }), [selectedArchitectureId, setArchitectureOperations, rawGraph, handleGraphChange, layoutError]);
+  }), [selectedArchitectureId, setArchitectureOperations, rawGraph, handleGraphChange]);
 
   // Helper function to extract complete graph state for the agent
   const extractCompleteGraphState = (graph: any) => {
@@ -1921,8 +2117,8 @@ Adapt these patterns to your specific requirements while maintaining the overall
           updateStreamingMessage(turnMessageId, `✅ Turn ${result.turnNumber} completed (${result.count} operations)`, true, 'batch_update');
           
           // 🎯 UPDATE UI AFTER EACH TURN - This makes progress visible to user
-        handleGraphChange(currentGraph);
-          console.log(`🔄 Updated UI with turn ${result.turnNumber} changes`);
+          // CRITICAL: Mark as 'ai' source so ELK runs for AI-generated architectures
+        handleGraphChange(currentGraph, { source: 'ai' });
           
           // Check for ELK layout errors from the hook
           if (layoutError) {
@@ -1951,7 +2147,6 @@ Adapt these patterns to your specific requirements while maintaining the overall
           }
           
           // Send tool outputs back to continue conversation
-          console.log('🔗 Sending tool outputs for continuation with response ID:', currentResponseId);
           const continuationResponse = await fetch('/api/simple-agent', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1992,8 +2187,8 @@ Adapt these patterns to your specific requirements while maintaining the overall
         }
       }
       
-      handleGraphChange(currentGraph);
-      console.log('✅ Architecture generation completed');
+      // CRITICAL: Mark as 'ai' source so ELK runs for AI-generated architectures
+      handleGraphChange(currentGraph, { source: 'ai' });
       
       // Fire completion events to update ProcessingStatusIcon and re-enable chatbox
       window.dispatchEvent(new CustomEvent('allProcessingComplete'));
@@ -2023,24 +2218,10 @@ Adapt these patterns to your specific requirements while maintaining the overall
   }, [handleChatSubmit]);
 
   const handleAddNodeToGroup = useCallback((groupId: string) => {
-    console.log('[GroupTool] handleAddNodeToGroup called', { groupId });
-    const nodeName = `new_node_${Date.now()}`;
-    const updated = batchUpdate([
-      {
-        name: "add_node",
-        nodename: nodeName,
-        parentId: groupId,
-        data: { label: "New Node" }
-      }
-    ], structuredClone(rawGraph));
-    handleGraphChange(updated);
-    // Try to focus edit on the newly created node in RF layer
-    const newNodeId = nodeName.toLowerCase();
-    setTimeout(() => {
-      console.log('[GroupTool] Focusing newly added node', { newNodeId });
-      setNodes(nds => nds.map(n => n.id === newNodeId ? { ...n, data: { ...n.data, isEditing: true } } : n));
-    }, 0);
-  }, [rawGraph, handleGraphChange, setNodes]);
+    console.log('[GroupTool] Plus button clicked - entering add node mode for group:', groupId);
+    // Set pendingGroupId to enable hover preview and track which group to add to
+    setPendingGroupId(groupId);
+  }, []);
   
   useEffect(() => {
     return () => {
@@ -2055,8 +2236,15 @@ Adapt these patterns to your specific requirements while maintaining the overall
 
   // Manual fit view function that can be called anytime
   const manualFitView = useCallback(() => {
-    if (reactFlowRef.current) {
+    if (reactFlowRef.current && typeof reactFlowRef.current.getViewport === 'function') {
       try {
+        const viewport = reactFlowRef.current.getViewport();
+        // If viewport is way off (negative Y or extreme values), reset it first
+        if (viewport.y < -500 || viewport.y > 5000 || viewport.x < -500 || viewport.x > 5000) {
+          console.warn('⚠️ [VIEWPORT] Viewport is way off, resetting before fitView', viewport);
+          reactFlowRef.current.setCenter(0, 0, { zoom: 1 });
+        }
+        
         reactFlowRef.current.fitView({
           padding: 0.2,
           duration: 800,
@@ -2074,13 +2262,46 @@ Adapt these patterns to your specific requirements while maintaining the overall
   useEffect(() => {
     // Only trigger if we have content and ReactFlow is ready
     if (nodes.length > 0 && reactFlowRef.current && layoutVersion > 0) {
+      // Check if ReactFlow instance is ready (getViewport might not exist yet)
+      if (typeof reactFlowRef.current.getViewport !== 'function') {
+        return; // ReactFlow not ready yet
+      }
+      
+      // Debug: Log viewport and node positions
+      const viewport = reactFlowRef.current.getViewport();
+      const nodePositions = nodes.slice(0, 5).map(n => ({ id: n.id, x: n.position.x, y: n.position.y }));
+      const minX = Math.min(...nodes.map(n => n.position.x));
+      const minY = Math.min(...nodes.map(n => n.position.y));
+      const maxX = Math.max(...nodes.map(n => n.position.x));
+      const maxY = Math.max(...nodes.map(n => n.position.y));
+      
+      
       // Check if we should skip fitView (for user mutations in FREE mode)
-      if (shouldSkipFitViewRef?.current === true) {
+      // BUT: Always run fitView if nodes are spread far apart (AI diagrams)
+      const nodeSpread = Math.max(maxX - minX, maxY - minY);
+      const hasLargeSpread = nodeSpread > 2000; // Nodes spread over 2000px
+      const shouldForceFitView = hasLargeSpread || nodes.length > 10; // Force for AI diagrams
+      
+      if (shouldSkipFitViewRef?.current === true && !shouldForceFitView) {
         shouldSkipFitViewRef.current = false; // Clear flag after checking
         return;
       }
       
+      // Clear skip flag if we're forcing fitView
+      if (shouldForceFitView) {
+        shouldSkipFitViewRef.current = false;
+      }
+      
       const timeoutId = setTimeout(() => {
+        const afterViewport = reactFlowRef.current?.getViewport();
+        
+        // For large spreads, center on the middle of all nodes first
+        if (hasLargeSpread && reactFlowRef.current) {
+          const centerX = (minX + maxX) / 2;
+          const centerY = (minY + maxY) / 2;
+          reactFlowRef.current.setCenter(centerX, centerY, { zoom: 0.5 }); // Start zoomed out
+        }
+        
         manualFitView();
       }, 200); // Unified delay to ensure layout is complete
       return () => clearTimeout(timeoutId);
@@ -2128,11 +2349,11 @@ Adapt these patterns to your specific requirements while maintaining the overall
     setShowElkDebug(newShowState);
     
     // Auto-copy when showing debug data
-    if (newShowState && layoutGraph) {
-      const structuralData = getStructuralData(layoutGraph);
+    if (newShowState && rawGraph) {
+      const structuralData = getStructuralData(rawGraph);
       copyStructuralDataToClipboard(structuralData);
     }
-  }, [showElkDebug, layoutGraph, getStructuralData, copyStructuralDataToClipboard]);
+  }, [showElkDebug, rawGraph, getStructuralData, copyStructuralDataToClipboard]);
 
   // Handler for graph sync
   const handleGraphSync = useCallback(() => {
@@ -2141,10 +2362,8 @@ Adapt these patterns to your specific requirements while maintaining the overall
     // Set loading state
     setIsSyncing(true);
     
-    // Clear React Flow state first
-    console.log('🔄 [syncGraphStateWithReactFlow] Clearing edges and nodes');
-    setNodes([]);
-    setEdges([]);
+    // ReactFlow state will be cleared automatically by layout side-effect when rawGraph changes
+    // Don't directly modify ReactFlow - maintain Domain → ViewState → ReactFlow sync
     
     // Force a re-layout by creating a new reference to the raw graph
     // This will trigger the useEffect in the hook that calls ELK layout
@@ -2170,45 +2389,22 @@ Adapt these patterns to your specific requirements while maintaining the overall
     }
   }, [layoutVersion, isSyncing]);
 
+
   // Handle delete key for selected nodes and edges
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Delete' || event.key === 'Backspace') {
         if (selectedNodes.length > 0 || selectedEdges.length > 0) {
           event.preventDefault();
-          // Create a deep copy of the graph (like DevPanel does)
-          let updatedGraph = JSON.parse(JSON.stringify(rawGraph));
           
-          // Delete selected nodes
-          selectedNodes.forEach(node => {
-            console.log(`Deleting node: ${node.id}`);
-            try {
-              updatedGraph = deleteNode(node.id, updatedGraph);
-              console.log(`Successfully deleted node: ${node.id}`);
-            } catch (error) {
-              console.error(`Error deleting node ${node.id}:`, error);
-            }
-          });
-          
-          // Delete selected edges
-          selectedEdges.forEach(edge => {
-            console.log(`Deleting edge: ${edge.id}`);
-            try {
-              updatedGraph = deleteEdge(edge.id, updatedGraph);
-              console.log(`Successfully deleted edge: ${edge.id}`);
-            } catch (error) {
-              console.error(`Error deleting edge ${edge.id}:`, error);
-            }
-          });
-          
-          // Apply the final updated graph using the proper handler
-          console.log('🗑️ Applying graph changes after deletion:', {
+          handleDeleteKey({
+            selectedNodes,
+            selectedEdges,
+            rawGraph,
             selectedArchitectureId,
-            deletedNodes: selectedNodes.map(n => n.id),
-            deletedEdges: selectedEdges.map(e => e.id),
-            newGraphNodeCount: updatedGraph?.children?.length || 0
+            logDeletionAndSave,
           });
-          handleGraphChange(updatedGraph);
+          
           // Clear selection after deletion
           setSelectedNodes([]);
           setSelectedEdges([]);
@@ -2223,7 +2419,7 @@ Adapt these patterns to your specific requirements while maintaining the overall
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [selectedNodes, selectedEdges, rawGraph, handleGraphChange]);
+  }, [selectedNodes, selectedEdges, rawGraph, selectedArchitectureId, logDeletionAndSave, setSelectedNodes, setSelectedEdges]);
   
   // Edge creation handled by useCanvasState
   const {
@@ -2247,6 +2443,281 @@ Adapt these patterns to your specific requirements while maintaining the overall
     nodes,
   });
 
+  
+  // ELK SVG view - always visible
+  const [elkSvgContent, setElkSvgContent] = useState<string>('');
+  const [isGeneratingSvg, setIsGeneratingSvg] = useState(false);
+  
+  // Generate SVG from domain graph - auto-update when graph changes
+  const generateElkSvg = useCallback(async () => {
+    if (!rawGraph) {
+      setElkSvgContent('');
+      return;
+    }
+    
+    setIsGeneratingSvg(true);
+    try {
+      // Create a deep copy of the graph
+      const graphCopy = JSON.parse(JSON.stringify(rawGraph));
+      
+      // Apply defaults and ensure IDs
+      const graphWithOptions = ensureIds(graphCopy);
+      
+      // Inject ViewState dimensions into graph before ELK layout
+      // This ensures debug viewer shows actual sizes, not defaults
+      const viewState = viewStateRef.current;
+      if (viewState) {
+        function injectViewStateDimensions(node: any): void {
+          const id = node.id;
+          const isGroup = !!(node.children && node.children.length > 0);
+          
+          // Get dimensions from ViewState
+          if (isGroup) {
+            const groupGeom = viewState.group?.[id];
+            if (groupGeom?.w && groupGeom?.h) {
+              node.width = groupGeom.w;
+              node.height = groupGeom.h;
+            }
+          } else {
+            const nodeGeom = viewState.node?.[id];
+            if (nodeGeom?.w && nodeGeom?.h) {
+              node.width = nodeGeom.w;
+              node.height = nodeGeom.h;
+            }
+          }
+          
+          // Recursively process children
+          if (node.children) {
+            node.children.forEach((child: any) => injectViewStateDimensions(child));
+          }
+        }
+        
+        injectViewStateDimensions(graphWithOptions);
+      }
+      
+      // Run ELK layout
+      const elk = new ELK();
+      const layoutedGraph = await elk.layout(graphWithOptions);
+      
+      // Generate SVG
+      const svgContent = generateSVG(layoutedGraph);
+      setElkSvgContent(svgContent);
+    } catch (error) {
+      console.error('Error generating ELK SVG:', error);
+      setElkSvgContent('<text x="20" y="20" fill="red">Error generating SVG</text>');
+    } finally {
+      setIsGeneratingSvg(false);
+    }
+  }, [rawGraph, viewStateRef]);
+  
+  // Auto-generate SVG when graph changes
+  useEffect(() => {
+    generateElkSvg();
+  }, [generateElkSvg]);
+
+  const handleCreateWrapperAndArrange = useCallback(async (selectionIds: string[]) => {
+    if (!rawGraph || !viewStateRef.current) {
+      console.warn('🟦 [WRAPPER] Missing rawGraph or viewState');
+      return;
+    }
+    
+    try {
+      console.log('🟦 [WRAPPER] Creating wrapper section for selection:', selectionIds);
+      
+      // Create wrapper section (domain mutation)
+      const { graph: updatedGraph, wrapperId } = createWrapperSection(selectionIds, rawGraph);
+      setRawGraph(updatedGraph, 'user');
+      
+      console.log('🟦 [WRAPPER] Created wrapper:', wrapperId);
+      
+      // Run scoped ELK layout with LOCK gesture routing (single explicit ELK run)
+      const elkScope = resolveElkScope(wrapperId, updatedGraph);
+      
+      if (!elkScope) {
+        console.warn('🟦 [WRAPPER] No ELK scope resolved, skipping layout');
+        return;
+      }
+      
+      console.log('🟦 [WRAPPER] Running ELK on scope:', { originalWrapper: wrapperId, resolvedScope: elkScope });
+      
+      const delta = await runScopeLayout(
+        elkScope, 
+        updatedGraph, 
+        viewStateRef.current || createEmptyViewState(), 
+        {}
+      );
+      
+      // Merge delta into ViewState
+      const beforeViewState = viewStateRef.current || createEmptyViewState();
+      console.log('🟦 [ARRANGE] ViewState before merge:', {
+        nodeCount: Object.keys(beforeViewState.node || {}).length,
+        groupCount: Object.keys(beforeViewState.group || {}).length,
+        beforeNodes: beforeViewState.node
+      });
+      
+      const updatedViewState = mergeViewState(beforeViewState, delta);
+      viewStateRef.current = updatedViewState;
+      
+      console.log('🟦 [ARRANGE] ViewState after merge:', {
+        nodeCount: Object.keys(updatedViewState.node || {}).length,
+        groupCount: Object.keys(updatedViewState.group || {}).length,
+        afterNodes: updatedViewState.node
+      });
+      
+      console.log('🟦 [WRAPPER] Layout complete, updating ReactFlow nodes');
+      
+      // Don't directly update ReactFlow - let Domain → ViewState → layout side-effect handle it
+      // The setRawGraph() call below will trigger proper synchronization
+      
+      console.log('🟦 [WRAPPER] Wrapper creation and arrangement complete');
+      
+    } catch (error) {
+      console.error('🟦 [WRAPPER] Failed to create wrapper section:', error);
+    }
+  }, [rawGraph, viewStateRef, setRawGraph, setNodes]);
+
+  // Helper to find a group/node in the graph by ID
+  const findNodeInGraph = useCallback((graph: any, targetId: string): any => {
+    if (graph.id === targetId) return graph;
+    if (graph.children) {
+      for (const child of graph.children) {
+        const found = findNodeInGraph(child, targetId);
+        if (found) return found;
+      }
+    }
+    return null;
+  }, []);
+
+  const handleArrangeGroup = useCallback(async (groupId: string) => {
+    // Arrange the insides of the group using ELK, relative to group position
+    if (!rawGraph || !viewStateRef.current) {
+      console.warn('🟦 [ARRANGE] Missing rawGraph or viewState');
+      return;
+    }
+    
+    try {
+      
+      // Check if group exists in graph
+      const groupNode = findNodeInGraph(rawGraph, groupId);
+      if (!groupNode) {
+        console.error('🟦 [ARRANGE] Group not found in graph:', groupId);
+        return;
+      }
+      
+      const currentMode = groupNode.mode || 'FREE';
+      
+      // Toggle mode: FREE -> LOCK, LOCK -> FREE
+      const newMode = currentMode === 'FREE' ? 'LOCK' : 'FREE';
+      
+      if (!groupNode.children || groupNode.children.length === 0) {
+        console.warn('🟦 [ARRANGE] Group has no children to arrange');
+        // Still update the graph to persist the mode change - use deep copy
+        const updatedGraph = JSON.parse(JSON.stringify(rawGraph));
+        const updatedGroupNode = findGroup(updatedGraph);
+        if (updatedGroupNode) {
+          updatedGroupNode.mode = newMode;
+        }
+        
+        setRawGraph(updatedGraph, 'user');
+        return;
+      }
+      
+      // Only run ELK if setting to LOCK (arranging)
+      if (newMode !== 'LOCK') {
+        // Persist mode change with deep copy
+        const updatedGraph = JSON.parse(JSON.stringify(rawGraph));
+        const updatedGroupNode = findGroup(updatedGraph);
+        if (updatedGroupNode) {
+          updatedGroupNode.mode = newMode;
+        }
+        
+        setRawGraph(updatedGraph, 'user');
+        return;
+      }
+      
+      // Run ELK layout on resolved scope (LOCK gesture routing)
+      const elkScope = resolveElkScope(groupId, rawGraph);
+      
+      if (!elkScope) {
+        console.warn('🟦 [ARRANGE] No ELK scope resolved, skipping layout');
+        return;
+      }
+      
+      console.log('[🎯COORD] handleArrangeGroup - starting ELK layout:', { 
+        originalGroup: groupId, 
+        resolvedScope: elkScope,
+        groupAbsolutePos: viewStateRef.current.group?.[groupId] 
+          ? `${viewStateRef.current.group[groupId].x},${viewStateRef.current.group[groupId].y}`
+          : 'none',
+      });
+      
+      // Use original rawGraph for ELK (before mode change)
+      const delta = await runScopeLayout(elkScope, rawGraph, viewStateRef.current, {});
+      
+      console.log('[🎯COORD] handleArrangeGroup - ELK delta received (absolute positions):', {
+        nodeCount: Object.keys(delta.node || {}).length,
+        groupCount: Object.keys(delta.group || {}).length,
+        nodePositions: Object.entries(delta.node || {}).slice(0, 3).map(([id, geom]: [string, any]) => ({
+          id,
+          absolute: `${geom.x},${geom.y}`,
+        })),
+      });
+      
+      if (Object.keys(delta.node || {}).length === 0 && Object.keys(delta.group || {}).length === 0) {
+        console.warn('🟦 [ARRANGE] Empty delta - no positions calculated');
+        return;
+      }
+      
+      // Merge delta into ViewState
+      const updatedViewState = mergeViewState(viewStateRef.current, delta);
+      viewStateRef.current = updatedViewState;
+      
+      console.log('🟦 [ARRANGE] ViewState updated, updating ReactFlow nodes');
+      console.log('🟦 [ARRANGE] Delta received:', {
+        nodeCount: Object.keys(delta.node || {}).length,
+        groupCount: Object.keys(delta.group || {}).length,
+        deltaNodes: delta.node,
+        deltaGroups: delta.group
+      });
+      console.log('🟦 [ARRANGE] Updated ViewState:', {
+        nodeCount: Object.keys(updatedViewState.node || {}).length,
+        groupCount: Object.keys(updatedViewState.group || {}).length,
+        viewStateNodes: updatedViewState.node,
+        viewStateGroups: updatedViewState.group
+      });
+      
+      // Don't directly update ReactFlow - maintain Domain → ViewState → ReactFlow sync
+      // The setRawGraph() call below will trigger proper update via layout side-effect
+      
+      // ReactFlow positions are updated via ViewState → layout side-effect
+      // No need to force refresh - the setRawGraph() call below will trigger proper update
+      
+      // CRITICAL: Create a deep copy of rawGraph BEFORE setting mode
+      // This ensures we have a clean copy that we can mutate without affecting the original
+      const updatedGraph = JSON.parse(JSON.stringify(rawGraph));
+      updatedGraph.viewState = updatedViewState;
+      
+      // Phase 3: Write to ViewState only (no more Domain writes)
+      
+      // Write to ViewState.layout (primary location)
+      if (!updatedViewState.layout) {
+        updatedViewState.layout = {};
+      }
+      updatedViewState.layout[groupId] = { mode: newMode };
+      
+      // Update the graph with the ViewState that now includes layout
+      updatedGraph.viewState = updatedViewState;
+      
+      setRawGraph(updatedGraph, 'user');
+      
+      
+      console.log('🟦 [ARRANGE] Group arranged successfully, mode:', newMode);
+    } catch (error) {
+      console.error('🟦 [ARRANGE] Failed to arrange group:', error);
+    }
+  }, [rawGraph, setRawGraph, setNodes]);
+
+
   // Create node types with handlers - memoized to prevent recreation
   // Use useCallback for each node type component to prevent ReactFlow warnings
   const memoizedNodeTypes = useMemo(
@@ -2267,6 +2738,9 @@ Adapt these patterns to your specific requirements while maintaining the overall
       handleConnectorDotClick,
       handleLabelChange,
       handleAddNodeToGroup,
+      handleArrangeGroup,
+      handleCreateWrapperAndArrange,
+      selectedNodeIds: selectedNodeIds || [],
     }),
     [
       selectedTool,
@@ -2275,12 +2749,22 @@ Adapt these patterns to your specific requirements while maintaining the overall
       handleConnectorDotClick,
       handleLabelChange,
       handleAddNodeToGroup,
+      handleArrangeGroup,
+      handleCreateWrapperAndArrange,
+      selectedNodeIds,
     ]
   );
 
   useEffect(() => {
     const viewStateNodes = rawGraph?.viewState?.node;
     const nodeCount = viewStateNodes ? Object.keys(viewStateNodes).length : 0;
+    const graphChildrenCount = rawGraph?.children?.length || 0;
+    
+    // Debug: Log node visibility issue
+    if (graphChildrenCount > 0 && nodes.length === 0) {
+      // Graph has nodes but ReactFlow nodes are empty
+    }
+    
     if (
       nodeCount > 0 &&
       nodes.length === 0 &&
@@ -2293,12 +2777,29 @@ Adapt these patterns to your specific requirements while maintaining the overall
         console.info('[HYDRATION] Detected incoming viewState, waiting for stabilization', {
           expectedNodes: nodeCount,
           architectureId: selectedArchitectureId,
+          graphChildren: graphChildrenCount,
+          reactFlowNodes: nodes.length
         });
       }
+      
+      // CRITICAL: Add fallback timeout to prevent hydration from blocking saves forever
+      setTimeout(() => {
+        if (isHydratingRef.current) {
+          isHydratingRef.current = false;
+        }
+      }, 1000);
     }
-  }, [rawGraph, nodes.length, selectedArchitectureId]);
+  }, [rawGraph, nodes.length, selectedArchitectureId, nodes]);
 
   useEffect(() => {
+    // Check for nodes at (0,0) - indicates ELK didn't run
+    if (nodes.length > 0) {
+      const zeroPosNodes = nodes.filter(n => n.position.x === 0 && n.position.y === 0);
+      if (zeroPosNodes.length === nodes.length && nodes.length > 3) {
+        // All nodes at (0,0) - ELK may not have run
+      }
+    }
+    
     if (!isHydratingRef.current) return;
     const expected = expectedHydratedNodeCountRef.current;
     if (!expected) {
@@ -2372,97 +2873,9 @@ const extractDimension = (value: number | string | undefined, fallback: number) 
   return fallback;
 };
 
-useEffect(() => {
-  if (restoredFromSnapshotRef.current) return;
-  if (typeof window === "undefined") return;
-  if (isEmbedToCanvasTransition()) return;
-  if (selectedArchitectureId && selectedArchitectureId !== "new-architecture") return;
+// Canvas restoration logic moved to useCanvasInitialization hook
 
-  const hasGraphContent =
-    (rawGraph?.children && rawGraph.children.length > 0) ||
-    (rawGraph?.edges && rawGraph.edges.length > 0);
-
-  if (hasGraphContent) return;
-
-  try {
-    const stored = localStorage.getItem(LOCAL_CANVAS_SNAPSHOT_KEY) || sessionStorage.getItem(LOCAL_CANVAS_SNAPSHOT_KEY);
-    if (!stored) return;
-
-    const parsed = JSON.parse(stored);
-    if (!parsed || !parsed.rawGraph || !parsed.rawGraph.children || parsed.rawGraph.children.length === 0) {
-      return;
-    }
-
-    const viewStateSnapshot = parsed.viewState || parsed.rawGraph.viewState;
-    if (viewStateSnapshot && viewStateRef) {
-      try {
-        viewStateRef.current = JSON.parse(JSON.stringify(viewStateSnapshot));
-      } catch (error) {
-        console.warn("⚠️ Failed to clone stored viewState snapshot:", error);
-        viewStateRef.current = viewStateSnapshot;
-      }
-    }
-
-    const graphWithViewState =
-      viewStateSnapshot && parsed.rawGraph
-        ? { ...parsed.rawGraph, viewState: viewStateSnapshot }
-        : parsed.rawGraph;
-
-    restoredFromSnapshotRef.current = true;
-    setRawGraph(graphWithViewState);
-    console.log("♻️ Restored canvas from local snapshot");
-  } catch (error) {
-    console.warn("⚠️ Failed to restore local canvas snapshot:", error);
-  }
-}, [rawGraph, setRawGraph, selectedArchitectureId, viewStateRef]);
-
-useEffect(() => {
-  if (!viewStateRef) {
-    return;
-  }
-
-  const nextNodeState: Record<string, { x: number; y: number; w: number; h: number }> = {};
-  const nextGroupState: Record<string, { x: number; y: number; w: number; h: number }> = {};
-
-  nodes.forEach((node) => {
-    const isGroup = (node as any).type === "group";
-    const fallbackWidth = isGroup ? 480 : 96;
-    const fallbackHeight = isGroup ? 320 : 96;
-    const width =
-      extractDimension(
-        (node.style as any)?.width,
-        extractDimension((node.data as any)?.width, fallbackWidth)
-      );
-    const height =
-      extractDimension(
-        (node.style as any)?.height,
-        extractDimension((node.data as any)?.height, fallbackHeight)
-      );
-    const geom = {
-      x: node.position?.x ?? 0,
-      y: node.position?.y ?? 0,
-      w: width,
-      h: height,
-    };
-    if (isGroup) {
-      nextGroupState[node.id] = geom;
-    } else {
-      nextNodeState[node.id] = geom;
-    }
-  });
-
-  const prevState = viewStateRef.current || { node: {}, group: {}, edge: {} };
-  const nodeChanged = geometriesDiffer(prevState.node || {}, nextNodeState);
-  const groupChanged = geometriesDiffer(prevState.group || {}, nextGroupState);
-
-  if (nodeChanged || groupChanged) {
-    viewStateRef.current = {
-      node: nextNodeState,
-      group: nextGroupState,
-      edge: prevState.edge || {},
-    };
-  }
-}, [nodes, viewStateRef]);
+// Canvas restoration logic moved to useCanvasInitialization hook
 
 useEffect(() => {
   if (isHydratingRef.current) return;
@@ -2480,12 +2893,18 @@ useEffect(() => {
 
   try {
     const viewStateSnapshot = getViewStateSnapshot();
+    
+    // CRITICAL: Use deep copy to preserve nested modes (shallow copy loses nested mutations)
+    const rawGraphCopy = JSON.parse(JSON.stringify(rawGraph));
+    
     const payload = {
-      rawGraph: viewStateSnapshot ? { ...rawGraph, viewState: viewStateSnapshot } : rawGraph,
+      rawGraph: viewStateSnapshot ? { ...rawGraphCopy, viewState: viewStateSnapshot } : rawGraphCopy,
       viewState: viewStateSnapshot,
       selectedArchitectureId,
-      savedAt: Date.now(),
+      timestamp: Date.now(), // Use 'timestamp' to match saveCanvasSnapshot format
     };
+    
+    
     const serialized = JSON.stringify(payload);
     localStorage.setItem(LOCAL_CANVAS_SNAPSHOT_KEY, serialized);
     sessionStorage.setItem(LOCAL_CANVAS_SNAPSHOT_KEY, serialized);
@@ -2494,6 +2913,7 @@ useEffect(() => {
     console.warn("⚠️ Failed to persist local canvas snapshot:", error);
   }
 }, [rawGraph, nodes, edges, getViewStateSnapshot, selectedArchitectureId, markDirty]);
+
   
   const {
     messages,
@@ -2770,17 +3190,10 @@ useEffect(() => {
   // Listen for final processing completion (sync with ProcessingStatusIcon)
   useEffect(() => {
     const handleFinalComplete = () => {
-      console.log('🏁 Final processing complete event received');
-      console.log('🔍 Current agent lock state:', agentLockedArchitectureId);
-      console.log('🔍 Current operation states:', architectureOperations);
-      
       // Only clear operations if the agent is truly done (not locked to any architecture)
       // The agent lock gets cleared when operations are truly complete
       if (!agentLockedArchitectureId) {
-        console.log('✅ Agent not locked - clearing all loading indicators');
         setArchitectureOperations({});
-      } else {
-        console.log('⏸️ Agent still locked to:', agentLockedArchitectureId, '- keeping loading indicators');
       }
       
       // Always unlock the agent when this event fires (this indicates true completion)
@@ -2814,32 +3227,173 @@ useEffect(() => {
     };
   }, [rawGraph]);
 
+  // Update selection box corner positions dynamically
+  useEffect(() => {
+    if (selectedTool !== 'arrow') return;
+    
+    const updateSelectionBoxCorners = () => {
+      // Try multiple selector strategies
+      const container = document.querySelector('.react-flow__nodesselection') || 
+                       document.querySelector('.arrow-mode .react-flow__nodesselection');
+      const rect = document.querySelector('.react-flow__nodesselection-rect') ||
+                   document.querySelector('.arrow-mode .react-flow__nodesselection-rect');
+      
+      if (!container || !rect) {
+        return; // Silently return if not found
+      }
+      
+      const containerRect = (container as HTMLElement).getBoundingClientRect();
+      const rectElement = rect as HTMLElement;
+      const rectRect = rectElement.getBoundingClientRect();
+      const rectStyle = window.getComputedStyle(rectElement);
+      
+      // Parse the rect's top and left values
+      const rectTop = parseFloat(rectStyle.top) || 0;
+      const rectLeft = parseFloat(rectStyle.left) || 0;
+      const rectWidth = rectRect.width;
+      const rectHeight = rectRect.height;
+      
+      // Get container transform to account for zoom
+      const containerStyle = window.getComputedStyle(container as HTMLElement);
+      const transform = containerStyle.transform;
+      let zoom = 1;
+      if (transform && transform !== 'none') {
+        // Extract scale from matrix: matrix(scaleX, 0, 0, scaleY, translateX, translateY)
+        const matrix = transform.match(/matrix\(([^)]+)\)/);
+        if (matrix) {
+          const values = matrix[1].split(',').map(v => parseFloat(v.trim()));
+          if (values.length >= 4) {
+            zoom = values[0]; // scaleX (assuming uniform scaling)
+          }
+        }
+      }
+      
+      // Set CSS custom property on the rect element for corner scale
+      // The corner is now positioned directly on the rect, so it moves/zooms with it naturally
+      // We just need to scale it inversely to keep visual size constant
+      const rectEl = rectElement;
+      const inverseScale = zoom > 0 ? 1 / zoom : 1;
+      rectEl.style.setProperty('--corner-scale', `${inverseScale}`);
+      
+      // Get the corner square element to check its actual position
+      const cornerSquare = rectElement.querySelector('::before') || 
+        (rectElement as any).querySelector('[data-corner-square]');
+      
+      // Calculate expected positions
+      const selectionCornerX = rectRect.right; // Right edge of selection box
+      const selectionCornerY = rectRect.top;   // Top edge of selection box
+      
+      // The corner square should be positioned at top: -8px, right: -8px relative to rect
+      // This means its center should be at the selection corner
+      const cornerSquareExpectedCenterX = selectionCornerX;
+      const cornerSquareExpectedCenterY = selectionCornerY;
+      
+      // Get actual corner square position
+      const cornerSquareStyle = window.getComputedStyle(rectElement, '::before');
+      const cornerSquareTop = cornerSquareStyle.top;
+      const cornerSquareRight = cornerSquareStyle.right;
+      
+      // Parse the CSS values
+      const cornerTopValue = parseFloat(cornerSquareTop) || 0;
+      const cornerRightValue = parseFloat(cornerSquareRight) || 0;
+      
+      // Rect's top-right corner in container space (using already declared rectTop and rectLeft)
+      const rectTopRightX = rectLeft + rectWidth;
+      const rectTopRightY = rectTop;
+      
+      // Corner square is positioned at top: cornerTopValue, right: cornerRightValue relative to rect
+      // The square is 8px × 8px
+      // With transform-origin at center, the center is at 4px from each edge
+      // So the center position relative to rect's top-right corner is:
+      // X: rect's right edge - cornerRightValue - 4px (half width)
+      // Y: rect's top edge + cornerTopValue + 4px (half height)
+      const cornerSquareCenterX = rectTopRightX - cornerRightValue - 4;
+      const cornerSquareCenterY = rectTopRightY + cornerTopValue + 4;
+      
+      // Convert to screen coordinates (accounting for container transform)
+      // Use already declared containerRect
+      const cornerSquareCenterScreenX = containerRect.left + cornerSquareCenterX;
+      const cornerSquareCenterScreenY = containerRect.top + cornerSquareCenterY;
+      
+      // Calculate the offset
+      const offsetX = selectionCornerX - cornerSquareCenterScreenX;
+      const offsetY = selectionCornerY - cornerSquareCenterScreenY;
+      
+      // Removed verbose selection corner debug logs
+      
+    };
+    
+    // Update corners when selection appears or changes (debounced)
+    let timeoutId: NodeJS.Timeout;
+    const observer = new MutationObserver(() => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(updateSelectionBoxCorners, 50);
+    });
+    
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style']
+    });
+    
+    // Use requestAnimationFrame to continuously update when selection box exists
+    let rafId: number;
+    const updateLoop = () => {
+      const container = document.querySelector('.arrow-mode .react-flow__nodesselection');
+      if (container) {
+        updateSelectionBoxCorners();
+        rafId = requestAnimationFrame(updateLoop);
+      } else {
+        // Stop loop when no selection box
+        rafId = requestAnimationFrame(updateLoop);
+      }
+    };
+    rafId = requestAnimationFrame(updateLoop);
+    
+    // Initial update
+    setTimeout(updateSelectionBoxCorners, 100);
+    
+    return () => {
+      observer.disconnect();
+      clearTimeout(timeoutId);
+      cancelAnimationFrame(rafId);
+    };
+  }, [selectedTool]);
+
   // Handle selection changes to ensure edges remain visible
   const handleSelectionChange = useCallback((params: any) => {
-    console.log('🎯 [DEBUG] Selection change:', {
-      selectedTool,
-      params,
-      nodesCount: params?.nodes?.length || 0,
-      edgesCount: params?.edges?.length || 0
-    });
-
     if (!params) {
       return;
     }
  
     // Allow selection when using arrow tool, but prevent when actively using other tools
     if (selectedTool === 'connector' || selectedTool === 'box') {
-      console.log('🚫 [DEBUG] Blocking selection due to active tool:', selectedTool);
       return;
     }
  
-    // Don't force-deselect nodes - let ReactFlow handle natural selection
+    // Domain and ReactFlow MUST be perfectly synchronized - no validation needed
     const newSelectedNodes = params.nodes || [];
     const newSelectedEdges = params.edges || [];
- 
-    console.log('✅ [DEBUG] Allowing selection:', {
-      newSelectedNodes: newSelectedNodes.length,
-      newSelectedEdges: newSelectedEdges.length
+
+    // Update selected nodes state - use functional updates to prevent infinite loops
+    setSelectedNodes((prev) => {
+      const prevIds = prev.map(n => n.id).sort().join(',');
+      const newIds = newSelectedNodes.map((n: Node) => n.id).sort().join(',');
+      if (prevIds === newIds) return prev; // Prevent unnecessary updates
+      return newSelectedNodes;
+    });
+    setSelectedEdges((prev) => {
+      const prevIds = prev.map(e => e.id).sort().join(',');
+      const newIds = newSelectedEdges.map((e: Edge) => e.id).sort().join(',');
+      if (prevIds === newIds) return prev; // Prevent unnecessary updates
+      return newSelectedEdges;
+    });
+    setSelectedNodeIds((prev) => {
+      const prevStr = prev.sort().join(',');
+      const newStr = newSelectedNodes.map((n: Node) => n.id).sort().join(',');
+      if (prevStr === newStr) return prev; // Prevent unnecessary updates
+      return newSelectedNodes.map((n: Node) => n.id);
     });
 
     if (newSelectedNodes.length === 0 && newSelectedEdges.length === 0) {
@@ -2847,25 +3401,12 @@ useEffect(() => {
       return;
     }
  
-    setEdges((edges) => updateEdgeStylingOnSelection(edges, newSelectedNodes));
-  }, [selectedTool, setEdges]);
+    // Always highlight edges when nodes are selected (not just in arrow mode)
+    setEdges((edges) => updateEdgeStylingOnSelection(edges, newSelectedNodes.map((n: Node) => n.id)));
+  }, [selectedTool, setEdges, setSelectedNodes, setSelectedEdges, setSelectedNodeIds]);
 
-  // Critical fix to ensure edges remain visible at all times
-  useEffect(() => {
-    // Function to ensure all edges are visible always
-    const ensureEdgesVisible = () => {
-      setEdges((currentEdges) => ensureEdgeVisibility(currentEdges, { customZIndex: 3000 }));
-    };
-    
-    // Run the fix immediately
-    ensureEdgesVisible();
-    
-    // Set up animation frame for next paint
-    const id = requestAnimationFrame(ensureEdgesVisible);
-    
-    // Clean up
-    return () => cancelAnimationFrame(id);
-  }, [setEdges, layoutVersion]); // Run on mount and when layout changes
+  // REMOVED: Problematic edge visibility effect that caused flicker during node movement
+  // The centralized z-index configuration now handles edge layering properly
 
   // Add mousedown handler to pane for immediate deselection (not waiting for mouse up)
   useEffect(() => {
@@ -2886,7 +3427,10 @@ useEffect(() => {
       
       // Deselect immediately on mouse down when in arrow mode
       if (selectedTool === 'arrow') {
-        setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
+        // Use ReactFlow's built-in selection clearing instead of direct node manipulation
+        if (reactFlowRef.current) {
+          reactFlowRef.current.setNodes((nds) => nds.map(node => ({ ...node, selected: false })));
+        }
         setSelectedNodes([]);
         setSelectedEdges([]);
       }
@@ -2958,12 +3502,12 @@ useEffect(() => {
   const handleToggleVisMode = useCallback((reactFlowMode: boolean) => {
     setUseReactFlow(reactFlowMode);
     
-    // If switching to SVG mode, generate SVG immediately if layoutGraph is available
-    if (!reactFlowMode && layoutGraph) {
-      const svgContent = generateSVG(layoutGraph);
+    // If switching to SVG mode, generate SVG immediately if rawGraph is available
+    if (!reactFlowMode && rawGraph) {
+      const svgContent = generateSVG(rawGraph);
       setSvgContent(svgContent);
     }
-  }, [layoutGraph]);
+  }, [rawGraph]);
   
   // Handler for receiving SVG content from DevPanel
   const handleSvgGenerated = useCallback((svg: string) => {
@@ -2974,15 +3518,15 @@ useEffect(() => {
   // SVG zoom handler using utility function
   const handleSvgZoomCallback = useCallback((delta: number) => {
     setSvgZoom(prev => handleSvgZoom(delta, prev));
-  }, []);
+  }, [setSvgZoom]);
 
   // Effect to generate SVG content when needed
   useEffect(() => {
-    if (!useReactFlow && !svgContent && layoutGraph) {
-      const newSvgContent = generateSVG(layoutGraph);
+    if (!useReactFlow && !svgContent && rawGraph) {
+      const newSvgContent = generateSVG(rawGraph);
       setSvgContent(newSvgContent);
     }
-  }, [useReactFlow, svgContent, layoutGraph]);
+  }, [useReactFlow, svgContent, rawGraph]);
 
   // Event handler for mousewheel to zoom SVG
   useEffect(() => {
@@ -3000,7 +3544,7 @@ useEffect(() => {
     return () => {
       window.removeEventListener('wheel', handleWheel);
     };
-  }, [useReactFlow, handleSvgZoom]);
+  }, [useReactFlow, handleSvgZoomCallback]);
 
   useEffect(() => {
     const pending = pendingSelectionRef.current;
@@ -3082,20 +3626,28 @@ useEffect(() => {
           <CanvasToolbar selectedTool={selectedTool} onSelect={handleToolSelect} />
         </div>
         {/* Hover preview for Box placement (snap-to-grid) */}
-        <NodeHoverPreview reactFlowRef={reactFlowRef} visible={selectedTool === 'box'} />
+        <NodeHoverPreview reactFlowRef={reactFlowRef} visible={selectedTool === 'box' || pendingGroupId !== null} />
         <GroupHoverPreview reactFlowRef={reactFlowRef} visible={selectedTool === 'group'} />
         {/* ReactFlow container - only show when in ReactFlow mode */}
         {useReactFlow && (
-          <div className="absolute inset-0 h-full w-full z-0"
+          <div className="absolute inset-0 h-full w-full z-0 bg-gray-50"
             onClick={(event) => {
+              const parentId = pendingGroupId;
               placeNodeOnCanvas(
                 event.nativeEvent as MouseEvent,
                 selectedTool,
                 reactFlowRef,
-                handleAddNode,
                 viewStateRef,
-                (next) => setSelectedTool(next)
+                (next) => {
+                  setSelectedTool(next);
+                  setPendingGroupId(null); // Reset after adding
+                },
+                parentId
               );
+              // Reset pendingGroupId after handling
+              if (parentId) {
+                setPendingGroupId(null);
+              }
             }}
           >
             <NodeInteractionContext.Provider value={nodeInteractionValue}>
@@ -3103,7 +3655,304 @@ useEffect(() => {
               ref={reactFlowRef}
               nodes={nodes} 
               edges={edges}
-              onNodesChange={onNodesChange}
+              onNodesChange={(changes) => {
+                
+                onNodesChange(changes);
+                
+                // Track newly added nodes/groups to skip containment detection for them
+                const now = Date.now();
+                changes.forEach((ch: any) => {
+                  if (ch.type === 'add' && ch.item?.id) {
+                    recentlyCreatedNodesRef.current.set(ch.item.id, now);
+                    // Clean up old entries (older than 2 seconds)
+                    recentlyCreatedNodesRef.current.forEach((timestamp, id) => {
+                      if (now - timestamp > 2000) {
+                        recentlyCreatedNodesRef.current.delete(id);
+                      }
+                    });
+                  }
+                });
+                
+                // Check for containment after nodes are updated
+                
+                if (selectedTool !== 'box' && reactFlowRef.current) {
+                  // Use requestAnimationFrame to check after ReactFlow has updated
+                  requestAnimationFrame(() => {
+                    const currentNodes = reactFlowRef.current?.getNodes() || [];
+                    const movedNodes = changes
+                      .filter(ch => ch.type === 'position')
+                      .map(ch => (ch as any).id)
+                      .filter(Boolean)
+                      // Skip recently created nodes/groups - they're just being positioned initially
+                      .filter((nodeId: string) => {
+                        const createdTime = recentlyCreatedNodesRef.current.get(nodeId);
+                        if (createdTime) {
+                          const age = Date.now() - createdTime;
+                          // Enable for production but lower threshold for testing
+                          if (age < 100) { // Reduced from 1000ms to 100ms for debugging
+                            return false;
+                          }
+                        }
+                        return true;
+                      });
+                    
+                    
+                    if (movedNodes.length > 0) {
+                      let updatedGraph = structuredClone(rawGraph);
+                      let graphUpdated = false;
+                      
+                      // Helper to find parent in domain graph
+                      const findParentInGraph = (graph: RawGraph, nodeId: string): string | null => {
+                        const findParent = (n: any, targetId: string, parentId: string | null = null): string | null => {
+                          if (n.id === targetId) return parentId;
+                          if (n.children) {
+                            for (const child of n.children) {
+                              const result = findParent(child, targetId, n.id);
+                              if (result !== null) return result;
+                            }
+                          }
+                          return null;
+                        };
+                        return findParent(graph, nodeId);
+                      };
+                      
+                      // Helper to find node in domain graph
+                      const findNodeInGraph = (graph: RawGraph, nodeId: string): any => {
+                        const find = (n: any, targetId: string): any => {
+                          if (n.id === targetId) return n;
+                          if (n.children) {
+                            for (const child of n.children) {
+                              const result = find(child, targetId);
+                              if (result) return result;
+                            }
+                          }
+                          return null;
+                        };
+                        return find(graph, nodeId);
+                      };
+                      
+                      // Check each moved node for containment
+                      movedNodes.forEach((nodeId) => {
+                        const node = currentNodes.find(n => n.id === nodeId);
+                        if (!node) return;
+                        
+                        // Case 1: Regular node moved into or out of a group
+                        if (node.type !== 'group') {
+                          // Use ReactFlow position during drag (ViewState may be stale)
+                          const containingGroup = findContainingGroup(node, currentNodes, viewStateRef.current, true);
+                          const currentParentInGraph = findParentInGraph(updatedGraph, nodeId);
+                          
+                          // Determine new parent: if node is fully contained in a group, use that group; otherwise use root
+                          const newParentId = containingGroup ? containingGroup.id : 'root';
+                          
+                          // Check if parent changed (including moving out of a group)
+                          // currentParentInGraph could be a group ID or 'root' or null
+                          // newParentId is either a group ID or 'root'
+                          if (currentParentInGraph !== newParentId) {
+                            // CRITICAL: Preserve absolute position when moving nodes out of groups
+                            const viewStateBefore = viewStateRef.current;
+                            const absolutePosBefore = viewStateBefore?.node?.[nodeId] || viewStateBefore?.group?.[nodeId];
+                            
+                            
+                            // Update domain graph: move node to new parent
+                            try {
+                              
+                              updatedGraph = moveNode(nodeId, newParentId, updatedGraph);
+                              graphUpdated = true;
+                              
+                              // If node was moved INTO a group (not root), set that group to FREE mode
+                              // User is manually positioning, so disable auto-arrange (LOCK mode)
+                              if (newParentId !== 'root') {
+                                const targetGroup = findNodeInGraph(updatedGraph, newParentId);
+                                if (targetGroup) {
+                                  targetGroup.mode = 'FREE';
+                                }
+                              }
+                              
+                              const newParentAfter = findParentInGraph(updatedGraph, nodeId);
+                              
+                              // CRITICAL: Immediately prevent coordinate jumps by updating ReactFlow first
+                              if (absolutePosBefore) {
+                                
+                                // IMMEDIATELY update ReactFlow to prevent coordinate conversion issues
+                                setNodes((prevNodes) => prevNodes.map((n) => {
+                                  if (n.id === nodeId) {
+                                    const updatedNode = { ...n };
+                                    
+                                    if (newParentId === 'root') {
+                                      // Moving OUT of group: Remove parentId and use absolute position
+                                      delete (updatedNode as any).parentId;
+                                      updatedNode.position = {
+                                        x: absolutePosBefore.x,
+                                        y: absolutePosBefore.y
+                                      };
+                                      
+                                      console.log('🔧 [MOVE-OUT] Node moved to root:', {
+                                        nodeId,
+                                        removedParentId: (n as any).parentId || 'none',
+                                        absolutePosition: `${absolutePosBefore.x},${absolutePosBefore.y}`
+                                      });
+                                    } else {
+                                      // Moving INTO group: Set parentId and calculate relative position
+                                      const groupNode = currentNodes.find(gn => gn.id === newParentId);
+                                      if (groupNode && groupNode.position) {
+                                        (updatedNode as any).parentId = newParentId;
+                                        updatedNode.position = {
+                                          x: absolutePosBefore.x - groupNode.position.x,
+                                          y: absolutePosBefore.y - groupNode.position.y
+                                        };
+                                      }
+                                    }
+                                    
+                                    return updatedNode;
+                                  }
+                                  return n;
+                                }));
+                                
+                                // Update ViewState to match
+                                if (viewStateRef.current) {
+                                  const currentViewState = { ...viewStateRef.current };
+                                  if (!currentViewState.node) currentViewState.node = {};
+                                  
+                                  currentViewState.node[nodeId] = {
+                                    x: absolutePosBefore.x,
+                                    y: absolutePosBefore.y,
+                                    w: absolutePosBefore.w,
+                                    h: absolutePosBefore.h
+                                  };
+                                  
+                                  viewStateRef.current = currentViewState;
+                                }
+                              }
+                              
+                              if (containingGroup) {
+                                // Select the group (not the node) - this will trigger highlighting of contained nodes
+                                setNodes((nds) =>
+                                  nds.map((n) =>
+                                    n.id === containingGroup.id ? { ...n, selected: true } : { ...n, selected: false }
+                                  )
+                                );
+                                setSelectedNodes([containingGroup]);
+                                setSelectedNodeIds([containingGroup.id]);
+                              }
+                            } catch (error) {
+                              console.warn(`Failed to move node ${nodeId} from ${currentParentInGraph} to ${newParentId}:`, error);
+                            }
+                          }
+                        }
+                        // Case 2: Group moved around nodes or other groups
+                        else {
+                          const group = node;
+                          
+                          // First check if the group itself was moved into another group
+                          const containingGroup = findContainingGroup(group, currentNodes, viewStateRef.current);
+                          const currentParentInGraph = findParentInGraph(updatedGraph, nodeId);
+                          const newParentId = containingGroup ? containingGroup.id : 'root';
+                          
+                          if (currentParentInGraph !== newParentId) {
+                            
+                            // Update domain graph: move group to new parent
+                            try {
+                              updatedGraph = moveNode(nodeId, newParentId, updatedGraph);
+                              graphUpdated = true;
+                              
+                              console.log('✅ [GROUP-MOVE] Group moved successfully in domain graph:', {
+                                groupId: nodeId,
+                                newParent: newParentId
+                              });
+                              
+                              if (containingGroup) {
+                                // Select the containing group (not the moved group)
+                                setNodes((nds) =>
+                                  nds.map((n) =>
+                                    n.id === containingGroup.id ? { ...n, selected: true } : { ...n, selected: false }
+                                  )
+                                );
+                                setSelectedNodes([containingGroup]);
+                                setSelectedNodeIds([containingGroup.id]);
+                              }
+                            } catch (error) {
+                              console.error(`❌ [GROUP-MOVE] Failed to move group ${nodeId} from ${currentParentInGraph} to ${newParentId}:`, error);
+                            }
+                          } else {
+                            console.log('⏭️ [GROUP-MOVE] Group parent unchanged, skipping domain update:', {
+                              groupId: nodeId,
+                              parent: currentParentInGraph
+                            });
+                          }
+                          
+                          // Find nodes/groups fully contained in this group
+                          const containedNodes = findFullyContainedNodes(group, currentNodes);
+                          
+                          if (containedNodes.length > 0) {
+                            // Update domain graph: move each contained node/group into the group
+                            containedNodes.forEach((containedNode) => {
+                              try {
+                                updatedGraph = moveNode(containedNode.id, group.id, updatedGraph);
+                                graphUpdated = true;
+                              } catch (error) {
+                                console.warn(`Failed to move ${containedNode.id} into group ${group.id}:`, error);
+                              }
+                            });
+                            
+                            // Set group to FREE mode when nodes are moved into it (user is manually positioning)
+                            const targetGroup = findNodeInGraph(updatedGraph, group.id);
+                            if (targetGroup) {
+                              targetGroup.mode = 'FREE';
+                            }
+                            
+                            // Select the contained nodes
+                            setNodes((nds) =>
+                              nds.map((n) =>
+                                containedNodes.some(cn => cn.id === n.id) ? { ...n, selected: true } : n
+                              )
+                            );
+                            setSelectedNodes(containedNodes);
+                            setSelectedNodeIds(containedNodes.map(n => n.id));
+                          }
+                        }
+                      });
+                      
+                      // Update domain graph if any changes were made
+                      if (graphUpdated) {
+                        // CRITICAL: Preserve viewState when updating domain graph
+                        // This ensures nodes maintain their absolute positions when moved into/out of groups
+                        // The viewstate position should NOT change - only the domain structure changes
+                        const currentViewState = viewStateRef.current;
+                        if (currentViewState) {
+                          (updatedGraph as any).viewState = currentViewState;
+                        }
+                        // Use a small delay to ensure ReactFlow has finished processing the node changes
+                        // before updating the domain graph, which will trigger a re-render
+                        setTimeout(() => {
+                          // Mark as 'user' source to preserve ViewState and skip ELK layout
+                          setRawGraph(updatedGraph, 'user');
+                          
+                          // Log position after update to detect jumps
+                          setTimeout(() => {
+                            movedNodes.forEach((nodeId) => {
+                              const viewStateAfter = viewStateRef.current;
+                              const viewStatePos = viewStateAfter?.node?.[nodeId] || viewStateAfter?.group?.[nodeId];
+                              const reactFlowNode = reactFlowRef.current?.getNodes()?.find(n => n.id === nodeId);
+                              if (viewStatePos && reactFlowNode) {
+                                const viewStateX = viewStatePos.x;
+                                const reactFlowX = reactFlowNode.position.x;
+                                const viewStateY = viewStatePos.y;
+                                const reactFlowY = reactFlowNode.position.y;
+                                const xDiff = Math.abs(viewStateX - reactFlowX);
+                                const yDiff = Math.abs(viewStateY - reactFlowY);
+                                
+                                if (xDiff > 1 || yDiff > 1) {
+                                }
+                              }
+                            });
+                          }, 100);
+                        }, 0);
+                      }
+                    }
+                  });
+                }
+              }}
               onEdgesChange={onEdgesChange}
               onConnect={(connection: any) => {
                 console.log(`[InteractiveCanvas] ReactFlow onConnect called:`, connection);
@@ -3145,21 +3994,96 @@ useEffect(() => {
                   }
                 }
 
+                // Handle pendingGroupId (Plus button mode) - add node to specific group
+                if (pendingGroupId) {
+                  const rf = reactFlowRef.current;
+                  if (!rf) return;
+                  
+                  // Convert screen coordinates to world coordinates
+                  const screenPoint = { x: (event as any).clientX, y: (event as any).clientY };
+                  const projected = (rf as any).screenToFlowPosition
+                    ? (rf as any).screenToFlowPosition(screenPoint)
+                    : rf.project(screenPoint);
+                  
+                  console.log('[🎯COORD] InteractiveCanvas - screen to world (group):', {
+                    screen: `${screenPoint.x},${screenPoint.y}`,
+                    world: `${projected.x},${projected.y}`,
+                    pendingGroupId,
+                  });
+                  
+                  // Use CoordinateService to snap to grid
+                  const snappedCenter = CoordinateService.snapPoint(projected);
+                  const NODE_SIZE = 96;
+                  const half = NODE_SIZE / 2;
+                  const topLeft = { x: snappedCenter.x - half, y: snappedCenter.y - half };
+                  const id = `user-node-${Date.now()}`;
+
+                  console.log('[🎯COORD] InteractiveCanvas - final position (group):', {
+                    nodeId: id,
+                    snappedCenter: `${snappedCenter.x},${snappedCenter.y}`,
+                    topLeft: `${topLeft.x},${topLeft.y}`,
+                    parentId: pendingGroupId,
+                  });
+
+                  // Write position to ViewState first (before domain mutation)
+                  try {
+                    if (viewStateRef && viewStateRef.current) {
+                      const vs = viewStateRef.current;
+                      vs.node = vs.node || {};
+                      vs.node[id] = { x: topLeft.x, y: topLeft.y, w: NODE_SIZE, h: NODE_SIZE };
+                      
+                      console.log('[🎯COORD] InteractiveCanvas - wrote to ViewState (group):', {
+                        nodeId: id,
+                        viewStatePosition: `${topLeft.x},${topLeft.y}`,
+                        size: `${NODE_SIZE}x${NODE_SIZE}`,
+                      });
+                    }
+                  } catch (error) {
+                    console.error(`[InteractiveCanvas] Error writing to viewState:`, error);
+                  }
+
+                  // Use Orchestrator for FREE structural edit (add node to group)
+                  const intent = {
+                    source: 'user' as const,
+                    kind: 'free-structural' as const,
+                    scopeId: pendingGroupId,
+                    payload: {
+                      action: 'add-node' as const,
+                      nodeId: id,
+                      parentId: pendingGroupId,
+                      position: { x: topLeft.x, y: topLeft.y }, // ✅ FIX: Include position in payload
+                      size: { w: NODE_SIZE, h: NODE_SIZE },     // ✅ FIX: Include size in payload  
+                      data: {
+                        label: '', // Empty label for "Add text" placeholder
+                      }
+                    }
+                  };
+                  
+                  apply(intent).catch(error => {
+                    console.error('[InteractiveCanvas] Orchestrator apply failed:', error);
+                  });
+
+                  // Reset pendingGroupId after adding
+                  setPendingGroupId(null);
+                  return;
+                }
+
                 if ((event as any).target?.classList?.contains("react-flow__pane")) {
                   // ... existing code ...
                 }
               }}
               onInit={(instance) => {
                 reactFlowRef.current = instance;
+                (window as any).__reactFlowInstance = instance; // Expose for console commands
               }}
               nodeTypes={memoizedNodeTypes}
               edgeTypes={memoizedEdgeTypes}
-              className={`w-full h-full ${CANVAS_STYLES.canvas.background.light} dark:${CANVAS_STYLES.canvas.background.dark}`}
+              className={`w-full h-full ${CANVAS_STYLES.canvas.background.light} dark:${CANVAS_STYLES.canvas.background.dark} ${selectedTool === 'arrow' ? 'arrow-mode' : 'non-arrow-mode'}`}
               defaultEdgeOptions={{
                 type: 'step', // Right-angled edges (not bezier/smoothstep)
                 style: CANVAS_STYLES.edges.default,
                 animated: false,
-                zIndex: CANVAS_STYLES.zIndex.edgeLabels,
+                zIndex: CANVAS_STYLES.zIndex.edges, // Fix: Use correct edge z-index (2000), not edgeLabels (5000)
                 markerEnd: {
                   type: 'arrowclosed',
                   width: 20,
@@ -3308,6 +4232,33 @@ useEffect(() => {
         onCancel={deleteOverlay.onCancel}
       />
 
+
+      {/* ELK SVG View - Always Visible */}
+      <div className="fixed bottom-4 right-4 w-96 h-96 bg-white border border-gray-300 rounded-lg shadow-xl z-[10001] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between p-2 border-b border-gray-200 bg-gray-50">
+          <h3 className="text-sm font-semibold text-gray-900">ELK Domain Graph</h3>
+          <button
+            onClick={generateElkSvg}
+            disabled={isGeneratingSvg}
+            className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
+          >
+            {isGeneratingSvg ? 'Generating...' : 'Refresh'}
+          </button>
+        </div>
+        <div className="flex-1 overflow-auto p-2 bg-white">
+          {isGeneratingSvg ? (
+            <div className="flex items-center justify-center h-full text-gray-500">Generating SVG...</div>
+          ) : elkSvgContent ? (
+            <div 
+              className="w-full h-full"
+              dangerouslySetInnerHTML={{ __html: elkSvgContent }}
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-500">No graph data</div>
+          )}
+        </div>
+      </div>
+
       {/* Notification Overlay - Matching Share Dialog Design */}
       <NotificationModal
         show={notification.show}
@@ -3322,11 +4273,11 @@ useEffect(() => {
               </div>
 
       {/* Save/Edit and Settings buttons - align to right, match toolbar height/spacing */}
-      <div className={`absolute top-4 z-[100] flex items-center transition-all duration-300 ${
+      <div className={`absolute top-4 z-[10002] flex items-center transition-all duration-300 ${
         viewModeConfig.showChatPanel
           ? (rightPanelCollapsed ? 'right-[5.5rem]' : 'right-[25rem]')
           : 'right-4'
-      }`} style={{ height: 40, gap: 8 }}>
+      }`} style={{ height: 40, gap: 8, pointerEvents: 'auto' }}>
         {/* Share Button - Always visible for all users */}
                 <button
           onClick={handleShareCurrent}
@@ -3336,6 +4287,7 @@ useEffect(() => {
               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
               : 'bg-white text-gray-700 hover:bg-gray-50'
           }`}
+          style={{ position: 'relative', zIndex: 10003 }}
           title={
             !rawGraph || !rawGraph.children || rawGraph.children.length === 0
               ? 'Create some content first to share'
@@ -3359,6 +4311,6 @@ useEffect(() => {
       </div>
     </div>
   );
-};
+}
 
 export default InteractiveCanvas;

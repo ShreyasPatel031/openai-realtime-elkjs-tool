@@ -104,8 +104,12 @@ export class ArchitectureService {
         isPublic: architectureData.isPublic || false,
         tags: architectureData.tags || [],
         
-        // Save the complete ELK data
-        rawGraph: architectureData.rawGraph,
+        // Phase 3: Save Domain Graph only (no ViewState to Firebase)
+        rawGraph: (() => {
+          const cleanGraph = { ...architectureData.rawGraph };
+          delete cleanGraph.viewState; // Remove ViewState from Firebase save
+          return cleanGraph;
+        })(),
         nodes: architectureData.nodes,
         edges: architectureData.edges,
         

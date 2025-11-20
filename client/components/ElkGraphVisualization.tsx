@@ -3,49 +3,7 @@ import React, { useState, useEffect } from "react";
 import ELK from "elkjs/lib/elk.bundled.js";
 import { ElkGraph } from '../types/graph';
 import DevPanel from './DevPanel';
-
-// Add default options constants from ElkRender
-const ROOT_DEFAULT_OPTIONS = {
-  layoutOptions: {
-    "algorithm": "layered",
-    "elk.direction": "RIGHT",
-    "hierarchyHandling": "INCLUDE_CHILDREN",
-    "elk.layered.nodePlacement.strategy": "NETWORK_SIMPLEX",
-    "elk.layered.considerModelOrder": true,
-    "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES",
-    "elk.layered.nodePlacement.favorStraightEdges": true,
-    "elk.layered.cycleBreaking.strategy": "INTERACTIVE",
-    "elk.interactive": true,
-    "elk.interactiveLayout": true,
-    "elk.layered.priority.direction": 0,
-    "org.eclipse.elk.debugMode": true,
-    "elk.layered.crossingMinimization.forceNodeModelOrder": true,
-    "elk.layered.priority.shortness": 100,  
-    "spacing.edgeNode": 30,
-    "spacing.nodeNode": 30,
-    "spacing.edgeEdge": 30,
-    "spacing.nodeNodeBetweenLayers": 40,
-    "spacing.edgeNodeBetweenLayers": 40,
-    "spacing.edgeEdgeBetweenLayers": 30,
-  }
-};
-
-const NON_ROOT_DEFAULT_OPTIONS = {
-  width: 120,
-  height: 60,
-  layoutOptions: {
-    "nodeLabels.placement": "INSIDE V_TOP H_LEFT",
-    "elk.padding": "[top=30.0,left=30.0,bottom=30.0,right=30.0]",
-    "elk.layered.nodePlacement.favorStraightEdges": true,
-    "elk.layered.priority.shortness": 100, 
-    "spacing.edgeNode": 30,
-    "spacing.nodeNode": 30,
-    "spacing.edgeEdge": 30,
-    "spacing.nodeNodeBetweenLayers": 40,
-    "spacing.edgeNodeBetweenLayers": 40,
-    "spacing.edgeEdgeBetweenLayers": 30,
-  }
-};
+import { ROOT_DEFAULT_OPTIONS, NON_ROOT_DEFAULT_OPTIONS } from '../graph/utils/elk/elkOptions';
 
 /**
  * Flatten child coordinates by adding parent offsets so that

@@ -223,7 +223,6 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
             // console.log('📊 Processing data:', data)
             
             if (data === '[DONE]') {
-              console.log('🏁 Stream marked as done')
               // Mark streaming as complete
               setMessages(prev => 
                 prev.map(msg => 
@@ -242,7 +241,6 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
               
               // Handle special diagram creation messages
               if (parsed.type === 'diagram_creation') {
-                console.log('🏗️ Diagram creation message received:', parsed.message)
                 assistantMessage += `\n\n${parsed.message}`
                 setMessages(prev => 
                   prev.map(msg => 
@@ -256,28 +254,20 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
               
               // Handle diagram trigger
               if (parsed.type === 'trigger_diagram') {
-                console.log('🚀 Triggering diagram creation with:', parsed.requirements)
-                console.log('🔍 Full trigger_diagram object:', parsed)
-                
                 // Set loading state for diagram generation
                 setIsDiagramGenerating(true)
-                console.log('🔄 Set diagram generation loading state to true')
                 
                 // Set global state (needed for naming and other functions)
                 ;(window as any).originalChatTextInput = parsed.requirements
                 ;(window as any).chatTextInput = parsed.requirements
                 ;(window as any).selectedImages = []
-                console.log('✅ Set global state for diagram generation')
                 
                 // Use the SAME PATH as regular architecture generation
                 // Call handleChatSubmit directly since process_user_requirements is disabled
-                console.log('📞 Using unified architecture generation path via handleChatSubmit...')
                 try {
                   const handleChatSubmit = (window as any).handleChatSubmit
                   if (handleChatSubmit && typeof handleChatSubmit === 'function') {
-                    console.log('✅ Found handleChatSubmit function, calling it...')
                     await handleChatSubmit(parsed.requirements)
-                    console.log('✅ handleChatSubmit completed successfully')
                   } else {
                     console.error('❌ handleChatSubmit function not found on window object')
                     throw new Error('handleChatSubmit function not available')
@@ -287,14 +277,12 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
                 } finally {
                   // Clear loading state after completion
                   setIsDiagramGenerating(false)
-                  console.log('✅ Set diagram generation loading state to false')
                 }
                 continue // Continue processing other messages in the same chunk
               }
               
               // Handle error messages
               if (parsed.type === 'error') {
-                console.log('❌ Error message received:', parsed.message)
                 assistantMessage += `\n\nError: ${parsed.message}`
                 setMessages(prev => 
                   prev.map(msg => 

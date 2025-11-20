@@ -33,13 +33,9 @@ export function createViewStateSnapshot(
   isHydratingRef: React.MutableRefObject<boolean>
 ): ViewState {
   if (isHydratingRef.current && viewStateRef?.current) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.info('[VIEWSTATE DEBUG] Hydration in progress - reusing existing snapshot');
-    }
     try {
       return JSON.parse(JSON.stringify(viewStateRef.current));
     } catch (error) {
-      console.warn('⚠️ Failed to clone viewState snapshot during hydration:', error);
       return viewStateRef.current;
     }
   }
@@ -49,7 +45,6 @@ export function createViewStateSnapshot(
         try {
           return JSON.parse(JSON.stringify(viewStateRef.current));
         } catch (error) {
-          console.warn('⚠️ Failed to clone viewState snapshot:', error);
           return viewStateRef.current;
         }
       })()
@@ -57,8 +52,28 @@ export function createViewStateSnapshot(
 
   const snapshot = base || { node: {}, group: {}, edge: {} };
 
+  // Helper to calculate absolute position from node and all nodes
+  const getAbsolutePosition = (node: Node, allNodes: Node[]): { x: number; y: number } => {
+    let x = node.position?.x ?? 0;
+    let y = node.position?.y ?? 0;
+    
+    // If node has a parent, add parent's absolute position
+    if ((node as any).parentId) {
+      const parent = allNodes.find(n => n.id === (node as any).parentId);
+      if (parent) {
+        const parentAbs = getAbsolutePosition(parent, allNodes);
+        x += parentAbs.x;
+        y += parentAbs.y;
+      }
+    }
+    
+    return { x, y };
+  };
+
+
   nodes.forEach((node) => {
     const existingNodeView = viewStateRef?.current?.node?.[node.id];
+    const existingGroupView = viewStateRef?.current?.group?.[node.id];
 
     const rawWidth =
       (typeof node.data?.width === 'number' && node.data.width) ||
@@ -69,17 +84,22 @@ export function createViewStateSnapshot(
       (typeof node.style?.height === 'number' && node.style.height) ||
       (typeof node.style?.height === 'string' ? parseFloat(node.style.height) : undefined);
 
-    const stabilizedX =
-      (node.position?.x ?? 0) === 0 && (node.position?.y ?? 0) === 0 && existingNodeView
-        ? existingNodeView.x
-        : node.position?.x ?? 0;
-    const stabilizedY =
-      (node.position?.x ?? 0) === 0 && (node.position?.y ?? 0) === 0 && existingNodeView
-        ? existingNodeView.y
-        : node.position?.y ?? 0;
+    // CRITICAL: Calculate absolute position (not relative)
+    // ReactFlow nodes inside groups have relative positions, but ViewState must store absolute
+    const absolutePos = getAbsolutePosition(node, nodes);
+    
+    const width = rawWidth ?? existingNodeView?.w ?? existingGroupView?.w ?? 96;
+    const height = rawHeight ?? existingNodeView?.h ?? existingGroupView?.h ?? 96;
 
-    const width = rawWidth ?? existingNodeView?.w ?? 96;
-    const height = rawHeight ?? existingNodeView?.h ?? 96;
+    // Stabilize: if position is (0,0) and we have existing view, use existing
+    const stabilizedX =
+      absolutePos.x === 0 && absolutePos.y === 0 && (existingNodeView || existingGroupView)
+        ? (existingNodeView?.x ?? existingGroupView?.x ?? 0)
+        : absolutePos.x;
+    const stabilizedY =
+      absolutePos.x === 0 && absolutePos.y === 0 && (existingNodeView || existingGroupView)
+        ? (existingNodeView?.y ?? existingGroupView?.y ?? 0)
+        : absolutePos.y;
 
     snapshot.node = snapshot.node || {};
     snapshot.node[node.id] = {
@@ -90,44 +110,40 @@ export function createViewStateSnapshot(
     };
 
     if (node.type === 'group') {
-      const existingGroupView = viewStateRef?.current?.group?.[node.id];
       snapshot.group = snapshot.group || {};
       snapshot.group[node.id] = {
-        x:
-          (node.position?.x ?? 0) === 0 && (node.position?.y ?? 0) === 0 && existingGroupView
-            ? existingGroupView.x
-            : node.position?.x ?? 0,
-        y:
-          (node.position?.x ?? 0) === 0 && (node.position?.y ?? 0) === 0 && existingGroupView
-            ? existingGroupView.y
-            : node.position?.y ?? 0,
+        x: stabilizedX,
+        y: stabilizedY,
         w: rawWidth ?? existingGroupView?.w ?? width,
         h: rawHeight ?? existingGroupView?.h ?? height,
       };
     }
   });
 
-  if (process.env.NODE_ENV !== 'production') {
-    const nodeEntries = Object.entries(snapshot.node || {});
-    const groupEntries = Object.entries(snapshot.group || {});
-    const zeroPositionNodes = nodeEntries
-      .filter(([, geom]) => !geom || (geom.x === 0 && geom.y === 0))
-      .map(([id, geom]) => ({ id, ...geom }));
-    const digest = `${nodeEntries.length}:${groupEntries.length}:${zeroPositionNodes.length}`;
-
-    if (digest !== lastSnapshotDigest || zeroPositionNodes.length > 0) {
-      lastSnapshotDigest = digest;
-      console.info('[VIEWSTATE DEBUG] createViewStateSnapshot', {
-        nodeCount: nodeEntries.length,
-        groupCount: groupEntries.length,
-        zeroPositionSample: zeroPositionNodes.slice(0, 3),
-        sampleNodes: nodeEntries.slice(0, 3).map(([id, geom]) => ({ id, ...geom })),
-        sampleGroups: groupEntries.slice(0, 3).map(([id, geom]) => ({ id, ...geom })),
-      });
-    }
-  }
-
   return snapshot;
+}
+
+/**
+ * Helper to extract all group IDs from the graph
+ */
+function extractGroupIdsFromGraph(graph: any): string[] {
+  const groupIds: string[] = [];
+  if (!graph) return groupIds;
+  
+  const traverse = (node: any) => {
+    if (node.type === 'group' || node.data?.isGroup || node.mode) {
+      groupIds.push(node.id);
+    }
+    if (node.children) {
+      node.children.forEach((child: any) => traverse(child));
+    }
+  };
+  
+  if (graph.children) {
+    graph.children.forEach((child: any) => traverse(child));
+  }
+  
+  return groupIds;
 }
 
 /**
@@ -149,7 +165,7 @@ export function saveCanvasSnapshot(
     localStorage.setItem(LOCAL_CANVAS_SNAPSHOT_KEY, serialized);
     sessionStorage.setItem(LOCAL_CANVAS_SNAPSHOT_KEY, serialized);
   } catch (error) {
-    console.warn("⚠️ Failed to persist local canvas snapshot:", error);
+    console.error("❌ [saveCanvasSnapshot] Failed to persist local canvas snapshot:", error);
   }
 }
 

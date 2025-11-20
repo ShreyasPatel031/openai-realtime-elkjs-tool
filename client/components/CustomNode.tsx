@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { useReactFlow } from 'reactflow';
 import { iconLists } from '../generated/iconLists';
 import { iconFallbackService } from '../utils/iconFallbackService';
 import { iconCacheService } from '../utils/iconCacheService';
@@ -9,6 +10,7 @@ import ConnectorDots from './node/ConnectorDots';
 import NodeHandles from './node/NodeHandles';
 import { useNodeStyle } from '../contexts/NodeStyleContext';
 import { useNodeInteractions } from '../contexts/NodeInteractionContext';
+import { getNodeStyle, CANVAS_STYLES } from './graph/styles/canvasStyles';
 
 // NO HEURISTIC FALLBACKS - let semantic fallback service handle everything
 
@@ -36,13 +38,33 @@ interface CustomNodeProps {
 const noopLabelChange = (_id: string, _label: string) => {};
 const noopConnectorClick = (_nodeId: string, _handleId: string) => {};
 
-const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChange, selectedTool = 'arrow', connectingFrom, connectingFromHandle, onConnectorDotClick }) => {
-  const interactions = useNodeInteractions();
+const CustomNodeComponent: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChange, selectedTool = 'arrow', connectingFrom, connectingFromHandle, onConnectorDotClick }) => {
+  const interactionsRaw = useNodeInteractions();
+  const { getNodes } = useReactFlow();
   const { leftHandles = [], rightHandles = [], topHandles = [], bottomHandles = [] } = data;
-  const { settings } = useNodeStyle();
+  const nodeStyleRaw = useNodeStyle();
+  
+  // Memoize hook values to prevent re-renders when object references change but values are the same
+  const interactions = React.useMemo(() => interactionsRaw, [
+    interactionsRaw?.selectedTool,
+    interactionsRaw?.connectingFrom,
+    interactionsRaw?.connectingFromHandle,
+    interactionsRaw?.handleConnectorDotClick,
+    interactionsRaw?.handleLabelChange,
+    interactionsRaw?.selectedNodeIds?.join(','),
+  ]);
+  
+  const settings = React.useMemo(() => nodeStyleRaw?.settings, [
+    nodeStyleRaw?.settings?.iconSize,
+    nodeStyleRaw?.settings?.nodePaddingVertical,
+    nodeStyleRaw?.settings?.nodePaddingHorizontal,
+    nodeStyleRaw?.settings?.textPadding,
+  ]);
   
   const [isEditing, setIsEditing] = useState(data.isEditing || (!data.label || data.label === 'Add text'));
   const [label, setLabel] = useState(!data.label || data.label === 'Add text' ? '' : data.label);
+  
+  const prevSelectedRef_edit = useRef(selected);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const lastBlurTimeRef = useRef<number>(0);
   const [iconLoaded, setIconLoaded] = useState(false);
@@ -222,13 +244,21 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
     }
   }, [data.icon, id]);
 
-  // keep local label in sync
+  // keep local label in sync - only update if actually different to prevent loops
   useEffect(() => {
-    setLabel(!data.label || data.label === 'Add text' ? '' : data.label);
-  }, [data.label]);
+    const newLabel = !data.label || data.label === 'Add text' ? '' : data.label;
+    if (label !== newLabel) {
+      setLabel(newLabel);
+    }
+  }, [data.label]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-enter edit mode when node is selected, clear when deselected
+  // Use refs to prevent unnecessary state updates
   useEffect(() => {
+    // Only update if selection actually changed
+    if (prevSelectedRef_edit.current === selected) return;
+    prevSelectedRef_edit.current = selected;
+    
     if (selected && !isEditing) {
       const timeSinceBlur = Date.now() - lastBlurTimeRef.current;
       if (timeSinceBlur < 100) {
@@ -245,23 +275,50 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
       // Clear editing state when node is deselected
       setIsEditing(false);
     }
-  }, [selected, isEditing]);
+  }, [selected]); // Remove isEditing from deps to prevent loops
 
   // Focus input when entering edit mode
   useEffect(() => {
     if (isEditing && inputRef.current) {
-      const timer = setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-          // Auto-resize textarea to fit content
-          const textarea = inputRef.current;
-          textarea.style.height = 'auto';
-          textarea.style.height = `${textarea.scrollHeight}px`;
+      // Use a single requestAnimationFrame to avoid excessive renders
+      let rafId: number;
+      let rafId2: number;
+      
+      rafId = requestAnimationFrame(() => {
+        if (!inputRef.current) return;
+        
+        const textarea = inputRef.current;
+        // Prevent extension errors by ensuring element is properly set up
+        if (!(textarea as any).__skipExtensionCheck) {
+          (textarea as any).__skipExtensionCheck = true;
         }
-      }, 0);
-      return () => clearTimeout(timer);
+        
+        // Use a second RAF only if needed for focus
+        rafId2 = requestAnimationFrame(() => {
+          if (!inputRef.current) return;
+          
+          try {
+            // Use focus with preventScroll to avoid triggering scroll-based handlers
+            inputRef.current.focus({ preventScroll: true });
+            // Auto-resize textarea to fit content (only if height changed)
+            const currentHeight = inputRef.current.style.height;
+            inputRef.current.style.height = 'auto';
+            const newHeight = `${inputRef.current.scrollHeight}px`;
+            if (currentHeight !== newHeight) {
+              inputRef.current.style.height = newHeight;
+            }
+          } catch (error) {
+            // Silently ignore focus errors (e.g., from browser extensions)
+          }
+        });
+      });
+      
+      return () => {
+        if (rafId) cancelAnimationFrame(rafId);
+        if (rafId2) cancelAnimationFrame(rafId2);
+      };
     }
-  }, [isEditing, label]);
+  }, [isEditing]); // Remove label from dependencies to prevent excessive re-runs
 
   const handleLabelChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newLabel = e.target.value;
@@ -292,10 +349,69 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
     }
   };
 
+  // Check if node is inside a selected group
+  // This includes both:
+  // 1. Nodes with parentId that matches a selected group
+  // 2. Nodes that are spatially contained within a selected group (for visual feedback)
+  const isInsideSelectedGroup = React.useMemo(() => {
+    if (!interactions?.selectedNodeIds || selected) return false;
+    if (effectiveSelectedTool !== 'arrow') return false;
+    
+    // Get all nodes to find this node's parent
+    const allNodes = getNodes();
+    const currentNode = allNodes.find(n => n.id === id);
+    if (!currentNode) return false;
+    
+    // Check if this node's parent is in the selected node IDs
+    const parentId = (currentNode as any).parentId;
+    if (parentId && interactions.selectedNodeIds.includes(parentId)) {
+      return true;
+    }
+    
+    // Also check if node is spatially contained within any selected group
+    // This handles the case where a group is moved around nodes
+    const selectedGroups = allNodes.filter(n => 
+      n.type === 'group' && interactions.selectedNodeIds.includes(n.id)
+    );
+    
+    for (const group of selectedGroups) {
+      const nodeBounds = {
+        x: currentNode.position.x,
+        y: currentNode.position.y,
+        width: (currentNode.data as any)?.width || 96,
+        height: (currentNode.data as any)?.height || 96,
+      };
+      const groupBounds = {
+        x: group.position.x,
+        y: group.position.y,
+        width: (group.data as any)?.width || (group.style as any)?.width || 480,
+        height: (group.data as any)?.height || (group.style as any)?.height || 320,
+      };
+      
+      // Check if node is fully contained within group bounds
+      const isContained = 
+        nodeBounds.x >= groupBounds.x &&
+        nodeBounds.y >= groupBounds.y &&
+        nodeBounds.x + nodeBounds.width <= groupBounds.x + groupBounds.width &&
+        nodeBounds.y + nodeBounds.height <= groupBounds.y + groupBounds.height;
+      
+      if (isContained) {
+        return true;
+      }
+    }
+    
+    return false;
+  }, [interactions?.selectedNodeIds, selected, effectiveSelectedTool, id, getNodes]);
+  
+  // Use centralized styling from canvasStyles.ts - SINGLE SOURCE OF TRUTH
+  const nodeStateStyle = getNodeStyle(
+    selected,
+    false, // isHovered - handled by CSS for consistency
+    effectiveSelectedTool === 'arrow' && isInsideSelectedGroup
+  );
+
   const nodeStyle = {
-    background: 'white', // Always white from Figma
-    border: '1px solid #e4e4e4', // Figma exact border color
-    borderRadius: '8px', // Figma 8px radius
+    ...nodeStateStyle,
     padding: '0px',
     // Width fixed, height auto-sizes to content
     width: data.width || 96,
@@ -306,10 +422,11 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
     justifyContent: 'flex-start',
     alignItems: 'flex-start',
     fontSize: '12px',
-    boxShadow: 'none', // No shadow from Figma
     position: 'relative' as const,
-    zIndex: selected ? 100 : 50,
-    pointerEvents: 'all' as const
+    zIndex: selected ? CANVAS_STYLES.zIndex.selectedNodes : CANVAS_STYLES.zIndex.nodes, // Use centralized z-index, above edges
+    pointerEvents: 'all' as const,
+    // Don't use overflow hidden here - it clips the green hover areas and dots
+    // Overflow hidden is handled by CSS on ReactFlow's wrapper
   };
 
   const [nodeEl, setNodeEl] = useState<HTMLDivElement | null>(null);
@@ -460,7 +577,7 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
         justifyContent: 'center',
         width: '100%',
         flex: 1,
-        zIndex: 1, // Lower z-index than green hover areas (zIndex: 1000)
+        zIndex: 1,
         pointerEvents: isEditing ? 'auto' : 'none', // Only interactive when editing
         boxSizing: 'border-box'
       }}>
@@ -580,5 +697,29 @@ const CustomNode: React.FC<CustomNodeProps> = ({ data, id, selected, onLabelChan
     </>
   );
 };
+
+// Memoize CustomNode to prevent unnecessary re-renders when props haven't changed
+// Returns true if props are equal (skip render), false if different (should render)
+const CustomNode = React.memo(CustomNodeComponent, (prevProps, nextProps) => {
+  // Check if any relevant props changed - if all are equal, return true to skip render
+  return (
+    prevProps.id === nextProps.id &&
+    prevProps.selected === nextProps.selected &&
+    prevProps.selectedTool === nextProps.selectedTool &&
+    prevProps.connectingFrom === nextProps.connectingFrom &&
+    prevProps.connectingFromHandle === nextProps.connectingFromHandle &&
+    prevProps.data.label === nextProps.data.label &&
+    prevProps.data.icon === nextProps.data.icon &&
+    prevProps.data.width === nextProps.data.width &&
+    prevProps.data.height === nextProps.data.height &&
+    prevProps.data.isEditing === nextProps.data.isEditing &&
+    prevProps.data.leftHandles?.length === nextProps.data.leftHandles?.length &&
+    prevProps.data.rightHandles?.length === nextProps.data.rightHandles?.length &&
+    prevProps.data.topHandles?.length === nextProps.data.topHandles?.length &&
+    prevProps.data.bottomHandles?.length === nextProps.data.bottomHandles?.length
+  );
+});
+
+CustomNode.displayName = 'CustomNode';
 
 export default CustomNode; 

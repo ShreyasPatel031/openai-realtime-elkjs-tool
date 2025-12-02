@@ -38,6 +38,17 @@ export function toReactFlowWithViewState(
   // First, get ReactFlow nodes/edges from ELK (for structure, handles, edge routing)
   const { nodes: elkNodes, edges: elkEdges } = processLayoutedGraph(elkGraph, dimensions);
 
+  // Build a map of parent absolute positions for relative position calculation
+  const parentPositions = new Map<string, { x: number; y: number }>();
+  elkNodes.forEach((node) => {
+    if (node.type === 'group') {
+      const groupGeometry = viewState.group?.[node.id];
+      if (groupGeometry) {
+        parentPositions.set(node.id, { x: groupGeometry.x, y: groupGeometry.y });
+      }
+    }
+  });
+
   // Override all node positions from ViewState (enforce contract)
   const nodes = elkNodes.map((node) => {
     const nodeId = node.id;
@@ -64,17 +75,31 @@ export function toReactFlowWithViewState(
       : viewState.node?.[nodeId];
 
     if (geometry) {
+      // ReactFlow requires relative positions for child nodes, absolute for top-level
+      // ViewState stores absolute positions, so convert to relative if node has a parent
+      const parentId = node.parentId;
+      let finalPosition = { x: geometry.x, y: geometry.y };
+      
+      if (parentId && parentId !== 'root') {
+        // Node has a parent - convert absolute to relative position
+        const parentPos = parentPositions.get(parentId);
+        if (parentPos) {
+          finalPosition = {
+            x: geometry.x - parentPos.x,
+            y: geometry.y - parentPos.y,
+          };
+        }
+      }
+      // If no parent or parent not found, use absolute position as-is
+      
       // Override position from ViewState
       return {
         ...node,
-        position: {
-          x: geometry.x,
-          y: geometry.y,
-        },
+        position: finalPosition,
         // Update data.position if it exists
         data: {
           ...node.data,
-          position: { x: geometry.x, y: geometry.y },
+          position: finalPosition,
         },
       };
     }
@@ -107,7 +132,7 @@ export function toReactFlowWithViewState(
       return {
         ...edge,
         data: {
-          ...edge.data,
+          ...(edge.data || {}),
           bendPoints: edgeGeom.waypoints,
         },
       };

@@ -1,0 +1,115 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - generic:
+          - button "Atelier":
+            - img "Atelier"
+      - button "Sign in" [ref=e12] [cursor=pointer]:
+        - img [ref=e13] [cursor=pointer]
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - generic [ref=e19]:
+          - generic [ref=e20]:
+            - button "Arrow (V)" [ref=e21] [cursor=pointer]:
+              - img [ref=e23] [cursor=pointer]
+            - button "Hand (H)" [ref=e25] [cursor=pointer]:
+              - img [ref=e27] [cursor=pointer]
+          - generic [ref=e33]:
+            - button "Add box (R)" [ref=e34] [cursor=pointer]:
+              - img [ref=e36] [cursor=pointer]
+            - button "Add connector (C)" [ref=e38] [cursor=pointer]:
+              - img [ref=e40] [cursor=pointer]
+            - button "Create group (G)" [ref=e44] [cursor=pointer]:
+              - img [ref=e46] [cursor=pointer]
+        - generic [ref=e52]:
+          - generic [ref=e54] [cursor=pointer]:
+            - generic:
+              - img:
+                - generic:
+                  - button "Edge from libavoid-h-left to libavoid-h-right"
+                  - button "Edge from libavoid-v-top to libavoid-v-bottom"
+                  - button "Edge from libavoid-straight-left to libavoid-straight-right"
+                  - button "Edge from libavoid-d-top-left to libavoid-d-bottom-right" [ref=e55] [cursor=pointer]
+                  - button "Edge from libavoid-port-source to libavoid-port-middle1" [ref=e58] [cursor=pointer]
+                  - button "Edge from libavoid-port-source to libavoid-port-middle2" [ref=e61] [cursor=pointer]
+                  - button "Edge from libavoid-port-middle1 to libavoid-port-target" [ref=e64] [cursor=pointer]
+                  - button "Edge from libavoid-port-middle2 to libavoid-port-target" [ref=e67] [cursor=pointer]
+              - generic:
+                - button "H-Left" [ref=e70] [cursor=pointer]:
+                  - generic [ref=e73] [cursor=pointer]: H-Left
+                - button "H-Block" [ref=e74] [cursor=pointer]:
+                  - generic [ref=e77] [cursor=pointer]: H-Block
+                - button "H-Right" [ref=e78] [cursor=pointer]:
+                  - generic [ref=e81] [cursor=pointer]: H-Right
+                - button "V-Top" [ref=e82] [cursor=pointer]:
+                  - generic [ref=e85] [cursor=pointer]: V-Top
+                - button "V-Block" [ref=e86] [cursor=pointer]:
+                  - generic [ref=e89] [cursor=pointer]: V-Block
+                - button "V-Bottom" [ref=e90] [cursor=pointer]:
+                  - generic [ref=e93] [cursor=pointer]: V-Bottom
+                - button "Straight-L" [ref=e94] [cursor=pointer]:
+                  - generic [ref=e97] [cursor=pointer]: Straight-L
+                - button "Straight-R" [ref=e98] [cursor=pointer]:
+                  - generic [ref=e101] [cursor=pointer]: Straight-R
+                - button "Diag-Top" [ref=e102] [cursor=pointer]:
+                  - generic [ref=e105] [cursor=pointer]: Diag-Top
+                - button "Diag-Block" [ref=e106] [cursor=pointer]:
+                  - generic [ref=e109] [cursor=pointer]: Diag-Block
+                - button "Diag-Bottom" [ref=e110] [cursor=pointer]:
+                  - generic [ref=e113] [cursor=pointer]: Diag-Bottom
+                - button "Port-Source" [ref=e114] [cursor=pointer]:
+                  - generic [ref=e117] [cursor=pointer]: Port-Source
+                - button "Port-Mid1" [ref=e118] [cursor=pointer]:
+                  - generic [ref=e121] [cursor=pointer]: Port-Mid1
+                - button "Port-Mid2" [ref=e122] [cursor=pointer]:
+                  - generic [ref=e125] [cursor=pointer]: Port-Mid2
+                - button "Port-Target" [ref=e126] [cursor=pointer]:
+                  - generic [ref=e129] [cursor=pointer]: Port-Target
+          - img [ref=e130]
+          - generic [ref=e132]:
+            - button "zoom in" [ref=e133] [cursor=pointer]:
+              - img [ref=e134] [cursor=pointer]
+            - button "zoom out" [ref=e136] [cursor=pointer]:
+              - img [ref=e137] [cursor=pointer]
+            - button "fit view" [ref=e139] [cursor=pointer]:
+              - img [ref=e140] [cursor=pointer]
+            - button "toggle interactivity" [ref=e142] [cursor=pointer]:
+              - img [ref=e143] [cursor=pointer]
+          - link "React Flow attribution" [ref=e146] [cursor=pointer]:
+            - /url: https://reactflow.dev
+            - text: React Flow
+      - generic [ref=e148]:
+        - generic [ref=e149]:
+          - heading "ELK Domain Graph" [level=3] [ref=e150]
+          - button "Refresh" [ref=e151] [cursor=pointer]
+        - img [ref=e154]:
+          - generic [ref=e155]: No content
+    - generic [ref=e156]:
+      - button "Share" [disabled] [ref=e157]:
+        - img [ref=e158]
+        - generic [ref=e161]: Share
+      - generic [ref=e162]:
+        - button "Export" [ref=e163] [cursor=pointer]:
+          - img [ref=e164] [cursor=pointer]
+          - generic [ref=e167] [cursor=pointer]: Export
+        - button "Save" [disabled] [ref=e168]:
+          - img [ref=e169]
+          - generic [ref=e173]: Save
+        - button "Sign in" [ref=e175] [cursor=pointer]:
+          - img [ref=e176] [cursor=pointer]
+  - generic [ref=e179]:
+    - button "Close Chat Panel" [ref=e181] [cursor=pointer]:
+      - img [ref=e183] [cursor=pointer]
+      - generic "Close Chat Panel":
+        - img
+    - generic [ref=e186]:
+      - img [ref=e190]
+      - generic [ref=e194]:
+        - textbox "Ask me to create an architecture..." [active] [ref=e195]
+        - button "Send message" [disabled] [ref=e196]:
+          - img [ref=e197]
+```

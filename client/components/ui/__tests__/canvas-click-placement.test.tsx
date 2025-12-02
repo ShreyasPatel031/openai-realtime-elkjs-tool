@@ -84,8 +84,13 @@ describe('Canvas Click Placement Integration', () => {
         'root' // parentId
       );
 
-      // Wait for async operations to complete
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Wait for async operations to complete - rendering happens via dynamic import
+      // Wait for nodes to appear in rendered array
+      let attempts = 0;
+      while (renderedNodes.length === 0 && attempts < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
 
       console.log('🎯 [TEST] After placeNodeOnCanvas:');
       console.log('  - Graph children:', testGraph.current?.children?.length || 0);
@@ -170,8 +175,17 @@ describe('Canvas Click Placement Integration', () => {
         'root'
       );
 
-      await new Promise(resolve => setTimeout(resolve, 200)); // Wait for async operations
+      // Wait for node to appear
+      let attempts = 0;
+      const expectedCount = i + 1;
+      while (renderedNodes.length < expectedCount && attempts < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
     }
+
+    // Wait a bit more for final render
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     // Verify all nodes were created
     expect(renderedNodes.length).toBe(clickPositions.length);
@@ -208,7 +222,8 @@ describe('Canvas Click Placement Integration', () => {
       { x: 33, y: 17 }       // Odd coordinates
     ];
 
-    for (const clickPos of edgeCases) {
+    for (let i = 0; i < edgeCases.length; i++) {
+      const clickPos = edgeCases[i];
       const mockEvent = createMockMouseEvent(clickPos.x, clickPos.y);
       
       placeNodeOnCanvas(
@@ -220,8 +235,17 @@ describe('Canvas Click Placement Integration', () => {
         'root'
       );
 
-      await new Promise(resolve => setTimeout(resolve, 100)); // Wait for async operations
+      // Wait for node to appear
+      let attempts = 0;
+      const expectedCount = i + 1;
+      while (renderedNodes.length < expectedCount && attempts < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
     }
+
+    // Wait a bit more for final render
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     // Verify all edge case nodes were created
     expect(renderedNodes.length).toBe(edgeCases.length);

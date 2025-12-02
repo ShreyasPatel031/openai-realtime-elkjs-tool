@@ -325,14 +325,14 @@ describe('Node Persistence', () => {
     
     // Initialize Orchestrator with test refs
     const graphRef = { current: freshGraph };
-    const viewStateRef = { current: freshViewState };
+    const testViewStateRef = { current: freshViewState };
     let renderedNodes: any[] = [];
     let renderedEdges: any[] = [];
     
     const { initializeOrchestrator } = await import('../../../core/orchestration/Orchestrator');
     initializeOrchestrator(
       graphRef,
-      viewStateRef,
+      testViewStateRef,
       () => {
         // Mock trigger render - just update test arrays
         const { toReactFlowWithViewState } = require('../../../core/renderer/ReactFlowAdapter');
@@ -346,7 +346,7 @@ describe('Node Persistence', () => {
           edges: graphRef.current?.edges || [],
         };
         const dimensions = { width: 96, height: 96, groupWidth: 288, groupHeight: 192, padding: 10 };
-        const result = toReactFlowWithViewState(minimalELK, dimensions, viewStateRef.current);
+        const result = toReactFlowWithViewState(minimalELK, dimensions, testViewStateRef.current);
         renderedNodes = result.nodes;
         renderedEdges = result.edges;
       },
@@ -383,9 +383,9 @@ describe('Node Persistence', () => {
     expect(renderedNode.position.y).toBe(250);
     
     // Step 11: Check ViewState was written correctly
-    expect(viewStateRef.current.node['test-canvas-node']).toBeTruthy();
-    expect(viewStateRef.current.node['test-canvas-node'].x).toBe(150);
-    expect(viewStateRef.current.node['test-canvas-node'].y).toBe(250);
+    expect(testViewStateRef.current.node['test-canvas-node']).toBeTruthy();
+    expect(testViewStateRef.current.node['test-canvas-node'].x).toBe(150);
+    expect(testViewStateRef.current.node['test-canvas-node'].y).toBe(250);
     
     // Step 12: Check Domain was updated
     expect(graphRef.current?.children).toBeTruthy();
@@ -446,18 +446,12 @@ describe('Node Persistence', () => {
     };
     
     const dimensions = { width: 96, height: 96, groupWidth: 288, groupHeight: 192, padding: 10 };
-    const { nodes } = toReactFlowWithViewState(minimalELK, dimensions, restored!.viewState);
     
-    // Node will be in the array but at position (0,0) with default size
-    // This is NOT the correct behavior - node should have its saved position
-    const renderedNode = nodes.find((n: any) => n.id === 'node-without-viewstate');
-    expect(renderedNode).toBeTruthy();
-    
-    // CRITICAL: This test documents the current behavior - node appears at (0,0) when ViewState is missing
-    // In a perfect world, this should fail or the node shouldn't render at all
-    // But currently DomainRenderer defaults to (0,0) when ViewState is missing
-    expect(renderedNode?.position.x).toBe(0); // Default position, not the saved position
-    expect(renderedNode?.position.y).toBe(0); // Default position, not the saved position
+    // CRITICAL: This test should FAIL - when ViewState is missing, rendering should throw
+    // The test name says "should FAIL" - meaning the rendering operation should fail
+    expect(() => {
+      toReactFlowWithViewState(minimalELK, dimensions, restored!.viewState, { strictGeometry: true });
+    }).toThrow(/Missing ViewState geometry/);
   });
 });
 

@@ -1,0 +1,2714 @@
+{
+  "config": {
+    "configFile": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/playwright.config.ts",
+    "rootDir": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e",
+    "forbidOnly": false,
+    "fullyParallel": true,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 6
+    },
+    "preserveOutput": "always",
+    "reporter": [
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "quiet": false,
+    "projects": [
+      {
+        "outputDir": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/test-results",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {
+          "actualWorkers": 6
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "shard": null,
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.55.0",
+    "workers": 6,
+    "webServer": {
+      "command": "npm run dev",
+      "port": 3001,
+      "reuseExistingServer": true,
+      "timeout": 30000
+    }
+  },
+  "suites": [
+    {
+      "title": "canvas-comprehensive.spec.ts",
+      "file": "canvas-comprehensive.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Comprehensive Canvas Test Suite",
+          "file": "canvas-comprehensive.spec.ts",
+          "line": 3,
+          "column": 6,
+          "specs": [
+            {
+              "title": "resetCanvas Functionality - should clear canvas and domain, persist after refresh",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 10153,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (200, 200)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (200, 200)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (300, 300)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=1, domain=1, viewState=1\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (300, 300)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "(node:53238) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+                        }
+                      ],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:38.610Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-b77afa722af8f10e0962",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 168,
+              "column": 3
+            },
+            {
+              "title": "Node Deletion - should remove nodes from both canvas and domain",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 10413,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (200, 200)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (200, 200)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (300, 300)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=1, domain=1, viewState=1\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (300, 300)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (400, 400)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=2, domain=2, viewState=2\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (400, 400)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🗑️ Deleting node: user-node-1764611262536\n"
+                        },
+                        {
+                          "text": "📍 Selected nodes before delete: \u001b[33m1\u001b[39m\n"
+                        },
+                        {
+                          "text": "⌨️ Delete key pressed\n"
+                        },
+                        {
+                          "text": "📊 After delete domain: {\n  childrenCount: \u001b[33m2\u001b[39m,\n  childrenIds: [ \u001b[32m'user-node-1764611264923'\u001b[39m, \u001b[32m'user-node-1764611267302'\u001b[39m ]\n}\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "(node:53239) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+                        }
+                      ],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:38.632Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-7d6fc23b7b700c767b74",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 194,
+              "column": 3
+            },
+            {
+              "title": "Persistence Flow - should persist nodes after refresh",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 2,
+                      "status": "passed",
+                      "duration": 9426,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (250, 250)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Effect triggered: {hasRawGraph: true, children: 0, hasArchId: true, skipRef: false, source: ref}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - empty graph, preventing overwrite\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] apply called {source: user, kind: free-structural, scopeId: root, payload: Object}\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (250, 250)\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] BEFORE domain mutation - wrote ViewState geometry: {originalNodeId: user-node-1764611262608, normalizedNodeId: user-node-1764611262608, isGroup: undefined, geometry: Object, viewStateNodeCount: 1}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Effect triggered: {hasRawGraph: true, children: 1, hasArchId: true, skipRef: false, source: ref}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Saving to localStorage: {children: 1, viewStateNodes: 1}\n"
+                        },
+                        {
+                          "text": "[Browser] [saveCanvasSnapshot] BEFORE setItem: {inputChildren: 1, serializedChildren: 1, match: true}\n"
+                        },
+                        {
+                          "text": "[Browser] [saveCanvasSnapshot] ✅ Saved: {children: 1, viewStateNodes: 1, verifiedStoredChildren: 1}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] Checking render refs: {hasSetNodesRef: true, hasSetEdgesRef: true}\n"
+                        },
+                        {
+                          "text": "[Browser] 🔍 [Orchestrator] FREE mode - using universal converter: {domainChildren: 1, domainChildIds: Array(1), viewStateNodeKeys: Array(1), viewStateGroupKeys: Array(0), viewStateNodeCount: 1}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] About to call setNodesRef/setEdgesRef: {nodeCount: 1, edgeCount: 0, nodeIds: Array(1)}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] FREE mode rendered directly: {nodeCount: 1, domainChildren: 1, viewStateNodes: 1}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] ✅ Completed FREE structural add-node {originalNodeId: user-node-1764611262608, normalizedNodeId: user-node-1764611262608, parentId: root, graphNodeCount: 1, viewStateNodeCount: 1}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] ✅ Persisted to localStorage: {graphChildren: 1, viewStateNodes: 1, nodeIds: Array(1)}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Effect triggered: {hasRawGraph: true, children: 1, hasArchId: true, skipRef: false, source: ref}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":1,\"edges\":0,\"nodeIds\":[\"user-node-1764611262608\"]}\n"
+                        },
+                        {
+                          "text": "⏳ \"Generating...\" appeared\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Effect triggered: {hasRawGraph: true, children: 1, hasArchId: true, skipRef: false, source: ref}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":1,\"edges\":0,\"nodeIds\":[\"user-node-1764611262608\"]}\n"
+                        },
+                        {
+                          "text": "✅ \"Generating...\" disappeared\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (350, 350)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=1, domain=1, viewState=1\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Effect triggered: {hasRawGraph: true, children: 1, hasArchId: true, skipRef: false, source: ref}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":1,\"edges\":0,\"nodeIds\":[\"user-node-1764611262608\"]}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Effect triggered: {hasRawGraph: true, children: 1, hasArchId: true, skipRef: false, source: ref}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":1,\"edges\":0,\"nodeIds\":[\"user-node-1764611262608\"]}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] apply called {source: user, kind: free-structural, scopeId: root, payload: Object}\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (350, 350)\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] BEFORE domain mutation - wrote ViewState geometry: {originalNodeId: user-node-1764611263073, normalizedNodeId: user-node-1764611263073, isGroup: undefined, geometry: Object, viewStateNodeCount: 2}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Effect triggered: {hasRawGraph: true, children: 2, hasArchId: true, skipRef: false, source: ref}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Saving to localStorage: {children: 2, viewStateNodes: 2}\n"
+                        },
+                        {
+                          "text": "[Browser] [saveCanvasSnapshot] BEFORE setItem: {inputChildren: 2, serializedChildren: 2, match: true}\n"
+                        },
+                        {
+                          "text": "[Browser] [saveCanvasSnapshot] ✅ Saved: {children: 2, viewStateNodes: 2, verifiedStoredChildren: 2}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] Checking render refs: {hasSetNodesRef: true, hasSetEdgesRef: true}\n"
+                        },
+                        {
+                          "text": "[Browser] 🔍 [Orchestrator] FREE mode - using universal converter: {domainChildren: 2, domainChildIds: Array(2), viewStateNodeKeys: Array(2), viewStateGroupKeys: Array(0), viewStateNodeCount: 2}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] About to call setNodesRef/setEdgesRef: {nodeCount: 2, edgeCount: 0, nodeIds: Array(2)}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] FREE mode rendered directly: {nodeCount: 2, domainChildren: 2, viewStateNodes: 2}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] ✅ Completed FREE structural add-node {originalNodeId: user-node-1764611263073, normalizedNodeId: user-node-1764611263073, parentId: root, graphNodeCount: 2, viewStateNodeCount: 2}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] ✅ Persisted to localStorage: {graphChildren: 2, viewStateNodes: 2, nodeIds: Array(2)}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Effect triggered: {hasRawGraph: true, children: 2, hasArchId: true, skipRef: false, source: ref}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":2,\"edges\":0,\"nodeIds\":[\"user-node-1764611262608\",\"user-node-1764611263073\"]}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Effect triggered: {hasRawGraph: true, children: 2, hasArchId: true, skipRef: false, source: ref}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":2,\"edges\":0,\"nodeIds\":[\"user-node-1764611262608\",\"user-node-1764611263073\"]}\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Effect triggered: {hasRawGraph: true, children: 2, hasArchId: true, skipRef: false, source: ref}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":2,\"edges\":0,\"nodeIds\":[\"user-node-1764611262608\",\"user-node-1764611263073\"]}\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "📦 Before refresh localStorage: {\n  hasData: \u001b[33mtrue\u001b[39m,\n  graphChildren: \u001b[33m2\u001b[39m,\n  graphChildIds: [ \u001b[32m'user-node-1764611262608'\u001b[39m, \u001b[32m'user-node-1764611263073'\u001b[39m ],\n  viewStateNodes: \u001b[33m2\u001b[39m,\n  timestamp: \u001b[33m1764611263090\u001b[39m,\n  rawPreview: \u001b[32m'{\"rawGraph\":{\"id\":\"root\",\"children\":[{\"id\":\"user-node-1764611262608\",\"labels\":[{\"text\":\"user-node-1764611262608\"}],\"data\":{\"label\":\"\"}},{\"id\":\"user-node-1764611263073\",\"labels\":[{\"text\":\"user-node-1764611263073\"}],\"data\":{\"label\":\"\"}}],\"edges\":[]},\"viewState\":{\"node\":{\"user-node-1764611262608\":{\"x\":-208,\"y\":-160,\"w\":96,\"h\":96},\"user-node-1764611263073\":{\"x\":-112,\"y\":-64,\"w\":96,\"h\":96}},\"group\":{},\"edge\":{},\"layout\":{}},\"selectedArchitectureId\":\"canvas-architecture\",\"timestamp\":1764611263090}'\u001b[39m\n}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 INIT] Restoring from local snapshot before Orchestrator init: {nodes: 2, hasViewState: true}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 INIT] Orchestrator initialized\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 CANVAS] Orchestrator initialized from InteractiveCanvas\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Effect triggered: {hasRawGraph: true, children: 2, hasArchId: true, skipRef: false, source: ref}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Saving to localStorage: {children: 2, viewStateNodes: 2}\n"
+                        },
+                        {
+                          "text": "[Browser] [saveCanvasSnapshot] BEFORE setItem: {inputChildren: 2, serializedChildren: 2, match: true}\n"
+                        },
+                        {
+                          "text": "[Browser] [saveCanvasSnapshot] ✅ Saved: {children: 2, viewStateNodes: 2, verifiedStoredChildren: 2}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 INIT] Orchestrator initialized\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 CANVAS] Orchestrator initialized from InteractiveCanvas\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Effect triggered: {hasRawGraph: true, children: 2, hasArchId: true, skipRef: false, source: ref}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":2,\"edges\":0,\"nodeIds\":[\"user-node-1764611262608\",\"user-node-1764611263073\"]}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Effect triggered: {hasRawGraph: true, children: 2, hasArchId: true, skipRef: false, source: ref}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":2,\"edges\":0,\"nodeIds\":[\"user-node-1764611262608\",\"user-node-1764611263073\"]}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Effect triggered: {hasRawGraph: true, children: 2, hasArchId: true, skipRef: false, source: ref}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":2,\"edges\":0,\"nodeIds\":[\"user-node-1764611262608\",\"user-node-1764611263073\"]}\n"
+                        },
+                        {
+                          "text": "📦 After refresh localStorage: {\n  hasData: \u001b[33mtrue\u001b[39m,\n  graphChildren: \u001b[33m2\u001b[39m,\n  viewStateNodes: \u001b[33m2\u001b[39m,\n  timestamp: \u001b[33m1764611267472\u001b[39m\n}\n"
+                        },
+                        {
+                          "text": "📊 After refresh sync: { canvasNodes: \u001b[33m2\u001b[39m, domainNodes: \u001b[33m2\u001b[39m, viewStateNodes: \u001b[33m2\u001b[39m, inSync: \u001b[33mtrue\u001b[39m }\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "(node:53241) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+                        }
+                      ],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:38.655Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-5c84c8c60f93fc2a5b75",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 278,
+              "column": 3
+            },
+            {
+              "title": "Position Stability - nodes and groups should not move when adding new elements",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 12711,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "📍 Initial canvas positions: {\n  nodes: [\n    {\n      id: \u001b[32m'test-node'\u001b[39m,\n      x: \u001b[33m200\u001b[39m,\n      y: \u001b[33m200\u001b[39m,\n      width: \u001b[33m96\u001b[39m,\n      height: \u001b[33m96\u001b[39m,\n      type: \u001b[32m'node'\u001b[39m\n    }\n  ],\n  groups: [\n    {\n      id: \u001b[32m'test-group'\u001b[39m,\n      x: \u001b[33m100\u001b[39m,\n      y: \u001b[33m100\u001b[39m,\n      width: \u001b[33m300\u001b[39m,\n      height: \u001b[33m200\u001b[39m,\n      type: \u001b[32m'group'\u001b[39m\n    }\n  ]\n}\n"
+                        },
+                        {
+                          "text": "✅ Initial group found on canvas: test-group at (100, 100) size 300×200\n"
+                        },
+                        {
+                          "text": "✅ Initial node found on canvas: test-node at (200, 200) size 96×96\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (400, 400)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=2, domain=2, viewState=2\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (400, 400)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (500, 500)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=3, domain=3, viewState=3\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (500, 500)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (600, 300)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=4, domain=4, viewState=4\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (600, 300)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "📍 Before canvas check - ViewState/Domain: {\n  viewStateGroups: [ \u001b[32m'test-group'\u001b[39m ],\n  viewStateNodes: [\n    \u001b[32m'test-node'\u001b[39m,\n    \u001b[32m'test-group'\u001b[39m,\n    \u001b[32m'user-node-1764611264827'\u001b[39m,\n    \u001b[32m'user-node-1764611267240'\u001b[39m,\n    \u001b[32m'user-node-1764611269624'\u001b[39m\n  ],\n  domainChildren: [\n    \u001b[32m'test-group'\u001b[39m,\n    \u001b[32m'test-node'\u001b[39m,\n    \u001b[32m'user-node-1764611264827'\u001b[39m,\n    \u001b[32m'user-node-1764611267240'\u001b[39m,\n    \u001b[32m'user-node-1764611269624'\u001b[39m\n  ],\n  groupInViewState: \u001b[33mtrue\u001b[39m,\n  groupInDomain: \u001b[33mtrue\u001b[39m\n}\n"
+                        },
+                        {
+                          "text": "📍 After adding node - canvas positions: {\n  nodes: [\n    {\n      id: \u001b[32m'test-node'\u001b[39m,\n      x: \u001b[33m200\u001b[39m,\n      y: \u001b[33m200\u001b[39m,\n      width: \u001b[33m96\u001b[39m,\n      height: \u001b[33m96\u001b[39m,\n      type: \u001b[32m'node'\u001b[39m\n    },\n    {\n      id: \u001b[32m'user-node-1764611264827'\u001b[39m,\n      x: \u001b[33m192\u001b[39m,\n      y: \u001b[33m176\u001b[39m,\n      width: \u001b[33m96\u001b[39m,\n      height: \u001b[33m96\u001b[39m,\n      type: \u001b[32m'node'\u001b[39m\n    },\n    {\n      id: \u001b[32m'user-node-1764611267240'\u001b[39m,\n      x: \u001b[33m256\u001b[39m,\n      y: \u001b[33m240\u001b[39m,\n      width: \u001b[33m96\u001b[39m,\n      height: \u001b[33m96\u001b[39m,\n      type: \u001b[32m'node'\u001b[39m\n    },\n    {\n      id: \u001b[32m'user-node-1764611269624'\u001b[39m,\n      x: \u001b[33m320\u001b[39m,\n      y: \u001b[33m128\u001b[39m,\n      width: \u001b[33m96\u001b[39m,\n      height: \u001b[33m96\u001b[39m,\n      type: \u001b[32m'node'\u001b[39m\n    }\n  ],\n  groups: [\n    {\n      id: \u001b[32m'test-group'\u001b[39m,\n      x: \u001b[33m100\u001b[39m,\n      y: \u001b[33m100\u001b[39m,\n      width: \u001b[33m300\u001b[39m,\n      height: \u001b[33m200\u001b[39m,\n      type: \u001b[32m'group'\u001b[39m\n    }\n  ]\n}\n"
+                        },
+                        {
+                          "text": "✅ Group test-group coordinates AND size EXACTLY unchanged: (100, 100) 300×200\n"
+                        },
+                        {
+                          "text": "✅ Node test-node coordinates AND size EXACTLY unchanged: (200, 200) 96×96\n"
+                        },
+                        {
+                          "text": "✅ ViewState coordinates AND size match ReactFlow for group: (100, 100) 300×200\n"
+                        },
+                        {
+                          "text": "✅ ViewState coordinates AND size match ReactFlow for node: (200, 200) 96×96\n"
+                        },
+                        {
+                          "text": "✅ Group still exists in domain\n"
+                        },
+                        {
+                          "text": "✅ Group still exists in ViewState\n"
+                        },
+                        {
+                          "text": "📋 Relevant console logs: [\n  \u001b[32m'[🧹 CLEANUP] traverse: user-node-1764611269624 isGroup=false'\u001b[39m,\n  \u001b[32m'[🧹 CLEANUP] collectAllIds result: {nodeIds: Array(5), groupIds: Array(2), domainChildren: 5, domainChildIds: Array(5)}'\u001b[39m,\n  \u001b[32m'[🧹 CLEANUP] Preserving group ViewState: test-group {geometry: Object}'\u001b[39m,\n  \u001b[32m'[🎯COORD] Converting test-group: {isGroup: true, position: 100,100, size: 300×200}'\u001b[39m,\n  \u001b[32m'[🔄 PERSIST] Skipped - same key: {\"children\":5,\"edges\":0,\"nodeIds\":[\"test-group\",\"test-node\",\"user-node-1764611264827\",\"user-node-1764611267240\",\"user-node-1764611269624\"]}'\u001b[39m,\n  \u001b[32m'[🔄 PERSIST] Skipped - same key: {\"children\":5,\"edges\":0,\"nodeIds\":[\"test-group\",\"test-node\",\"user-node-1764611264827\",\"user-node-1764611267240\",\"user-node-1764611269624\"]}'\u001b[39m,\n  \u001b[32m'[🔄 PERSIST] Skipped - same key: {\"children\":5,\"edges\":0,\"nodeIds\":[\"test-group\",\"test-node\",\"user-node-1764611264827\",\"user-node-1764611267240\",\"user-node-1764611269624\"]}'\u001b[39m,\n  \u001b[32m'📦 ViewState.layout: {test-group: Object, root: Object}'\u001b[39m,\n  \u001b[32m'📦 ViewState.layout: {test-group: Object, root: Object}'\u001b[39m,\n  \u001b[32m'📦 ViewState.layout: {test-group: Object, root: Object}'\u001b[39m\n]\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "(node:53242) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+                        }
+                      ],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:38.619Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-eb538858ae6b4aaf374d",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 369,
+              "column": 3
+            },
+            {
+              "title": "Group Stability - interactively created group should not disappear when adding nodes",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 17222,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (200, 200)\n"
+                        },
+                        {
+                          "text": "[Browser] 📦 ViewState: {node: Object, group: Object, edge: Object}\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (200, 200)\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] Processing 1 children of root\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] traverse: user-node-1764611262607 isGroup=false\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] collectAllIds result: {nodeIds: Array(1), groupIds: Array(1), domainChildren: 1, domainChildIds: Array(1)}\n"
+                        },
+                        {
+                          "text": "[Browser] [🎯COORD] Converting user-node-1764611262607: {isGroup: false, position: -256,-208, size: 96×96}\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🔧 Creating group interactively...\n"
+                        },
+                        {
+                          "text": "[Browser] [InteractiveCanvas] onPaneClick {selectedTool: group, targetClassList: react-flow__pane}\n"
+                        },
+                        {
+                          "text": "[Browser] [GroupTool] Creating draft group via Orchestrator {screenPoint: Object, flowPoint: Object, topLeft: Object}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] BEFORE domain mutation - wrote ViewState geometry: {originalNodeId: draft_group_1764611265667, normalizedNodeId: draft_group_1764611265667, isGroup: true, geometry: Object, viewStateNodeCount: 2}\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] Processing 2 children of root\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] traverse: user-node-1764611262607 isGroup=false\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] traverse: draft_group_1764611265667 isGroup=true\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] collectAllIds result: {nodeIds: Array(2), groupIds: Array(2), domainChildren: 2, domainChildIds: Array(2)}\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] Preserving group ViewState: draft_group_1764611265667 {geometry: Object}\n"
+                        },
+                        {
+                          "text": "[Browser] [🎯COORD] Converting user-node-1764611262607: {isGroup: false, position: -256,-208, size: 96×96}\n"
+                        },
+                        {
+                          "text": "[Browser] [🎯COORD] Converting draft_group_1764611265667: {isGroup: true, position: -544,-416, size: 480×320}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] ✅ Completed FREE structural add-node {originalNodeId: draft_group_1764611265667, normalizedNodeId: draft_group_1764611265667, parentId: root, graphNodeCount: 2, viewStateNodeCount: 2}\n"
+                        },
+                        {
+                          "text": "[Browser] [GroupTool] ✅ Group created via Orchestrator (FREE mode, no ELK hook): draft_group_1764611265667\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":2,\"edges\":0,\"nodeIds\":[\"draft_group_1764611265667\",\"user-node-1764611262607\"]}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":2,\"edges\":0,\"nodeIds\":[\"draft_group_1764611265667\",\"user-node-1764611262607\"]}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":2,\"edges\":0,\"nodeIds\":[\"draft_group_1764611265667\",\"user-node-1764611262607\"]}\n"
+                        },
+                        {
+                          "text": "📍 Positions before adding nodes: {\n  nodes: [\n    {\n      id: \u001b[32m'user-node-1764611262607'\u001b[39m,\n      x: \u001b[33m-256\u001b[39m,\n      y: \u001b[33m-208\u001b[39m,\n      width: \u001b[33m96\u001b[39m,\n      height: \u001b[33m96\u001b[39m,\n      type: \u001b[32m'node'\u001b[39m\n    }\n  ],\n  groups: [\n    {\n      id: \u001b[32m'draft_group_1764611265667'\u001b[39m,\n      x: \u001b[33m-544\u001b[39m,\n      y: \u001b[33m-416\u001b[39m,\n      width: \u001b[33m480\u001b[39m,\n      height: \u001b[33m320\u001b[39m,\n      type: \u001b[32m'group'\u001b[39m\n    }\n  ]\n}\n"
+                        },
+                        {
+                          "text": "✅ Group created: draft_group_1764611265667 at (-544, -416) size 480×320\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (400, 400)\n"
+                        },
+                        {
+                          "text": "[Browser] 📦 ViewState: {node: Object, group: Object, edge: Object, layout: Object}\n"
+                        },
+                        {
+                          "text": "[Browser] [LAYER-SYNC] Domain IDs: [user-node-1764611262607, draft_group_1764611265667]\n"
+                        },
+                        {
+                          "text": "[Browser] [LAYER-SYNC] ViewState IDs: [user-node-1764611262607, draft_group_1764611265667]\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=2, domain=2, viewState=2\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":2,\"edges\":0,\"nodeIds\":[\"draft_group_1764611265667\",\"user-node-1764611262607\"]}\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] Processing 3 children of root\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] traverse: user-node-1764611262607 isGroup=false\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] traverse: draft_group_1764611265667 isGroup=true\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] traverse: user-node-1764611267375 isGroup=false\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] collectAllIds result: {nodeIds: Array(3), groupIds: Array(2), domainChildren: 3, domainChildIds: Array(3)}\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] Preserving group ViewState: draft_group_1764611265667 {geometry: Object}\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (400, 400)\n"
+                        },
+                        {
+                          "text": "[Browser] [🎯COORD] Converting user-node-1764611262607: {isGroup: false, position: -256,-208, size: 96×96}\n"
+                        },
+                        {
+                          "text": "[Browser] [🎯COORD] Converting draft_group_1764611265667: {isGroup: true, position: -544,-416, size: 480×320}\n"
+                        },
+                        {
+                          "text": "[Browser] [🎯COORD] Converting user-node-1764611267375: {isGroup: false, position: -64,100, size: 96×96}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":3,\"edges\":0,\"nodeIds\":[\"draft_group_1764611265667\",\"user-node-1764611262607\",\"user-node-1764611267375\"]}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":3,\"edges\":0,\"nodeIds\":[\"draft_group_1764611265667\",\"user-node-1764611262607\",\"user-node-1764611267375\"]}\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":3,\"edges\":0,\"nodeIds\":[\"draft_group_1764611265667\",\"user-node-1764611262607\",\"user-node-1764611267375\"]}\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (500, 500)\n"
+                        },
+                        {
+                          "text": "[Browser] 📦 ViewState: {node: Object, group: Object, edge: Object, layout: Object}\n"
+                        },
+                        {
+                          "text": "[Browser] [LAYER-SYNC] Domain IDs: [user-node-1764611262607, draft_group_1764611265667, user-node-1764611267375]\n"
+                        },
+                        {
+                          "text": "[Browser] [LAYER-SYNC] ViewState IDs: [user-node-1764611262607, draft_group_1764611265667, user-node-1764611267375]\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=3, domain=3, viewState=3\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":3,\"edges\":0,\"nodeIds\":[\"draft_group_1764611265667\",\"user-node-1764611262607\",\"user-node-1764611267375\"]}\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (500, 500)\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] Processing 4 children of root\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] traverse: user-node-1764611262607 isGroup=false\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] traverse: draft_group_1764611265667 isGroup=true\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] traverse: user-node-1764611267375 isGroup=false\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] traverse: user-node-1764611270286 isGroup=false\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] collectAllIds result: {nodeIds: Array(4), groupIds: Array(2), domainChildren: 4, domainChildIds: Array(4)}\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] Preserving group ViewState: draft_group_1764611265667 {geometry: Object}\n"
+                        },
+                        {
+                          "text": "[Browser] [🎯COORD] Converting user-node-1764611262607: {isGroup: false, position: -256,-208, size: 96×96}\n"
+                        },
+                        {
+                          "text": "[Browser] [🎯COORD] Converting draft_group_1764611265667: {isGroup: true, position: -544,-416, size: 480×320}\n"
+                        },
+                        {
+                          "text": "[Browser] [🎯COORD] Converting user-node-1764611267375: {isGroup: false, position: -64,100, size: 96×96}\n"
+                        },
+                        {
+                          "text": "[Browser] [🎯COORD] Converting user-node-1764611270286: {isGroup: false, position: 48,96, size: 96×96}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":4,\"edges\":0,\"nodeIds\":[\"draft_group_1764611265667\",\"user-node-1764611262607\",\"user-node-1764611267375\",\"user-node-1764611270286\"]}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":4,\"edges\":0,\"nodeIds\":[\"draft_group_1764611265667\",\"user-node-1764611262607\",\"user-node-1764611267375\",\"user-node-1764611270286\"]}\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":4,\"edges\":0,\"nodeIds\":[\"draft_group_1764611265667\",\"user-node-1764611262607\",\"user-node-1764611267375\",\"user-node-1764611270286\"]}\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (600, 300)\n"
+                        },
+                        {
+                          "text": "[Browser] 📦 ViewState: {node: Object, group: Object, edge: Object, layout: Object}\n"
+                        },
+                        {
+                          "text": "[Browser] [LAYER-SYNC] Domain IDs: [user-node-1764611262607, draft_group_1764611265667, user-node-1764611267375, user-node-1764611270286]\n"
+                        },
+                        {
+                          "text": "[Browser] [LAYER-SYNC] ViewState IDs: [user-node-1764611262607, draft_group_1764611265667, user-node-1764611267375, user-node-1764611270286]\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=4, domain=4, viewState=4\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":4,\"edges\":0,\"nodeIds\":[\"draft_group_1764611265667\",\"user-node-1764611262607\",\"user-node-1764611267375\",\"user-node-1764611270286\"]}\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (600, 300)\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] Processing 5 children of root\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] traverse: user-node-1764611262607 isGroup=false\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] traverse: draft_group_1764611265667 isGroup=true\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] traverse: user-node-1764611267375 isGroup=false\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] traverse: user-node-1764611270286 isGroup=false\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] traverse: user-node-1764611273167 isGroup=false\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] collectAllIds result: {nodeIds: Array(5), groupIds: Array(2), domainChildren: 5, domainChildIds: Array(5)}\n"
+                        },
+                        {
+                          "text": "[Browser] [🧹 CLEANUP] Preserving group ViewState: draft_group_1764611265667 {geometry: Object}\n"
+                        },
+                        {
+                          "text": "[Browser] [🎯COORD] Converting user-node-1764611262607: {isGroup: false, position: -256,-208, size: 96×96}\n"
+                        },
+                        {
+                          "text": "[Browser] [🎯COORD] Converting draft_group_1764611265667: {isGroup: true, position: -544,-416, size: 480×320}\n"
+                        },
+                        {
+                          "text": "[Browser] [🎯COORD] Converting user-node-1764611267375: {isGroup: false, position: -64,100, size: 96×96}\n"
+                        },
+                        {
+                          "text": "[Browser] [🎯COORD] Converting user-node-1764611270286: {isGroup: false, position: 48,96, size: 96×96}\n"
+                        },
+                        {
+                          "text": "[Browser] [🎯COORD] Converting user-node-1764611273167: {isGroup: false, position: 144,-112, size: 96×96}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":5,\"edges\":0,\"nodeIds\":[\"draft_group_1764611265667\",\"user-node-1764611262607\",\"user-node-1764611267375\",\"user-node-1764611270286\",\"user-node-1764611273167\"]}\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":5,\"edges\":0,\"nodeIds\":[\"draft_group_1764611265667\",\"user-node-1764611262607\",\"user-node-1764611267375\",\"user-node-1764611270286\",\"user-node-1764611273167\"]}\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "[Browser] [🔄 PERSIST] Skipped - same key: {\"children\":5,\"edges\":0,\"nodeIds\":[\"draft_group_1764611265667\",\"user-node-1764611262607\",\"user-node-1764611267375\",\"user-node-1764611270286\",\"user-node-1764611273167\"]}\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "📍 Positions after adding nodes: {\n  nodes: [\n    {\n      id: \u001b[32m'user-node-1764611262607'\u001b[39m,\n      x: \u001b[33m-256\u001b[39m,\n      y: \u001b[33m-208\u001b[39m,\n      width: \u001b[33m96\u001b[39m,\n      height: \u001b[33m96\u001b[39m,\n      type: \u001b[32m'node'\u001b[39m\n    },\n    {\n      id: \u001b[32m'user-node-1764611267375'\u001b[39m,\n      x: \u001b[33m-64\u001b[39m,\n      y: \u001b[33m100\u001b[39m,\n      width: \u001b[33m96\u001b[39m,\n      height: \u001b[33m96\u001b[39m,\n      type: \u001b[32m'node'\u001b[39m\n    },\n    {\n      id: \u001b[32m'user-node-1764611270286'\u001b[39m,\n      x: \u001b[33m48\u001b[39m,\n      y: \u001b[33m96\u001b[39m,\n      width: \u001b[33m96\u001b[39m,\n      height: \u001b[33m96\u001b[39m,\n      type: \u001b[32m'node'\u001b[39m\n    },\n    {\n      id: \u001b[32m'user-node-1764611273167'\u001b[39m,\n      x: \u001b[33m144\u001b[39m,\n      y: \u001b[33m-112\u001b[39m,\n      width: \u001b[33m96\u001b[39m,\n      height: \u001b[33m96\u001b[39m,\n      type: \u001b[32m'node'\u001b[39m\n    }\n  ],\n  groups: [\n    {\n      id: \u001b[32m'draft_group_1764611265667'\u001b[39m,\n      x: \u001b[33m-544\u001b[39m,\n      y: \u001b[33m-416\u001b[39m,\n      width: \u001b[33m480\u001b[39m,\n      height: \u001b[33m320\u001b[39m,\n      type: \u001b[32m'group'\u001b[39m\n    }\n  ]\n}\n"
+                        },
+                        {
+                          "text": "✅ Group draft_group_1764611265667 coordinates AND size unchanged: (-544, -416) 480×320\n"
+                        },
+                        {
+                          "text": "[Browser] 📦 ViewState: {node: Object, group: Object, edge: Object, layout: Object}\n"
+                        },
+                        {
+                          "text": "✅ ViewState size matches ReactFlow: 480×320\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "(node:53243) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+                        }
+                      ],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:38.631Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-93882fd5908f0f88d415",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 592,
+              "column": 3
+            },
+            {
+              "title": "Group Size Persistence - should maintain size after refresh",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 20000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 7307,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "✅ Group before refresh: draft_group_1764611262774 size 480×320\n"
+                        },
+                        {
+                          "text": "✅ ViewState has correct size before refresh: 480×320\n"
+                        },
+                        {
+                          "text": "✅ Group after refresh: draft_group_1764611262774 size 480×320 (unchanged)\n"
+                        },
+                        {
+                          "text": "✅ ViewState has correct size after refresh: 480×320\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "(node:53240) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+                        }
+                      ],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:38.665Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-c188187aaa48a80403a1",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 723,
+              "column": 3
+            },
+            {
+              "title": "Group Size Persistence - should maintain resized size after drag",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 25000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 6402,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "✅ Group initial: draft_group_1764611268304 size 480×320\n"
+                        },
+                        {
+                          "text": "✅ Group after resize: draft_group_1764611268304 size 672×464\n"
+                        },
+                        {
+                          "text": "✅ Group after drag: draft_group_1764611268304 at (-144, 16) size 672×464 (preserved resized size)\n"
+                        },
+                        {
+                          "text": "✅ ViewState has correct resized size after drag: 672×464\n"
+                        },
+                        {
+                          "text": "✅ Verified size is resized (not initial 480×320)\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:46.524Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-d24160ec96e23016fbe3",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 814,
+              "column": 3
+            },
+            {
+              "title": "Group Drag - group should move when dragged",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 25000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 2,
+                      "status": "timedOut",
+                      "duration": 25364,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 25000ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 25000ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 25000ms exceeded.\u001b[39m"
+                        },
+                        {
+                          "location": {
+                            "file": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e/canvas-comprehensive.spec.ts",
+                            "column": 46,
+                            "line": 1053
+                          },
+                          "message": "Error: locator.boundingBox: Test timeout of 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-id=\"test_group_1764611273027\"]')\u001b[22m\n\n\n  1051 |     await page.waitForTimeout(500);\n  1052 |     \n> 1053 |     const finalGroupBox = await groupElement.boundingBox();\n       |                                              ^\n  1054 |     if (!finalGroupBox) {\n  1055 |       console.log('⚠️ Could not get final group bounding box');\n  1056 |       return;\n    at /Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e/canvas-comprehensive.spec.ts:1053:46"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "📍 Group initial: (584.5, 460)\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:48.638Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/test-results/canvas-comprehensive-Compr-9b482-up-should-move-when-dragged-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/test-results/canvas-comprehensive-Compr-9b482-up-should-move-when-dragged-chromium/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/test-results/canvas-comprehensive-Compr-9b482-up-should-move-when-dragged-chromium/error-context.md"
+                        }
+                      ]
+                    },
+                    {
+                      "workerIndex": 8,
+                      "parallelIndex": 2,
+                      "status": "timedOut",
+                      "duration": 25349,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 25000ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 25000ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 25000ms exceeded.\u001b[39m"
+                        },
+                        {
+                          "location": {
+                            "file": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e/canvas-comprehensive.spec.ts",
+                            "column": 46,
+                            "line": 1053
+                          },
+                          "message": "Error: locator.boundingBox: Test timeout of 25000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-id=\"test_group_1764611299391\"]')\u001b[22m\n\n\n  1051 |     await page.waitForTimeout(500);\n  1052 |     \n> 1053 |     const finalGroupBox = await groupElement.boundingBox();\n       |                                              ^\n  1054 |     if (!finalGroupBox) {\n  1055 |       console.log('⚠️ Could not get final group bounding box');\n  1056 |       return;\n    at /Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e/canvas-comprehensive.spec.ts:1053:46"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "📍 Group initial: (584.5, 460)\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "(node:54174) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+                        }
+                      ],
+                      "retry": 1,
+                      "startTime": "2025-12-01T17:48:14.319Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/test-results/canvas-comprehensive-Compr-9b482-up-should-move-when-dragged-chromium-retry1/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/test-results/canvas-comprehensive-Compr-9b482-up-should-move-when-dragged-chromium-retry1/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/test-results/canvas-comprehensive-Compr-9b482-up-should-move-when-dragged-chromium-retry1/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/test-results/canvas-comprehensive-Compr-9b482-up-should-move-when-dragged-chromium-retry1/trace.zip"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-a0ac0b2027ea252a6e29",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 995,
+              "column": 3
+            },
+            {
+              "title": "Group Deletion - should delete group from canvas and domain",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4777,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "🔧 Creating group for deletion test...\n"
+                        },
+                        {
+                          "text": "✅ Group created: draft_group_1764611271269 at (-448, -320)\n"
+                        },
+                        {
+                          "text": "📍 Before deletion: { inDomain: \u001b[33mtrue\u001b[39m, inViewState: \u001b[33mtrue\u001b[39m, canvasGroupCount: \u001b[33m1\u001b[39m }\n"
+                        },
+                        {
+                          "text": "✅ Group selected\n"
+                        },
+                        {
+                          "text": "[Browser] [DELETE] Starting sequential deletion of 1 nodes and 0 edges\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] DELETE-NODE - using current graph: {originalNodeId: draft_group_1764611271269, normalizedNodeId: draft_group_1764611271269, currentGraphChildren: 1, targetNodeExists: true}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] DELETE-NODE - using current graph: {originalNodeId: draft_group_1764611271269, normalizedNodeId: draft_group_1764611271269, currentGraphChildren: 1, targetNodeExists: true}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] delete-node complete: {originalNodeId: draft_group_1764611271269, normalizedNodeId: draft_group_1764611271269, graphNodeCount: 0, viewStateNodeCount: 0, deletedFromViewState: true}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] Completed FREE structural delete-node {nodeId: draft_group_1764611271269, graphChildrenCount: 0, beforeDeleteCount: 0, nodeStillInGraph: false, graphNodeIds: Array(0)}\n"
+                        },
+                        {
+                          "text": "[Browser] [DELETE] ✅ Deleted node from domain: draft_group_1764611271269\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] delete-node complete: {originalNodeId: draft_group_1764611271269, normalizedNodeId: draft_group_1764611271269, graphNodeCount: 0, viewStateNodeCount: 0, deletedFromViewState: true}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] Completed FREE structural delete-node {nodeId: draft_group_1764611271269, graphChildrenCount: 0, beforeDeleteCount: 0, nodeStillInGraph: false, graphNodeIds: Array(0)}\n"
+                        },
+                        {
+                          "text": "[Browser] [DELETE] ✅ Successfully deleted node: draft_group_1764611271269\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] FREE mode delete-node rendered directly: {nodeCount: 0, domainChildren: 0, viewStateNodes: 0}\n"
+                        },
+                        {
+                          "text": "[Browser] [Orchestrator] FREE mode delete-node rendered directly: {nodeCount: 0, domainChildren: 0, viewStateNodes: 0}\n"
+                        },
+                        {
+                          "text": "[Browser] [DELETE] ✅ Completed sequential deletion of all selected items\n"
+                        },
+                        {
+                          "text": "📍 After deletion: {\n  inDomain: \u001b[33mfalse\u001b[39m,\n  inViewState: \u001b[33mfalse\u001b[39m,\n  inViewStateNode: \u001b[33mfalse\u001b[39m,\n  canvasGroupCount: \u001b[33m0\u001b[39m,\n  groupOnCanvas: \u001b[33mfalse\u001b[39m\n}\n"
+                        },
+                        {
+                          "text": "✅ Group successfully deleted from domain, ViewState, and canvas\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:49.370Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-b796fcf486eec5e7e122",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1068,
+              "column": 3
+            },
+            {
+              "title": "Multiselect Delete - should remove all selected nodes from canvas and domain",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 16256,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (200, 200)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (200, 200)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (300, 300)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=1, domain=1, viewState=1\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (300, 300)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (400, 400)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=2, domain=2, viewState=2\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (400, 400)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🗑️ Deleting node 1 of 3\n"
+                        },
+                        {
+                          "text": "📊 After delete: canvas=2, domain=2\n"
+                        },
+                        {
+                          "text": "🗑️ Deleting node 2 of 3\n"
+                        },
+                        {
+                          "text": "📊 After delete: canvas=1, domain=1\n"
+                        },
+                        {
+                          "text": "🗑️ Deleting node 3 of 3\n"
+                        },
+                        {
+                          "text": "📊 After delete: canvas=0, domain=0\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:49.629Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-78d9ceb54e7ff10e7a18",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1174,
+              "column": 3
+            },
+            {
+              "title": "URL Architecture - localStorage should take priority over URL parameters",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 4814,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "📊 Domain after URL navigation: \u001b[33m1\u001b[39m\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:51.926Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-557530f1672b130ee387",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1218,
+              "column": 3
+            },
+            {
+              "title": "Domain-Canvas Sync - node should appear in both canvas and domain",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 3898,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (300, 300)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (300, 300)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:52.934Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-9b5cbc78b793cff9a719",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1248,
+              "column": 3
+            },
+            {
+              "title": "Ghost Node Prevention - no ghost nodes should remain after deletion",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 5044,
+                      "error": {
+                        "message": "TimeoutError: page.waitForFunction: Timeout 3000ms exceeded.",
+                        "stack": "TimeoutError: page.waitForFunction: Timeout 3000ms exceeded.\n    at /Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e/canvas-comprehensive.spec.ts:1281:16",
+                        "location": {
+                          "file": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e/canvas-comprehensive.spec.ts",
+                          "column": 16,
+                          "line": 1281
+                        },
+                        "snippet": "  1279 |     await page.keyboard.press('Delete');\n  1280 |     // Wait for deletion to complete\n> 1281 |     await page.waitForFunction((expectedCount) => {\n       |                ^\n  1282 |       const domain = (window as any).getDomainGraph?.() || { children: [] };\n  1283 |       return domain.children?.length < expectedCount;\n  1284 |     }, initialCount, { timeout: 3000 });"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e/canvas-comprehensive.spec.ts",
+                            "column": 16,
+                            "line": 1281
+                          },
+                          "message": "TimeoutError: page.waitForFunction: Timeout 3000ms exceeded.\n\n  1279 |     await page.keyboard.press('Delete');\n  1280 |     // Wait for deletion to complete\n> 1281 |     await page.waitForFunction((expectedCount) => {\n       |                ^\n  1282 |       const domain = (window as any).getDomainGraph?.() || { children: [] };\n  1283 |       return domain.children?.length < expectedCount;\n  1284 |     }, initialCount, { timeout: 3000 });\n    at /Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e/canvas-comprehensive.spec.ts:1281:16"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (300, 300)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (300, 300)\n"
+                        },
+                        {
+                          "text": "⏳ \"Generating...\" appeared\n"
+                        },
+                        {
+                          "text": "✅ \"Generating...\" disappeared\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:54.154Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/test-results/canvas-comprehensive-Compr-ab3f1-hould-remain-after-deletion-chromium/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/test-results/canvas-comprehensive-Compr-ab3f1-hould-remain-after-deletion-chromium/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/test-results/canvas-comprehensive-Compr-ab3f1-hould-remain-after-deletion-chromium/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e/canvas-comprehensive.spec.ts",
+                        "column": 16,
+                        "line": 1281
+                      }
+                    },
+                    {
+                      "workerIndex": 6,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 5167,
+                      "error": {
+                        "message": "TimeoutError: page.waitForFunction: Timeout 3000ms exceeded.",
+                        "stack": "TimeoutError: page.waitForFunction: Timeout 3000ms exceeded.\n    at /Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e/canvas-comprehensive.spec.ts:1281:16",
+                        "location": {
+                          "file": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e/canvas-comprehensive.spec.ts",
+                          "column": 16,
+                          "line": 1281
+                        },
+                        "snippet": "  1279 |     await page.keyboard.press('Delete');\n  1280 |     // Wait for deletion to complete\n> 1281 |     await page.waitForFunction((expectedCount) => {\n       |                ^\n  1282 |       const domain = (window as any).getDomainGraph?.() || { children: [] };\n  1283 |       return domain.children?.length < expectedCount;\n  1284 |     }, initialCount, { timeout: 3000 });"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e/canvas-comprehensive.spec.ts",
+                            "column": 16,
+                            "line": 1281
+                          },
+                          "message": "TimeoutError: page.waitForFunction: Timeout 3000ms exceeded.\n\n  1279 |     await page.keyboard.press('Delete');\n  1280 |     // Wait for deletion to complete\n> 1281 |     await page.waitForFunction((expectedCount) => {\n       |                ^\n  1282 |       const domain = (window as any).getDomainGraph?.() || { children: [] };\n  1283 |       return domain.children?.length < expectedCount;\n  1284 |     }, initialCount, { timeout: 3000 });\n    at /Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e/canvas-comprehensive.spec.ts:1281:16"
+                        }
+                      ],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (300, 300)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (300, 300)\n"
+                        },
+                        {
+                          "text": "⏳ \"Generating...\" appeared\n"
+                        },
+                        {
+                          "text": "✅ \"Generating...\" disappeared\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "(node:53802) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+                        }
+                      ],
+                      "retry": 1,
+                      "startTime": "2025-12-01T17:47:59.593Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/test-results/canvas-comprehensive-Compr-ab3f1-hould-remain-after-deletion-chromium-retry1/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/test-results/canvas-comprehensive-Compr-ab3f1-hould-remain-after-deletion-chromium-retry1/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/test-results/canvas-comprehensive-Compr-ab3f1-hould-remain-after-deletion-chromium-retry1/error-context.md"
+                        },
+                        {
+                          "name": "trace",
+                          "contentType": "application/zip",
+                          "path": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/test-results/canvas-comprehensive-Compr-ab3f1-hould-remain-after-deletion-chromium-retry1/trace.zip"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/Users/shreyaspatel/Desktop/Code/openai-realtime-console-edit-figjam/e2e/canvas-comprehensive.spec.ts",
+                        "column": 16,
+                        "line": 1281
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-d3b92fa5e3e6837b68ee",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1263,
+              "column": 3
+            },
+            {
+              "title": "ViewState Cleanup - ViewState should only contain existing nodes",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 11193,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (200, 200)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (200, 200)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (300, 300)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=1, domain=1, viewState=1\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (300, 300)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (400, 400)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=2, domain=2, viewState=2\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (400, 400)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:56.436Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-9f34092e58cd6a1b1426",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1296,
+              "column": 3
+            },
+            {
+              "title": "Double Render Prevention - should not trigger multiple renders for single action",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 1996,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (300, 300)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (300, 300)\n"
+                        },
+                        {
+                          "text": "⏳ \"Generating...\" appeared\n"
+                        },
+                        {
+                          "text": "✅ \"Generating...\" disappeared\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:56.749Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-aae976839e627a0fbd94",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1321,
+              "column": 3
+            },
+            {
+              "title": "localStorage Priority - should use localStorage over URL/remote sources",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 4975,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "📊 Domain after reload: \u001b[33m1\u001b[39m\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:56.839Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-dbbf92152494b867a051",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1340,
+              "column": 3
+            },
+            {
+              "title": "resetCanvas Persistence - should stay empty after resetCanvas and refresh",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 10773,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (200, 200)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (200, 200)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (300, 300)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=1, domain=1, viewState=1\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (300, 300)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:47:58.752Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-c4aaafd9434a2702d520",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1368,
+              "column": 3
+            },
+            {
+              "title": "State Distinction - should distinguish never used vs user cleared",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 7375,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "📊 Fresh state: {\n  hasLocalStorage: \u001b[33mfalse\u001b[39m,\n  isEmpty: \u001b[33mtrue\u001b[39m,\n  domain: { id: \u001b[32m'root'\u001b[39m, children: [], edges: [] }\n}\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (300, 300)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (300, 300)\n"
+                        },
+                        {
+                          "text": "⏳ \"Generating...\" appeared\n"
+                        },
+                        {
+                          "text": "✅ \"Generating...\" disappeared\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "📊 After add state: {\n  hasLocalStorage: \u001b[33mtrue\u001b[39m,\n  isEmpty: \u001b[33mfalse\u001b[39m,\n  domain: { id: \u001b[32m'root'\u001b[39m, children: [ \u001b[36m[Object]\u001b[39m ], edges: [] }\n}\n"
+                        },
+                        {
+                          "text": "📊 User cleared state: {\n  hasLocalStorage: \u001b[33mtrue\u001b[39m,\n  isEmpty: \u001b[33mtrue\u001b[39m,\n  domain: { id: \u001b[32m'root'\u001b[39m, children: [], edges: [] }\n}\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:48:01.821Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-5f62d1e4b7b1b6d9c123",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1394,
+              "column": 3
+            },
+            {
+              "title": "ELK Hook Bypass - FREE mode should not involve ELK hook",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 7,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4179,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (300, 300)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (300, 300)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        }
+                      ],
+                      "stderr": [
+                        {
+                          "text": "(node:53952) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+                        }
+                      ],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:48:05.380Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-16c08546668f2a9bc090",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1456,
+              "column": 3
+            },
+            {
+              "title": "Restoration Path - should go through Orchestrator not ELK hook",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 3755,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:48:05.894Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-cd24e5c5f26299c4b42d",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1487,
+              "column": 3
+            },
+            {
+              "title": "Responsibility Separation - restoration logic should be centralized",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 3671,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:48:07.635Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-2bbc1a76e32c5c078561",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1521,
+              "column": 3
+            },
+            {
+              "title": "Mode Storage Location - Domain should have no mode, ViewState should have modes",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 2876,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (300, 300)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (300, 300)\n"
+                        },
+                        {
+                          "text": "⏳ \"Generating...\" appeared\n"
+                        },
+                        {
+                          "text": "✅ \"Generating...\" disappeared\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:48:09.202Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-cb4494f6a4e185369eff",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1563,
+              "column": 3
+            },
+            {
+              "title": "Drag Node - ViewState stores absolute position after drag",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 5382,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (200, 200)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (200, 200)\n"
+                        },
+                        {
+                          "text": "⏳ \"Generating...\" appeared\n"
+                        },
+                        {
+                          "text": "✅ \"Generating...\" disappeared\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "📍 Initial ViewState position: { id: \u001b[32m'user-node-1764611291699'\u001b[39m, x: \u001b[33m-256\u001b[39m, y: \u001b[33m-208\u001b[39m }\n"
+                        },
+                        {
+                          "text": "📍 After drag ViewState position: { x: \u001b[33m-160\u001b[39m, y: \u001b[33m-112\u001b[39m }\n"
+                        },
+                        {
+                          "text": "📍 Expected change: +100, +100\n"
+                        },
+                        {
+                          "text": "📍 Actual change: { xDelta: \u001b[33m96\u001b[39m, yDelta: \u001b[33m96\u001b[39m }\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:48:09.534Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-36d8f479a95c4a9f07d7",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1641,
+              "column": 3
+            },
+            {
+              "title": "Drag Node Into Group - preserves absolute position, updates parent",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 5495,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "📍 Drag delta: { dragDeltaX: \u001b[33m-436.5\u001b[39m, dragDeltaY: \u001b[33m-385\u001b[39m }\n"
+                        },
+                        {
+                          "text": "📍 Orchestrator parent DURING drag (before mouse up): test-group\n"
+                        },
+                        {
+                          "text": "📍 Debugger parent DURING drag (before mouse up): test-group\n"
+                        },
+                        {
+                          "text": "📍 Final parent (after mouse up): test-group\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:48:09.657Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-3836b02469b2a76a0e06",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1698,
+              "column": 3
+            },
+            {
+              "title": "Drag Node Out of Group - reparenting happens DURING drag, not after",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 7,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5369,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "📍 Initial parent: test-group\n"
+                        },
+                        {
+                          "text": "📍 Orchestrator parent DURING drag (before mouse up): root\n"
+                        },
+                        {
+                          "text": "📍 Debugger parent DURING drag (before mouse up): root\n"
+                        },
+                        {
+                          "text": "📍 Final parent (after mouse up): root\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:48:09.839Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-b3579ec98090ea83db27",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 1885,
+              "column": 3
+            },
+            {
+              "title": "Coordinate Round-Trip - drag then refresh preserves position",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 4,
+                      "status": "passed",
+                      "duration": 10185,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (200, 200)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (200, 200)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "📍 After drag position: { x: \u001b[33m-112\u001b[39m, y: \u001b[33m-64\u001b[39m }\n"
+                        },
+                        {
+                          "text": "📍 After refresh position: { x: \u001b[33m-112\u001b[39m, y: \u001b[33m-64\u001b[39m }\n"
+                        },
+                        {
+                          "text": "📍 Difference: { xDiff: \u001b[33m0\u001b[39m, yDiff: \u001b[33m0\u001b[39m }\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:48:11.315Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-fd6c72fe66ed41e59e86",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 2009,
+              "column": 3
+            },
+            {
+              "title": "Drag Stability - existing nodes should not move when dragging another",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 8311,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "🧪 Adding node at (100, 100)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=0, domain=0, viewState=0\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (100, 100)\n"
+                        },
+                        {
+                          "text": "⏳ \"Generating...\" appeared\n"
+                        },
+                        {
+                          "text": "✅ \"Generating...\" disappeared\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "🧪 Adding node at (500, 300)\n"
+                        },
+                        {
+                          "text": "📊 Initial sync: canvas=1, domain=1, viewState=1\n"
+                        },
+                        {
+                          "text": "🔧 Selecting box tool...\n"
+                        },
+                        {
+                          "text": "🖱️ Clicked canvas at (500, 300)\n"
+                        },
+                        {
+                          "text": "⚠️ No \"Generating...\" found, waiting for domain update...\n"
+                        },
+                        {
+                          "text": "✅ Domain updated successfully\n"
+                        },
+                        {
+                          "text": "📍 First node (will drag): { id: \u001b[32m'user-node-1764611294317'\u001b[39m, x: \u001b[33m-352\u001b[39m, y: \u001b[33m-304\u001b[39m }\n"
+                        },
+                        {
+                          "text": "📍 Second node (should stay): { id: \u001b[32m'user-node-1764611295238'\u001b[39m, x: \u001b[33m48\u001b[39m, y: \u001b[33m-112\u001b[39m }\n"
+                        },
+                        {
+                          "text": "📍 First node movement: { xDiff: \u001b[33m80\u001b[39m, yDiff: \u001b[33m80\u001b[39m }\n"
+                        },
+                        {
+                          "text": "📍 Second node movement (should be 0): { xDiff: \u001b[33m0\u001b[39m, yDiff: \u001b[33m0\u001b[39m }\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:48:12.084Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-df91dfb013bedca956c6",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 2086,
+              "column": 3
+            },
+            {
+              "title": "Group Mode on Reparent - target group set to FREE when node moved in",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 3,
+                      "status": "passed",
+                      "duration": 5689,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "📍 After drag state: { nodeParent: \u001b[32m'mode-group'\u001b[39m, groupMode: \u001b[32m'FREE'\u001b[39m }\n"
+                        },
+                        {
+                          "text": "📍 Expected: nodeParent = mode-group, groupMode = FREE\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:48:14.927Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-2f97ac09443a2563df27",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 2166,
+              "column": 3
+            },
+            {
+              "title": "Selection State Persistence - node and group should remain selected after selection",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 1,
+                      "status": "passed",
+                      "duration": 7125,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "📍 After first click, selected count: \u001b[33m1\u001b[39m\n"
+                        },
+                        {
+                          "text": "📍 After Shift+click, selected count: \u001b[33m1\u001b[39m\n"
+                        },
+                        {
+                          "text": "📍 After 1.5s wait, selected count: \u001b[33m1\u001b[39m\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:48:15.161Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-f2b45d95cfe4ec7b5fb7",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 2280,
+              "column": 3
+            },
+            {
+              "title": "ARCHITECTURAL - Domain change must NOT modify ViewState positions",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 7,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4559,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "📍 Initial ViewState: {\n  nodePos: { x: \u001b[33m500\u001b[39m, y: \u001b[33m500\u001b[39m, w: \u001b[33m96\u001b[39m, h: \u001b[33m96\u001b[39m },\n  groupPos: { x: \u001b[33m100\u001b[39m, y: \u001b[33m100\u001b[39m, w: \u001b[33m300\u001b[39m, h: \u001b[33m300\u001b[39m }\n}\n"
+                        },
+                        {
+                          "text": "📍 After domain modification ViewState: {\n  nodePos: { x: \u001b[33m500\u001b[39m, y: \u001b[33m500\u001b[39m, w: \u001b[33m96\u001b[39m, h: \u001b[33m96\u001b[39m },\n  groupPos: { x: \u001b[33m100\u001b[39m, y: \u001b[33m100\u001b[39m, w: \u001b[33m300\u001b[39m, h: \u001b[33m300\u001b[39m }\n}\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:48:15.220Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-31620c1df284d45629bd",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 2396,
+              "column": 3
+            },
+            {
+              "title": "ARCHITECTURAL - ELK hook must NOT be triggered in FREE mode drag operations",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 7,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5130,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "📍 ELK call count during FREE mode drag: \u001b[33m0\u001b[39m\n"
+                        },
+                        {
+                          "text": "📍 Node 2 position (should be unchanged): {\n  before: { x: \u001b[33m300\u001b[39m, y: \u001b[33m100\u001b[39m, w: \u001b[33m96\u001b[39m, h: \u001b[33m96\u001b[39m },\n  after: { x: \u001b[33m300\u001b[39m, y: \u001b[33m100\u001b[39m, w: \u001b[33m96\u001b[39m, h: \u001b[33m96\u001b[39m }\n}\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:48:19.791Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-de17a802ca2b9d7fd3b2",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 2488,
+              "column": 3
+            },
+            {
+              "title": "ARCHITECTURAL - Only two triggers should update domain in FREE mode: move-in and move-out",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 5,
+                      "status": "passed",
+                      "duration": 6417,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "📍 After drag outside group, domain parent: root\n"
+                        },
+                        {
+                          "text": "📍 After drag INTO group, domain parent: trigger-group\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-01T17:48:20.400Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f1378429791074edf0fb-36877fb4e96c7f6a3489",
+              "file": "canvas-comprehensive.spec.ts",
+              "line": 2586,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2025-12-01T17:47:38.018Z",
+    "duration": 62070.371,
+    "expected": 30,
+    "skipped": 0,
+    "unexpected": 2,
+    "flaky": 0
+  }
+}

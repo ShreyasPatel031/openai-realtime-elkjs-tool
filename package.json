@@ -61,6 +61,7 @@
     "framer-motion": "^12.23.24",
     "history": "^5.3.0",
     "html2canvas": "^1.4.1",
+    "libavoid-js": "^0.4.5",
     "lodash": "^4.17.21",
     "lucide-react": "^0.501.0",
     "minipass": "^7.0.4",

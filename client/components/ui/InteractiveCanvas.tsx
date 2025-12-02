@@ -526,12 +526,122 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       }
     };
 
-    // Log help message
-  // console.log('💡 Console commands available:');
-  // console.log('  - loadSimpleDefault()    → Load simple serverless API architecture');
-  // console.log('  - loadComplexDefault()   → Load complex GCP test architecture');
-  // console.log('  - resetCanvas()          → Reset to empty canvas');
-  // console.log('  - toggleDefaultArchitecture(true/false) → Legacy toggle command');
+    // Libavoid fixtures loader for testing edge routing
+    (window as any).loadLibavoidFixtures = () => {
+      const scenarioNodes = [
+        { id: 'libavoid-h-left', label: 'H-Left', x: 160, y: 200, width: 96, height: 96 },
+        { id: 'libavoid-h-block', label: 'H-Block', x: 320, y: 184, width: 96, height: 128 },
+        { id: 'libavoid-h-right', label: 'H-Right', x: 500, y: 200, width: 96, height: 96 },
+        { id: 'libavoid-v-top', label: 'V-Top', x: 640, y: 80, width: 96, height: 96 },
+        { id: 'libavoid-v-block', label: 'V-Block', x: 620, y: 216, width: 128, height: 96 },
+        { id: 'libavoid-v-bottom', label: 'V-Bottom', x: 640, y: 420, width: 96, height: 96 },
+        { id: 'libavoid-straight-left', label: 'Straight-L', x: 160, y: 520, width: 96, height: 96 },
+        { id: 'libavoid-straight-right', label: 'Straight-R', x: 320, y: 520, width: 96, height: 96 },
+        { id: 'libavoid-d-top-left', label: 'Diag-Top', x: 480, y: 520, width: 96, height: 96 },
+        { id: 'libavoid-d-block', label: 'Diag-Block', x: 600, y: 600, width: 96, height: 96 },
+        { id: 'libavoid-d-bottom-right', label: 'Diag-Bottom', x: 760, y: 760, width: 96, height: 96 },
+        { id: 'libavoid-port-source', label: 'Port-Source', x: 224, y: 656, width: 96, height: 96 },
+        { id: 'libavoid-port-middle1', label: 'Port-Mid1', x: 300, y: 280, width: 96, height: 96 },
+        { id: 'libavoid-port-middle2', label: 'Port-Mid2', x: 300, y: 360, width: 96, height: 96 },
+        { id: 'libavoid-port-target', label: 'Port-Target', x: 500, y: 320, width: 96, height: 96 },
+      ];
+
+      const scenarioEdges = [
+        { id: 'edge-horizontal', source: 'libavoid-h-left', target: 'libavoid-h-right', sourceHandle: 'connector-right-source', targetHandle: 'connector-left-target' },
+        { id: 'edge-vertical', source: 'libavoid-v-top', target: 'libavoid-v-bottom', sourceHandle: 'connector-bottom-source', targetHandle: 'connector-top-target' },
+        { id: 'edge-straight', source: 'libavoid-straight-left', target: 'libavoid-straight-right', sourceHandle: 'connector-right-source', targetHandle: 'connector-left-target' },
+        { id: 'edge-diagonal', source: 'libavoid-d-top-left', target: 'libavoid-d-bottom-right', sourceHandle: 'connector-right-source', targetHandle: 'connector-bottom-target' },
+        { id: 'edge-port-from-1', source: 'libavoid-port-source', target: 'libavoid-port-middle1', sourceHandle: 'connector-right-source', targetHandle: 'connector-left-target' },
+        { id: 'edge-port-from-2', source: 'libavoid-port-source', target: 'libavoid-port-middle2', sourceHandle: 'connector-right-source', targetHandle: 'connector-left-target' },
+        { id: 'edge-port-to-1', source: 'libavoid-port-middle1', target: 'libavoid-port-target', sourceHandle: 'connector-right-source', targetHandle: 'connector-left-target' },
+        { id: 'edge-port-to-2', source: 'libavoid-port-middle2', target: 'libavoid-port-target', sourceHandle: 'connector-right-source', targetHandle: 'connector-left-target' },
+      ];
+
+      try {
+        console.log(`🧪 Loading libavoid canvas fixtures (${scenarioNodes.length} nodes, ${scenarioEdges.length} edges)...`);
+        console.log(`🧪 [LIBAVOID] Tests: obstacle avoidance (h-block, v-block, d-block), port spacing (edge-port-from-*, edge-port-to-*)`);
+
+        // Reset state
+        (window as any).__edgeDebug = {};
+
+        // Create obstacle rectangles for libavoid routing
+        const obstacleRects = scenarioNodes.map(node => ({
+          id: node.id,
+          x: node.x,
+          y: node.y,
+          width: node.width,
+          height: node.height
+        }));
+
+        // Create React Flow nodes directly
+        const rfNodes = scenarioNodes.map((node) => ({
+          id: node.id,
+          type: 'custom',
+          position: { x: node.x, y: node.y },
+          data: {
+            label: node.label,
+            width: node.width,
+            height: node.height,
+            icon: 'default'
+          },
+          style: { width: node.width, height: node.height },
+        }));
+
+        // Create React Flow edges with handles AND obstacles stored in data
+        const rfEdges = scenarioEdges.map((edge) => ({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          type: 'step',
+          data: {
+            sourceHandle: edge.sourceHandle,
+            targetHandle: edge.targetHandle,
+            sourcePosition: 'right',
+            targetPosition: 'left',
+            // CRITICAL: Pass all nodes as static obstacles for libavoid routing
+            staticObstacles: obstacleRects,
+            staticObstacleIds: scenarioNodes.map(n => n.id),
+            rerouteKey: Date.now() // Trigger routing
+          },
+        }));
+
+        // Update viewState
+        if (viewStateRef.current) {
+          viewStateRef.current = { node: {}, group: {}, edge: {} };
+          scenarioNodes.forEach((node) => {
+            viewStateRef.current!.node[node.id] = { x: node.x, y: node.y, w: node.width, h: node.height };
+          });
+        }
+
+        // Set nodes and edges
+        setNodes(rfNodes as any);
+        setEdges(rfEdges as any);
+
+        console.log(`🧪 [LIBAVOID] Loaded ${rfNodes.length} nodes and ${rfEdges.length} edges`);
+        return true;
+      } catch (error) {
+        console.error('❌ Failed to load libavoid fixtures:', error);
+        return false;
+      }
+    };
+
+    // Auto-load libavoid fixtures if URL param is set
+    const shouldForceLibavoidFixtures = (() => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('libavoidFixtures') === '1';
+      } catch {
+        return false;
+      }
+    })();
+
+    if (shouldForceLibavoidFixtures) {
+      setTimeout(() => {
+        if (typeof (window as any).loadLibavoidFixtures === 'function') {
+          (window as any).loadLibavoidFixtures();
+        }
+      }, 500);
+    }
 
     // Cleanup
     return () => {
@@ -539,6 +649,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       delete (window as any).loadComplexDefault;
       delete (window as any).resetCanvas;
       delete (window as any).toggleDefaultArchitecture;
+      delete (window as any).loadLibavoidFixtures;
     };
   }, []);
   

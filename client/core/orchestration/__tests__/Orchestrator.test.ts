@@ -6,10 +6,29 @@
  * Implementation will be completed as dependencies become available.
  */
 
-import { apply } from '../Orchestrator';
+import { apply, initializeOrchestrator } from '../Orchestrator';
 import type { EditIntent } from '../types';
+import type { RawGraph } from '../../../components/graph/types/index';
+import type { ViewState } from '../../viewstate/ViewState';
 
 describe('Orchestrator (stub)', () => {
+  let graphRef: { current: RawGraph | null };
+  let viewStateRef: { current: ViewState };
+
+  beforeEach(() => {
+    graphRef = { current: { id: 'root', children: [], edges: [] } };
+    viewStateRef = { current: { node: {}, group: {}, edge: {}, layout: {} } };
+    
+    initializeOrchestrator(
+      graphRef,
+      viewStateRef,
+      () => {}, // renderTrigger
+      (graph) => { graphRef.current = graph; },
+      () => {}, // setNodes
+      () => {}  // setEdges
+    );
+  });
+
   describe('apply', () => {
     it('should export apply function', () => {
       expect(typeof apply).toBe('function');

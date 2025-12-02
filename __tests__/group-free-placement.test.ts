@@ -1,7 +1,7 @@
 import { jest } from "@jest/globals";
 import type React from "react";
 import type { Node } from "reactflow";
-import { handleGroupToolPaneClick } from "../client/components/ui/canvasGroupInteractions";
+import { handleGroupToolPaneClick } from "../client/utils/canvas/canvasGroupInteractions";
 
 describe("handleGroupToolPaneClick", () => {
   afterEach(() => {
@@ -66,7 +66,7 @@ describe("handleGroupToolPaneClick", () => {
     const setSelectedNodes = jest.fn();
     const setSelectedTool = jest.fn();
 
-    const viewStateRef = { current: undefined as any };
+    const viewStateRef = { current: { node: {}, group: {}, edge: {} } as any };
     const pendingSelectionRef = { current: null as any };
     const shouldSkipFitViewRef = { current: false };
 
@@ -107,9 +107,10 @@ describe("handleGroupToolPaneClick", () => {
     });
 
     expect(viewStateRef.current.node).toBeDefined();
-    const draftId = "Draft group 1700000001234";
-    expect(viewStateRef.current.node[draftId]).toEqual({ x: 272, y: 224, w: 480, h: 320 });
-    expect(pendingSelectionRef.current).toEqual({ id: draftId, size: { width: 480, height: 320 } });
+    // Get the actual ID from batchPayload
+    const actualDraftId = batchPayload[0]?.nodename || "Draft group 1700000001234";
+    expect(viewStateRef.current.node[actualDraftId]).toEqual({ x: 272, y: 224, w: 480, h: 320 });
+    expect(pendingSelectionRef.current).toEqual({ id: actualDraftId, size: { width: 480, height: 320 } });
     expect(shouldSkipFitViewRef.current).toBe(true);
     expect(setSelectedTool).toHaveBeenCalledWith("arrow");
 
@@ -117,7 +118,7 @@ describe("handleGroupToolPaneClick", () => {
     expect(setNodes).toHaveBeenCalled();
     expect(typeof capturedNodesUpdater).toBe("function");
     const updatedNodes = capturedNodesUpdater?.([] as Node[]);
-    const createdNode = updatedNodes?.find((node) => node.id === draftId);
+    const createdNode = updatedNodes?.find((node) => node.id === actualDraftId);
     expect(createdNode).toBeDefined();
     expect(createdNode?.selected).toBe(true);
     expect(createdNode?.data).toMatchObject({

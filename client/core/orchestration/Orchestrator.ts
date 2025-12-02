@@ -279,17 +279,32 @@ export async function apply(intent: EditIntent): Promise<void> {
         // CRITICAL: Clone graph first since deleteNode mutates in place
         const graphToDelete = JSON.parse(JSON.stringify(updatedGraph));
         
+        // Collect all descendant node IDs before deletion (for ViewState cleanup)
+        const nodeToDelete = findNodeById(graphToDelete, payload.nodeId!);
+        const allDescendantIds = nodeToDelete ? (() => {
+          const ids = new Set<string>();
+          const collectIds = (n: any) => {
+            if (!n) return;
+            ids.add(n.id);
+            (n.children || []).forEach(collectIds);
+          };
+          collectIds(nodeToDelete);
+          return Array.from(ids);
+        })() : [payload.nodeId!];
+        
         // 1. Domain.mutate (delete node structure)
         updatedGraph = deleteNode(payload.nodeId!, graphToDelete);
         
-        // 2. Clean up ViewState (remove node/group geometry) BEFORE updating graph
+        // 2. Clean up ViewState (remove node/group geometry for node and all descendants)
         const cleanedViewState = { ...viewStateRef.current };
-        if (cleanedViewState.node?.[payload.nodeId!]) {
-          delete cleanedViewState.node[payload.nodeId!];
-        }
-        if (cleanedViewState.group?.[payload.nodeId!]) {
-          delete cleanedViewState.group[payload.nodeId!];
-        }
+        allDescendantIds.forEach((nodeId) => {
+          if (cleanedViewState.node?.[nodeId]) {
+            delete cleanedViewState.node[nodeId];
+          }
+          if (cleanedViewState.group?.[nodeId]) {
+            delete cleanedViewState.group[nodeId];
+          }
+        });
         viewStateRef.current = cleanedViewState;
         
         // 3. Update graph state (both ref and React state)

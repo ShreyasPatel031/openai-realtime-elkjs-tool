@@ -18,6 +18,7 @@ describe('ViewState', () => {
         node: {},
         group: {},
         edge: {},
+        layout: {},
       });
     });
 

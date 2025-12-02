@@ -6,6 +6,37 @@
 import React from 'react';
 import { render, fireEvent, waitFor, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
+
+// Mock Firebase before any imports that use it
+jest.mock('../../../lib/firebase', () => ({
+  auth: {},
+  db: {},
+  googleProvider: {},
+  initializeApp: jest.fn(),
+  getAuth: jest.fn(() => ({})),
+  getFirestore: jest.fn(() => ({})),
+  GoogleAuthProvider: jest.fn(),
+}));
+
+// Mock canvasStyles to avoid ESM export issues
+jest.mock('../../graph/styles/canvasStyles', () => ({
+  CANVAS_STYLES: {
+    edges: {
+      default: { stroke: '#bbb', strokeWidth: 2, opacity: 1 },
+      selected: { strokeDasharray: '5,5' },
+      connected: { stroke: '#0066cc', strokeWidth: 2 },
+    },
+    canvas: {
+      background: { light: 'bg-white', dark: 'bg-gray-900' },
+      zoom: { min: 0.1, max: 2 },
+      viewport: { default: { x: 0, y: 0, zoom: 1 } },
+    },
+    zIndex: { edges: 2000 },
+  },
+  getEdgeStyle: jest.fn(() => ({})),
+  getEdgeZIndex: jest.fn(() => 2000),
+}));
+
 import InteractiveCanvas from '../InteractiveCanvas';
 import { ViewModeProvider } from '../../../contexts/ViewModeContext';
 

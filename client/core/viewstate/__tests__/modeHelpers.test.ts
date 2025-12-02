@@ -130,8 +130,12 @@ describe('modeHelpers', () => {
     it('should not overwrite existing ViewState.layout', () => {
       const result = migrateModeDomainToViewState(mockDomainGraph, mockViewState);
       
-      // Should preserve existing layout
-      expect(result.layout).toEqual(mockViewState.layout);
+      // Should preserve existing layout entries (not overwrite them)
+      expect(result.layout!['group-1']).toEqual(mockViewState.layout!['group-1']);
+      expect(result.layout!['group-2']).toEqual(mockViewState.layout!['group-2']);
+      // But can add missing entries for groups that exist in domain
+      expect(result.layout!['group-3']).toBeDefined();
+      expect(result.layout!['root']).toBeDefined();
     });
   });
 

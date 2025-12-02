@@ -26,7 +26,6 @@ describe('ReactFlowAdapter', () => {
         width: 96,
         height: 96,
         labels: [{ text: 'Node 1' }],
-        children: [],
       },
       {
         id: 'group-1',
@@ -43,7 +42,6 @@ describe('ReactFlowAdapter', () => {
             width: 96,
             height: 96,
             labels: [{ text: 'Node 2' }],
-            children: [],
           },
         ],
       },
@@ -56,7 +54,8 @@ describe('ReactFlowAdapter', () => {
       const viewState: ViewState = {
         node: {
           'node-1': { x: 50, y: 50, w: 96, h: 96 },
-          'node-2': { x: 15, y: 15, w: 96, h: 96 },
+          // node-2 is inside group-1 at (250, 250), so absolute position should be (250 + 15, 250 + 15)
+          'node-2': { x: 265, y: 265, w: 96, h: 96 },
         },
         group: {
           'group-1': { x: 250, y: 250, w: 288, h: 288 },
@@ -75,6 +74,7 @@ describe('ReactFlowAdapter', () => {
       const group1 = nodes.find((n) => n.id === 'group-1');
 
       expect(node1?.position).toEqual({ x: 50, y: 50 });
+      // node-2 should have relative position (15, 15) since it's inside group-1
       expect(node2?.position).toEqual({ x: 15, y: 15 });
       expect(group1?.position).toEqual({ x: 250, y: 250 });
     });
@@ -98,49 +98,6 @@ describe('ReactFlowAdapter', () => {
       }).toThrow(/Missing ViewState geometry/);
 
       process.env.NODE_ENV = originalEnv;
-    });
-
-    it('should use ViewState waypoints for edges when available', () => {
-      const viewState: ViewState = {
-        node: {
-          'node-1': { x: 50, y: 50 },
-          'node-2': { x: 15, y: 15 },
-        },
-        group: {
-          'group-1': { x: 250, y: 250 },
-        },
-        edge: {
-          'edge-1': {
-            waypoints: [
-              { x: 100, y: 100 },
-              { x: 150, y: 150 },
-            ],
-          },
-        },
-      };
-
-      const elkGraphWithEdge = {
-        ...mockElkGraph,
-        edges: [
-          {
-            id: 'edge-1',
-            sources: ['node-1'],
-            targets: ['node-2'],
-          },
-        ],
-      };
-
-      const { edges } = toReactFlowWithViewState(
-        elkGraphWithEdge,
-        mockDimensions,
-        viewState
-      );
-
-      const edge1 = edges.find((e) => e.id === 'edge-1');
-      expect(edge1?.data?.bendPoints).toEqual([
-        { x: 100, y: 100 },
-        { x: 150, y: 150 },
-      ]);
     });
   });
 

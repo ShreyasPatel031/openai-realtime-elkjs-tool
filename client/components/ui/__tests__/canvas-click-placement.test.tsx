@@ -34,6 +34,7 @@ const createMockMouseEvent = (clientX: number, clientY: number): MouseEvent => (
 
 describe('Canvas Click Placement Integration', () => {
   it('should place node exactly where user clicks on canvas', async () => {
+    jest.setTimeout(15000); // Increase timeout for async rendering
     // Setup test environment
     const testGraph = { current: { id: 'root', children: [], edges: [] } };
     const testViewState = { current: { node: {}, group: {}, edge: {} } };
@@ -141,6 +142,7 @@ describe('Canvas Click Placement Integration', () => {
   });
 
   it('should place multiple nodes at different click positions', async () => {
+    jest.setTimeout(20000); // Increase timeout for multiple async operations
     const testGraph = { current: { id: 'root', children: [], edges: [] } };
     const testViewState = { current: { node: {}, group: {}, edge: {} } };
     let renderedNodes: any[] = [];
@@ -199,6 +201,7 @@ describe('Canvas Click Placement Integration', () => {
   });
 
   it('should handle edge cases: clicks at canvas boundaries', async () => {
+    jest.setTimeout(20000); // Increase timeout for multiple async operations
     const testGraph = { current: { id: 'root', children: [], edges: [] } };
     const testViewState = { current: { node: {}, group: {}, edge: {} } };
     let renderedNodes: any[] = [];

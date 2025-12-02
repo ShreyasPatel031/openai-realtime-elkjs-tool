@@ -37,6 +37,15 @@ jest.mock('../../graph/styles/canvasStyles', () => ({
   getEdgeZIndex: jest.fn(() => 2000),
 }));
 
+// Mock libavoid-js to avoid ESM export issues
+jest.mock('libavoid-js', () => ({
+  AvoidLib: {
+    Router: jest.fn(),
+    ShapeRef: jest.fn(),
+    ConnRef: jest.fn(),
+  },
+}));
+
 import InteractiveCanvas from '../InteractiveCanvas';
 import { ViewModeProvider } from '../../../contexts/ViewModeContext';
 

@@ -59,7 +59,20 @@ jest.mock('libavoid-js', () => ({
 
 // Mock SaveAuth component to avoid Firebase auth issues
 jest.mock('../../auth/SaveAuth', () => ({
-  default: () => null,
+  __esModule: true,
+  default: jest.fn(() => null),
+}));
+
+// Mock ArchitectureSidebar to avoid rendering issues
+jest.mock('../ArchitectureSidebar', () => ({
+  __esModule: true,
+  default: jest.fn(() => null),
+}));
+
+// Mock ProcessingStatusIcon
+jest.mock('../ProcessingStatusIcon', () => ({
+  __esModule: true,
+  default: jest.fn(() => null),
 }));
 
 import InteractiveCanvas from '../InteractiveCanvas';

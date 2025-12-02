@@ -587,6 +587,15 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           style: { width: node.width, height: node.height },
         }));
 
+        // Helper to derive position from handle name
+        const handleToPosition = (handle: string): string => {
+          if (handle.includes('right')) return 'right';
+          if (handle.includes('left')) return 'left';
+          if (handle.includes('top')) return 'top';
+          if (handle.includes('bottom')) return 'bottom';
+          return 'right'; // default
+        };
+
         // Create React Flow edges with handles AND obstacles stored in data
         const rfEdges = scenarioEdges.map((edge) => ({
           id: edge.id,
@@ -596,8 +605,9 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           data: {
             sourceHandle: edge.sourceHandle,
             targetHandle: edge.targetHandle,
-            sourcePosition: 'right',
-            targetPosition: 'left',
+            // CRITICAL: Derive positions from handles for correct libavoid pin directions
+            sourcePosition: handleToPosition(edge.sourceHandle),
+            targetPosition: handleToPosition(edge.targetHandle),
             // CRITICAL: Pass all nodes as static obstacles for libavoid routing
             staticObstacles: obstacleRects,
             staticObstacleIds: scenarioNodes.map(n => n.id),
@@ -950,6 +960,66 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     
     console.log('[🔄 CANVAS] Orchestrator initialized from InteractiveCanvas');
   }, [setRawGraph, setNodes, setEdges]); // Stable dependencies
+
+  // AUTO-CONFIGURE OBSTACLES: Ensure all edges have staticObstacleIds AND staticObstacles for libavoid routing
+  // This is CRITICAL - without this, libavoid doesn't know about obstacles and edges pass through nodes
+  // We pass BOTH staticObstacleIds AND staticObstacles with actual positions to ensure correct routing
+  useEffect(() => {
+    if (nodes.length === 0 || edges.length === 0) {
+      return;
+    }
+
+    // Build obstacle rects from current node positions
+    const allObstacles = nodes.map((node) => ({
+      id: node.id,
+      x: node.position?.x ?? 0,
+      y: node.position?.y ?? 0,
+      width: (node as any).width ?? node.data?.width ?? 96,
+      height: (node as any).height ?? node.data?.height ?? 96
+    }));
+    
+    const allNodeIds = allObstacles.map(o => o.id);
+    if (allNodeIds.length === 0) {
+      return;
+    }
+
+    // Create a signature to detect if obstacles changed
+    const obstacleSignature = allObstacles
+      .map(o => `${o.id}:${Math.round(o.x)}:${Math.round(o.y)}:${Math.round(o.width)}:${Math.round(o.height)}`)
+      .sort()
+      .join('|');
+
+    setEdges((prevEdges) => {
+      let updated = false;
+      const nextEdges = prevEdges.map((edge) => {
+        const data = edge.data || {};
+        const currentSignature = data._obstacleSignature || '';
+        
+        // If edge has same obstacle signature, skip it
+        if (currentSignature === obstacleSignature) {
+          return edge;
+        }
+
+        // Configure obstacles with positions
+        updated = true;
+
+        return {
+          ...edge,
+          type: edge.type || 'step', // Ensure type is set to 'step' for StepEdge to mount
+          data: {
+            ...data,
+            staticObstacleIds: allNodeIds,
+            staticObstacles: allObstacles, // Include actual positions!
+            obstacleMargin: 8, // Reduced from 20 - smaller spacing makes routing work better
+            _obstacleSignature: obstacleSignature, // Track for change detection
+            rerouteKey: Date.now() // Force re-routing - this is the dependency StepEdge watches
+          },
+        };
+      });
+
+      return updated ? nextEdges : prevEdges;
+    });
+  }, [edges, nodes, setEdges]);
 
   // Ref to store ReactFlow instance for auto-zoom functionality
   const reactFlowRef = useRef<any>(null);

@@ -38,7 +38,7 @@ describe('Canvas Click Placement Integration', () => {
   it('should place node exactly where user clicks on canvas', async () => {
     // Setup test environment
     const testGraph = { current: { id: 'root', children: [], edges: [] } };
-    const testViewState = { current: { node: {}, group: {}, edge: {} } };
+    const testViewState = { current: { node: {}, group: {}, edge: {}, layout: {} } };
     let renderedNodes: any[] = [];
     let renderedEdges: any[] = [];
 
@@ -144,7 +144,7 @@ describe('Canvas Click Placement Integration', () => {
 
   it('should place multiple nodes at different click positions', async () => {
     const testGraph = { current: { id: 'root', children: [], edges: [] } };
-    const testViewState = { current: { node: {}, group: {}, edge: {} } };
+    const testViewState = { current: { node: {}, group: {}, edge: {}, layout: {} } };
     let renderedNodes: any[] = [];
 
     initializeOrchestrator(
@@ -202,7 +202,7 @@ describe('Canvas Click Placement Integration', () => {
 
   it('should handle edge cases: clicks at canvas boundaries', async () => {
     const testGraph = { current: { id: 'root', children: [], edges: [] } };
-    const testViewState = { current: { node: {}, group: {}, edge: {} } };
+    const testViewState = { current: { node: {}, group: {}, edge: {}, layout: {} } };
     let renderedNodes: any[] = [];
 
     initializeOrchestrator(

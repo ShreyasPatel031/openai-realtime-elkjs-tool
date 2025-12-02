@@ -48,12 +48,12 @@ const CanvasToolbar: React.FC<CanvasToolbarProps> = ({ selectedTool, onSelect, c
 
   // Icon mappings with graceful fallbacks across lucide versions
   const ArrowIcon = (Lucide as any).MousePointer2 || (Lucide as any).MousePointer;
-  const HandIcon = (Lucide as any).Hand || (Lucide as any).HandIcon || (Lucide as any).HandPalm;
+  const HandIcon = (Lucide as any).Hand || (Lucide as any).HandIcon;
   const BoxIcon = (Lucide as any).Square || (Lucide as any).RectangleHorizontal || (Lucide as any).RectangleVertical;
-  // Use Spline per Figma selection; keep BezierCurve only as fallback if Spline missing
-  const ConnectorIcon = (Lucide as any).Spline || (Lucide as any).BezierCurve;
-  // Use Scan per Figma selection; keep RectangleDashed as fallback
-  const GroupIcon = (Lucide as any).Scan || (Lucide as any).RectangleDashed || (Lucide as any).SquareDashed;
+  // Use Spline per Figma selection
+  const ConnectorIcon = (Lucide as any).Spline || (Lucide as any).Link;
+  // Use Scan per Figma selection
+  const GroupIcon = (Lucide as any).Scan || (Lucide as any).SquareDashed || (Lucide as any).RectangleHorizontal;
 
   return (
     <div

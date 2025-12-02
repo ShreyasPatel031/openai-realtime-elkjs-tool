@@ -24,13 +24,19 @@ const createMockReactFlowRef = () => ({
 });
 
 // Mock MouseEvent
-const createMockMouseEvent = (clientX: number, clientY: number): MouseEvent => ({
-  clientX,
-  clientY,
-  target: { classList: { contains: () => true } },
-  preventDefault: jest.fn(),
-  stopPropagation: jest.fn()
-} as any);
+const createMockMouseEvent = (clientX: number, clientY: number): MouseEvent => {
+  const mockDiv = document.createElement('div');
+  mockDiv.className = 'react-flow__pane';
+  return {
+    clientX,
+    clientY,
+    currentTarget: mockDiv,
+    target: mockDiv,
+    classList: { contains: () => true },
+    preventDefault: jest.fn(),
+    stopPropagation: jest.fn()
+  } as any;
+};
 
 describe('Canvas Click Placement Integration', () => {
   jest.setTimeout(20000); // Increase timeout for async rendering

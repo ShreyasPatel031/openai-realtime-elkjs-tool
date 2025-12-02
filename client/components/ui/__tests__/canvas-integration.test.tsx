@@ -9,13 +9,24 @@ import '@testing-library/jest-dom';
 
 // Mock Firebase before any imports that use it
 jest.mock('../../../lib/firebase', () => ({
-  auth: {},
+  auth: {
+    currentUser: null,
+  },
   db: {},
   googleProvider: {},
   initializeApp: jest.fn(),
-  getAuth: jest.fn(() => ({})),
+  getAuth: jest.fn(() => ({ currentUser: null })),
   getFirestore: jest.fn(() => ({})),
   GoogleAuthProvider: jest.fn(),
+}));
+
+// Mock firebase/auth functions
+jest.mock('firebase/auth', () => ({
+  GoogleAuthProvider: jest.fn(),
+  signInWithPopup: jest.fn(),
+  signOut: jest.fn(),
+  onAuthStateChanged: jest.fn(() => jest.fn()), // Return unsubscribe function
+  getIdToken: jest.fn(),
 }));
 
 // Mock canvasStyles to avoid ESM export issues
@@ -44,6 +55,11 @@ jest.mock('libavoid-js', () => ({
     ShapeRef: jest.fn(),
     ConnRef: jest.fn(),
   },
+}));
+
+// Mock SaveAuth component to avoid Firebase auth issues
+jest.mock('../../auth/SaveAuth', () => ({
+  default: () => null,
 }));
 
 import InteractiveCanvas from '../InteractiveCanvas';

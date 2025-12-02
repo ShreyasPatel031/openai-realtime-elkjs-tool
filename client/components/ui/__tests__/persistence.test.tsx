@@ -372,6 +372,13 @@ describe('Node Persistence', () => {
     
     await apply(addNodeIntent);
     
+    // Wait for async rendering to complete
+    let attempts = 0;
+    while (renderedNodes.length === 0 && attempts < 50) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      attempts++;
+    }
+    
     // Step 9: CRITICAL CHECK - Node must appear in rendered nodes (on canvas)
     const renderedNode = renderedNodes.find((n: any) => n.id === 'test-canvas-node');
     if (!renderedNode) {

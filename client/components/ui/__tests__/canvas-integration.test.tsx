@@ -89,7 +89,11 @@ jest.mock('../../../hooks/useChatSession', () => ({
     messages: [],
     sendMessage: jest.fn(),
     clearMessages: jest.fn(),
-    isLoading: false
+    isLoading: false,
+    isSending: false,
+    messageSendStatus: null,
+    processEvents: jest.fn(),
+    safeSendClientEvent: jest.fn()
   })
 }));
 

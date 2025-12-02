@@ -99,9 +99,13 @@ test.describe('Actual Canvas Rendering', () => {
         // React Flow stores edge ID in data-testid with prefix "rf__edge-"
         const testId = edge.getAttribute('data-testid') || '';
         const edgeId = testId.replace('rf__edge-', '') || `unknown-${index}`;
+        // Check edge type from class name
+        const classList = Array.from(edge.classList);
+        const edgeType = classList.find(c => c.startsWith('react-flow__edge-') && c !== 'react-flow__edge-path')?.replace('react-flow__edge-', '') || 'unknown';
         return {
           id: edgeId,
           pathData: path?.getAttribute('d') || '',
+          type: edgeType,
         };
       });
       

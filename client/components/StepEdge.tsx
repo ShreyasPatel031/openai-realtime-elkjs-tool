@@ -534,6 +534,20 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
         const effectiveSourcePosition = dataSourcePosition ?? resolvePositionValue(sourcePosition, baseSourcePosition);
         const effectiveTargetPosition = dataTargetPosition ?? resolvePositionValue(targetPosition, baseTargetPosition);
         
+        // Debug: Log position resolution for edge-vertical
+        if (id === 'edge-vertical') {
+          console.log(`[StepEdge:${id}] 🔍 POSITION DEBUG:`, {
+            edgeDataSourcePos: edgeData?.sourcePosition,
+            edgeDataTargetPos: edgeData?.targetPosition,
+            dataSourcePosition: dataSourcePosition ? Position[dataSourcePosition] : 'undefined',
+            dataTargetPosition: dataTargetPosition ? Position[dataTargetPosition] : 'undefined',
+            effectiveSourcePosition: Position[effectiveSourcePosition],
+            effectiveTargetPosition: Position[effectiveTargetPosition],
+            baseSourcePosition: Position[baseSourcePosition],
+            baseTargetPosition: Position[baseTargetPosition],
+          });
+        }
+        
         
         // Phase 1: Register this edge in the port map
         const srcPortKey = `${source}:${effectiveSourcePosition}`;

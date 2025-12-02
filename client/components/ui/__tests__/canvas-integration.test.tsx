@@ -70,7 +70,7 @@ jest.mock('../ArchitectureSidebar', () => ({
 }));
 
 // Mock ProcessingStatusIcon
-jest.mock('../ProcessingStatusIcon', () => ({
+jest.mock('../../ProcessingStatusIcon', () => ({
   __esModule: true,
   default: jest.fn(() => null),
 }));

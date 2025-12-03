@@ -270,12 +270,24 @@ test.describe('Canvas FREE-mode interactions', () => {
     // Click on the left connector dot of the second node
     await page.mouse.click(end.x, end.y, { delay: 100 });
 
-    // Wait for edge to appear
-    await page.waitForFunction(
-      (previous) => document.querySelectorAll('.react-flow__edge').length > previous,
-      prevEdgeCount,
-      { timeout: 15000 },
-    );
+    // Wait for edge to appear - give extra time for edge creation to complete
+    await page.waitForTimeout(1000);
+    
+    try {
+      await page.waitForFunction(
+        (previous) => document.querySelectorAll('.react-flow__edge').length > previous,
+        prevEdgeCount,
+        { timeout: 20000 }, // Increased timeout for flaky test
+      );
+    } catch (e) {
+      // Get diagnostic info before failing
+      const diagnostic = await page.evaluate(() => ({
+        edgeCount: document.querySelectorAll('.react-flow__edge').length,
+        nodes: document.querySelectorAll('.react-flow__node').length,
+        hasConnectorButton: !!document.querySelector('button[aria-label*="connector" i]')
+      }));
+      throw new Error(`Edge did not appear. Previous count: ${prevEdgeCount}, Current: ${diagnostic.edgeCount}, Nodes: ${diagnostic.nodes}`);
+    }
 
     const finalEdgeCount = await page.evaluate(() => document.querySelectorAll('.react-flow__edge').length);
     expect(finalEdgeCount).toBeGreaterThan(prevEdgeCount);

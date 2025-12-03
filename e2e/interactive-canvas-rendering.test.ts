@@ -1,12 +1,15 @@
 import { test, expect } from '@playwright/test';
 
+const baseURL = process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL}/canvas` : 'http://localhost:3000/canvas';
+
 test.describe('InteractiveCanvas Rendering', () => {
   test.skip('should render empty canvas that can be interacted with', async ({ page }) => {
     console.log('🚀 Starting InteractiveCanvas rendering test...');
     
     // Navigate to the application
-    await page.goto('http://localhost:3000');
-    await page.waitForLoadState('networkidle');
+    await page.goto(baseURL);
+    await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
+    await page.waitForSelector('.react-flow', { timeout: 15000 });
     console.log('✅ Page loaded successfully');
     
     // Wait for the canvas to initialize
@@ -68,8 +71,9 @@ test.describe('InteractiveCanvas Rendering', () => {
     console.log('🚀 Testing architecture generation and node display...');
     
     // Navigate to the application
-    await page.goto('http://localhost:3000');
-    await page.waitForLoadState('networkidle');
+    await page.goto(baseURL);
+    await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
+    await page.waitForSelector('.react-flow', { timeout: 15000 });
     console.log('✅ Page loaded successfully');
     
         await page.waitForTimeout(1000);

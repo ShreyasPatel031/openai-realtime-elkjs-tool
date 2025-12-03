@@ -231,18 +231,7 @@ test.describe('Canvas FREE-mode interactions', () => {
 
     const prevEdgeCount = await page.evaluate(() => document.querySelectorAll('.react-flow__edge').length);
 
-    // Click connector tool and wait for it to be active
     await page.click('button[aria-label="Add connector (C)"]', { timeout: 5000 });
-    await page.waitForTimeout(300); // Wait for tool activation
-    
-    // Verify connector tool is active
-    const connectorToolActive = await page.evaluate(() => {
-      const btn = document.querySelector('button[aria-label*="connector" i]');
-      return btn?.getAttribute('class')?.includes('bg-blue') || false;
-    });
-    if (!connectorToolActive) {
-      console.warn('⚠️ Connector tool may not be active, continuing anyway...');
-    }
     
     // Wait for connector dots to appear (green background indicates they're visible)
     await page.waitForFunction(
@@ -252,9 +241,6 @@ test.describe('Canvas FREE-mode interactions', () => {
       },
       { timeout: 10000 }
     );
-    
-    // Extra wait to ensure dots are fully rendered and clickable
-    await page.waitForTimeout(500);
 
     // Get updated node positions after connector tool is activated
     const updatedSnapshots = await getNodeSnapshots(page);
@@ -278,25 +264,14 @@ test.describe('Canvas FREE-mode interactions', () => {
     // Click on the right connector dot of the first node
     await page.mouse.click(start.x, start.y, { delay: 100 });
 
-    // Wait for connection state to be established - check for connecting indicator
+    // Wait for connection state to be established
     await page.waitForTimeout(500);
-    await page.waitForFunction(
-      () => {
-        // Check if we're in connecting state (edge preview should appear)
-        const hasEdgePreview = document.querySelector('.react-flow__edge') || 
-                               document.querySelector('[class*="edge"]');
-        return hasEdgePreview !== null;
-      },
-      { timeout: 5000 }
-    ).catch(() => {
-      // If no preview appears, that's okay - continue anyway
-    });
 
     // Click on the left connector dot of the second node  
     await page.mouse.click(end.x, end.y, { delay: 100 });
     
     // Wait for edge creation to complete
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(1000);
 
     // Wait for edge to appear
     try {

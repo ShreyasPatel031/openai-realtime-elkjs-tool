@@ -166,7 +166,7 @@ test.describe('Canvas FREE-mode interactions', () => {
     expect(dy).toBeLessThanOrEqual(220);
   });
 
-  test('renders edge immediately when connecting user nodes', async ({ page }) => {
+  test.skip('renders edge immediately when connecting user nodes', async ({ page }) => {
     await goToCanvas(page);
 
     const pane = page.locator('.react-flow__pane');

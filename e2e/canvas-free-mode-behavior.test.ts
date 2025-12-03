@@ -265,14 +265,15 @@ test.describe('Canvas FREE-mode interactions', () => {
     await page.mouse.click(start.x, start.y, { delay: 100 });
 
     // Wait for connection state to be established
-    await page.waitForTimeout(500);
-
-    // Click on the left connector dot of the second node
-    await page.mouse.click(end.x, end.y, { delay: 100 });
-
-    // Wait for edge to appear - give extra time for edge creation to complete
     await page.waitForTimeout(1000);
+
+    // Click on the left connector dot of the second node  
+    await page.mouse.click(end.x, end.y, { delay: 100 });
     
+    // Wait for edge creation to start
+    await page.waitForTimeout(1000);
+
+    // Wait for edge to appear
     try {
       await page.waitForFunction(
         (previous) => document.querySelectorAll('.react-flow__edge').length > previous,

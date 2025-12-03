@@ -1,5 +1,7 @@
 import { test, expect, Page, Locator } from "@playwright/test";
 
+const baseURL = process.env.E2E_BASE_URL ? `${process.env.E2E_BASE_URL}/canvas` : 'http://localhost:3000/canvas';
+
 test.beforeEach(async ({ page }) => {
   page.on("console", (message) => {
     console.log(`[browser:${message.type()}] ${message.text()}`);
@@ -12,7 +14,8 @@ interface NodeSnapshot {
 }
 
 async function goToCanvas(page: Page) {
-  await page.goto("http://localhost:3000");
+  await page.goto(baseURL);
+  await page.waitForLoadState('domcontentloaded', { timeout: 15000 });
   await page.waitForSelector(".react-flow__pane", { timeout: 20000 });
 }
 

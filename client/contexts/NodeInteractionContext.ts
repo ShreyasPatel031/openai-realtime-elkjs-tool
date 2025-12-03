@@ -10,6 +10,7 @@ export interface NodeInteractionContextValue {
   handleAddNodeToGroup: (groupId: string) => void
   handleArrangeGroup?: (groupId: string) => void
   handleCreateWrapperAndArrange?: (selectionIds: string[]) => void
+  handleGroupResize?: (groupId: string, width: number, height: number, x: number, y: number) => void
   selectedNodeIds: string[]
 }
 

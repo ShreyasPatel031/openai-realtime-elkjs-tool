@@ -12,7 +12,7 @@ export default defineConfig({
   },
   fullyParallel: false, // Run tests sequentially to avoid port conflicts
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 1,
+  retries: 0,
   workers: 1, // Single worker to avoid conflicts
   reporter: 'list',
   use: {

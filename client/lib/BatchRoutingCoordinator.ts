@@ -78,7 +78,7 @@ export class BatchRoutingCoordinator {
       this.routerVersion = routerVersion;
       this.batchStartTime = Date.now();
       
-      console.log(`[BatchRoutingCoordinator] Initialized with router version: ${routerVersion}`);
+      // Router initialized
     }
   }
   
@@ -87,7 +87,7 @@ export class BatchRoutingCoordinator {
    */
   setExpectedEdgeCount(count: number): void {
     if (this.expectedEdgeCount !== count) {
-      console.log(`[BatchRoutingCoordinator] Expected edge count changed: ${this.expectedEdgeCount} -> ${count}`);
+      // Expected edge count updated
       this.expectedEdgeCount = count;
       
       // If we already have enough edges, trigger processing
@@ -129,7 +129,7 @@ export class BatchRoutingCoordinator {
       this.routeCallbacks.get(id)!.push(onRouteReady);
     }
     
-    console.log(`[BatchRoutingCoordinator] Edge registered: ${id} (${this.pendingEdges.size}/${this.expectedEdgeCount})`);
+    // Edge registered
     
     // Check if we should process
     this.checkAndProcess();
@@ -150,7 +150,7 @@ export class BatchRoutingCoordinator {
     if (pendingCount >= this.expectedEdgeCount && this.expectedEdgeCount > 0) {
       this.scheduleProcessing();
     } else if (waitTime > this.options.maxWaitTime && pendingCount > 0) {
-      console.log(`[BatchRoutingCoordinator] Max wait time exceeded (${waitTime}ms), processing ${pendingCount} edges`);
+      // Max wait time exceeded, processing batch
       this.processBatch();
     }
   }
@@ -179,35 +179,66 @@ export class BatchRoutingCoordinator {
     this.processingInProgress = true;
     const edgeIds = Array.from(this.pendingEdges.keys());
     
-    console.log(`[BatchRoutingCoordinator] 🚀 Processing batch: ${edgeIds.length} edges`);
+    // Processing batch
     
     try {
+      // Check if router is valid and not aborted
+      if (!this.router || typeof this.router.processTransaction !== 'function') {
+        throw new Error('Router not initialized or invalid');
+      }
+      
       // Call processTransaction ONCE for all edges
-      this.router.processTransaction?.();
+      // Wrap in try-catch to handle abort errors gracefully
+      try {
+        this.router.processTransaction();
+      } catch (processError: any) {
+        // If router is aborted, don't fail the entire batch
+        if (processError?.message?.includes('aborted') || processError?.message?.includes('already aborted')) {
+          console.warn(`[BatchRoutingCoordinator] Router aborted, skipping batch processing`);
+          this.processingInProgress = false;
+          return;
+        }
+        throw processError;
+      }
       
       // Extract routes for each edge
       for (const [id, registration] of Array.from(this.pendingEdges.entries())) {
-        const route = this.extractRoute(registration.connection);
-        this.computedRoutes.set(id, route);
-        
-        console.log(`[BatchRoutingCoordinator] Route computed for ${id}: ${route.length} points`);
-        
-        // Notify callbacks
-        const callbacks = this.routeCallbacks.get(id) || [];
-        for (const callback of callbacks) {
-          callback(route);
+        try {
+          const route = this.extractRoute(registration.connection);
+          this.computedRoutes.set(id, route);
+          
+          // Notify callbacks
+          const callbacks = this.routeCallbacks.get(id) || [];
+          for (const callback of callbacks) {
+            callback(route);
+          }
+        } catch (routeError: any) {
+          // If connection is invalid/aborted, skip this edge
+          if (routeError?.message?.includes('aborted') || routeError?.message?.includes('already aborted')) {
+            console.warn(`[BatchRoutingCoordinator] Connection aborted for edge ${id}, skipping`);
+            continue;
+          }
+          throw routeError;
         }
       }
       
       this.batchProcessed = true;
       this.processingInProgress = false;
       
-      console.log(`[BatchRoutingCoordinator] ✅ Batch complete: ${edgeIds.length} edges processed`);
+      // Batch complete
       this.options.onBatchComplete(edgeIds);
       
     } catch (error) {
       console.error(`[BatchRoutingCoordinator] ❌ Batch processing failed:`, error);
       this.processingInProgress = false;
+      
+      // Notify all callbacks with empty route to trigger fallback
+      for (const [id] of Array.from(this.pendingEdges.entries())) {
+        const callbacks = this.routeCallbacks.get(id) || [];
+        for (const callback of callbacks) {
+          callback([]);
+        }
+      }
     }
   }
   
@@ -287,7 +318,7 @@ export class BatchRoutingCoordinator {
     this.processingInProgress = false;
     this.batchStartTime = Date.now();
     
-    console.log(`[BatchRoutingCoordinator] Reset`);
+    // Reset
   }
   
   /**
@@ -295,7 +326,7 @@ export class BatchRoutingCoordinator {
    */
   forceProcess(): void {
     if (!this.batchProcessed && this.pendingEdges.size > 0) {
-      console.log(`[BatchRoutingCoordinator] Force processing ${this.pendingEdges.size} edges`);
+      // Force processing
       this.processBatch();
     }
   }

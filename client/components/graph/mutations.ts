@@ -379,16 +379,23 @@ export const deleteNode = (nodeId: NodeID, graph: RawGraph): RawGraph => {
 export const moveNode = (nodeId: NodeID, newParentId: NodeID, graph: RawGraph): RawGraph => {
   
   const node = findNodeById(graph, nodeId);
-  const newParent = findNodeById(graph, newParentId);
   
   if (!node) {
     notFound("node", nodeId);
     throw new Error(`Node '${nodeId}' not found`);
   }
   
-  if (!newParent) {
+  // Special case: when newParentId is 'root', use the graph itself as the parent
+  let newParent: ElkGraphNode;
+  if (newParentId === 'root') {
+    newParent = graph as ElkGraphNode; // The graph IS the root node
+  } else {
+    const foundParent = findNodeById(graph, newParentId);
+    if (!foundParent) {
     notFound("node", newParentId);
     throw new Error(`New parent node '${newParentId}' not found`);
+    }
+    newParent = foundParent;
   }
   
   // 1. forbid moving into own descendant (cycle)
@@ -510,11 +517,21 @@ const addEdgeInternal = (edgeId: EdgeID, sourceId: NodeID, targetId: NodeID, gra
     targets: [targetId]
   };
   
-  // Store handle IDs if provided (for connector handles)
+  // Store handle IDs and positions if provided (for connector handles)
   if (sourceHandle || targetHandle) {
+    // Derive positions from handles
+    const sourcePosition = sourceHandle?.includes('top') ? 'top' :
+                          sourceHandle?.includes('bottom') ? 'bottom' :
+                          sourceHandle?.includes('left') ? 'left' : 'right';
+    const targetPosition = targetHandle?.includes('top') ? 'top' :
+                          targetHandle?.includes('bottom') ? 'bottom' :
+                          targetHandle?.includes('left') ? 'left' : 'right';
+    
     newEdge.data = {
       sourceHandle,
-      targetHandle
+      targetHandle,
+      sourcePosition,
+      targetPosition
     };
   }
   

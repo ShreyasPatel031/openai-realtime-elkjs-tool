@@ -66,6 +66,9 @@ interface UseCanvasStateReturn {
   shouldSkipFitViewRef: any;
   getViewStateSnapshot: () => ViewState | undefined;
   
+  // Refs
+  rawGraphRef: React.MutableRefObject<any>;
+  
   // Services
   architectureService: CanvasArchitectureService;
   saveService: CanvasSaveService;
@@ -150,10 +153,14 @@ export function useCanvasInitialization(params: UseCanvasStateParams): UseCanvas
   // Setup migration test helpers for browser console (dev only)
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production') {
-      setupWindowHelpers(
-        () => viewStateRef.current || createEmptyViewState(),
-        () => rawGraph
-      );
+      // Import getOrchestratorDomain dynamically to avoid circular dependency issues
+      import('../../core/orchestration/Orchestrator').then(({ getOrchestratorDomain }) => {
+        setupWindowHelpers(
+          () => viewStateRef.current || createEmptyViewState(),
+          () => rawGraph,
+          getOrchestratorDomain
+        );
+      });
     }
   }, [rawGraph, viewStateRef]);
 
@@ -297,6 +304,9 @@ export function useCanvasInitialization(params: UseCanvasStateParams): UseCanvas
     viewStateRef,
     shouldSkipFitViewRef,
     getViewStateSnapshot,
+    
+    // Refs
+    rawGraphRef,
     
     // Services
     architectureService,

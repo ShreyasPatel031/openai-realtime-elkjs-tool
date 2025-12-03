@@ -100,6 +100,12 @@ export function convertViewStateToReactFlow(
         source: edge.sources?.[0] || edge.source,
         target: edge.targets?.[0] || edge.target,
         type: 'smoothstep',
+        sourceHandle: edge.data?.sourceHandle,
+        targetHandle: edge.data?.targetHandle,
+        data: {
+          sourcePosition: edge.data?.sourcePosition,
+          targetPosition: edge.data?.targetPosition,
+        },
       };
 
       edges.push(reactFlowEdge);

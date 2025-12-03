@@ -144,9 +144,11 @@ export function useCanvasInitialization(params: UseCanvasStateParams): UseCanvas
   // Setup migration test helpers for browser console (dev only)
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production') {
+      const { getOrchestratorDomain } = require('../../core/orchestration/Orchestrator');
       setupWindowHelpers(
         () => viewStateRef.current || createEmptyViewState(),
-        () => rawGraph
+        () => rawGraph,
+        getOrchestratorDomain
       );
     }
   }, [rawGraph, viewStateRef]);

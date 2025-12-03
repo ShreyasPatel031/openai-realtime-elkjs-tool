@@ -144,7 +144,11 @@ export function migrationReport(viewState: ViewState, domainGraph: ElkGraphNode)
 /**
  * Setup window helpers for browser console
  */
-export function setupWindowHelpers(getViewState: () => ViewState, getDomainGraph: () => ElkGraphNode) {
+export function setupWindowHelpers(
+  getViewState: () => ViewState, 
+  getDomainGraph: () => ElkGraphNode,
+  getOrchestratorDomain?: () => ElkGraphNode | null
+) {
   if (typeof window !== 'undefined') {
     (window as any).getViewState = () => {
       const vs = getViewState();
@@ -158,6 +162,14 @@ export function setupWindowHelpers(getViewState: () => ViewState, getDomainGraph
       console.log('🌳 Domain Graph:', graph);
       return graph;
     };
+    
+    if (getOrchestratorDomain) {
+      (window as any).getOrchestratorDomain = () => {
+        const graph = getOrchestratorDomain();
+        console.log('🎯 Orchestrator Domain Graph:', graph);
+        return graph;
+      };
+    }
     
     (window as any).checkModeAlignment = () => {
       const viewState = getViewState();

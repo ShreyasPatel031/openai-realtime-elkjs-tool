@@ -235,6 +235,16 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
           
 
 
+          // Derive port positions from handles if not already in edge data
+          const sourcePosition = edge.data?.sourcePosition || 
+            (sourceHandle?.includes('top') ? 'top' : 
+             sourceHandle?.includes('bottom') ? 'bottom' :
+             sourceHandle?.includes('left') ? 'left' : 'right');
+          const targetPosition = edge.data?.targetPosition ||
+            (targetHandle?.includes('top') ? 'top' :
+             targetHandle?.includes('bottom') ? 'bottom' :
+             targetHandle?.includes('left') ? 'left' : 'right');
+
           edges.push({
             id: edgeId, 
             source: sourceNodeId, 
@@ -256,7 +266,9 @@ export function processLayoutedGraph(elkGraph: any, dimensions: NodeDimensions) 
             data: {
               labelText: labelTxt,
               bendPoints: edge.absoluteBendPoints ?? [],
-              labelPos: labelPosAbs          // ← now absolute
+              labelPos: labelPosAbs,          // ← now absolute
+              sourcePosition,
+              targetPosition,
             },
             selected: false,
             hidden: false,

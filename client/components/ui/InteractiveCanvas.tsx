@@ -91,6 +91,7 @@ import NodeHoverPreview from "./NodeHoverPreview"
 import GroupHoverPreview from "./GroupHoverPreview"
 import CanvasToolbar from "./CanvasToolbar"
 import { useCanvasEdgeInteractions } from "../../hooks/canvas/useCanvasEdgeInteractions"
+import { useDragCoordinator } from "../../hooks/canvas/useDragCoordinator"
 
 import Chatbox from "./Chatbox"
 import { ApiEndpointProvider } from '../../contexts/ApiEndpointContext'
@@ -493,6 +494,15 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     // Command to reset to empty
     (window as any).resetCanvas = () => {
       console.log('🔄 Resetting to empty root...');
+      
+      // Clear ViewState first
+      viewStateRef.current = { node: {}, group: {}, edge: {} };
+      
+      // Clear ReactFlow nodes and edges
+      setNodes([]);
+      setEdges([]);
+      
+      // Set empty domain graph
       setRawGraph({ id: "root", children: [], edges: [] });
       
       // Reset viewport to center (access ref when called, not when defined)
@@ -929,15 +939,8 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     handleShareArchitecture,
     handleEditArchitecture,
     skipPersistenceRef: graphSkipPersistenceRef,
+    rawGraphRef,
   } = canvasGraphState;
-
-  // Create a ref for rawGraph since Orchestrator expects refs
-  const rawGraphRef = useRef(rawGraph);
-  
-  // Keep rawGraphRef in sync
-  useEffect(() => {
-    rawGraphRef.current = rawGraph;
-  }, [rawGraph]);
 
   // Initialize Orchestrator (moved from ELK hook for proper separation of concerns)
   useEffect(() => {
@@ -1027,6 +1030,17 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   
   // Track recently created nodes/groups to skip containment detection
   const recentlyCreatedNodesRef = useRef<Map<string, number>>(new Map());
+  
+  // Initialize DragCoordinator for centralized drag handling
+  const { handlePositionChanges: handleDragPositionChanges } = useDragCoordinator({
+    viewStateRef,
+    rawGraphRef,
+    setRawGraph,
+    setNodes,
+    reactFlowRef,
+    selectedArchitectureId,
+    recentlyCreatedNodesRef,
+  });
   
   // Utility to validate and clean nodes before setting them
   const validateNodes = useCallback((nodes: Node[]): Node[] => {
@@ -2911,6 +2925,27 @@ Adapt these patterns to your specific requirements while maintaining the overall
   
   const memoizedEdgeTypes = useMemo(() => edgeTypes, []);
 
+  // Handle group resize - updates ViewState with new dimensions
+  const handleGroupResize = useCallback((groupId: string, width: number, height: number, x: number, y: number) => {
+    if (!viewStateRef.current.group) {
+      viewStateRef.current.group = {};
+    }
+    
+    // Update ViewState with new dimensions and position
+    viewStateRef.current.group[groupId] = {
+      ...viewStateRef.current.group[groupId],
+      x,
+      y,
+      w: width,
+      h: height,
+    };
+    
+    // Also persist to localStorage
+    if (selectedArchitectureId && rawGraphRef.current) {
+      saveCanvasSnapshot(rawGraphRef.current, viewStateRef.current, selectedArchitectureId);
+    }
+  }, [selectedArchitectureId]);
+
   const nodeInteractionValue = useMemo(
     () => ({
       selectedTool,
@@ -2921,6 +2956,7 @@ Adapt these patterns to your specific requirements while maintaining the overall
       handleAddNodeToGroup,
       handleArrangeGroup,
       handleCreateWrapperAndArrange,
+      handleGroupResize,
       selectedNodeIds: selectedNodeIds || [],
     }),
     [
@@ -2932,6 +2968,7 @@ Adapt these patterns to your specific requirements while maintaining the overall
       handleAddNodeToGroup,
       handleArrangeGroup,
       handleCreateWrapperAndArrange,
+      handleGroupResize,
       selectedNodeIds,
     ]
   );
@@ -3837,7 +3874,7 @@ useEffect(() => {
               nodes={nodes} 
               edges={edges}
               onNodesChange={(changes) => {
-                
+                // Let ReactFlow handle its internal state updates
                 onNodesChange(changes);
                 
                 // Track newly added nodes/groups to skip containment detection for them
@@ -3854,284 +3891,23 @@ useEffect(() => {
                   }
                 });
                 
-                // Check for containment after nodes are updated
-                
-                if (selectedTool !== 'box' && reactFlowRef.current) {
-                  // Use requestAnimationFrame to check after ReactFlow has updated
-                  requestAnimationFrame(() => {
-                    const currentNodes = reactFlowRef.current?.getNodes() || [];
-                    const movedNodes = changes
-                      .filter(ch => ch.type === 'position')
-                      .map(ch => (ch as any).id)
-                      .filter(Boolean)
-                      // Skip recently created nodes/groups - they're just being positioned initially
-                      .filter((nodeId: string) => {
-                        const createdTime = recentlyCreatedNodesRef.current.get(nodeId);
-                        if (createdTime) {
-                          const age = Date.now() - createdTime;
-                          // Enable for production but lower threshold for testing
-                          if (age < 100) { // Reduced from 1000ms to 100ms for debugging
-                            return false;
-                          }
-                        }
-                        return true;
-                      });
-                    
-                    
-                    if (movedNodes.length > 0) {
-                      let updatedGraph = structuredClone(rawGraph);
-                      let graphUpdated = false;
-                      
-                      // Helper to find parent in domain graph
-                      const findParentInGraph = (graph: RawGraph, nodeId: string): string | null => {
-                        const findParent = (n: any, targetId: string, parentId: string | null = null): string | null => {
-                          if (n.id === targetId) return parentId;
-                          if (n.children) {
-                            for (const child of n.children) {
-                              const result = findParent(child, targetId, n.id);
-                              if (result !== null) return result;
-                            }
-                          }
-                          return null;
-                        };
-                        return findParent(graph, nodeId);
-                      };
-                      
-                      // Helper to find node in domain graph
-                      const findNodeInGraph = (graph: RawGraph, nodeId: string): any => {
-                        const find = (n: any, targetId: string): any => {
-                          if (n.id === targetId) return n;
-                          if (n.children) {
-                            for (const child of n.children) {
-                              const result = find(child, targetId);
-                              if (result) return result;
-                            }
-                          }
-                          return null;
-                        };
-                        return find(graph, nodeId);
-                      };
-                      
-                      // Check each moved node for containment
-                      movedNodes.forEach((nodeId) => {
-                        const node = currentNodes.find(n => n.id === nodeId);
-                        if (!node) return;
-                        
-                        // Case 1: Regular node moved into or out of a group
-                        if (node.type !== 'group') {
-                          // Use ReactFlow position during drag (ViewState may be stale)
-                          const containingGroup = findContainingGroup(node, currentNodes, viewStateRef.current, true);
-                          const currentParentInGraph = findParentInGraph(updatedGraph, nodeId);
-                          
-                          // Determine new parent: if node is fully contained in a group, use that group; otherwise use root
-                          const newParentId = containingGroup ? containingGroup.id : 'root';
-                          
-                          // Check if parent changed (including moving out of a group)
-                          // currentParentInGraph could be a group ID or 'root' or null
-                          // newParentId is either a group ID or 'root'
-                          if (currentParentInGraph !== newParentId) {
-                            // CRITICAL: Preserve absolute position when moving nodes out of groups
-                            const viewStateBefore = viewStateRef.current;
-                            const absolutePosBefore = viewStateBefore?.node?.[nodeId] || viewStateBefore?.group?.[nodeId];
-                            
-                            
-                            // Update domain graph: move node to new parent
-                            try {
-                              
-                              updatedGraph = moveNode(nodeId, newParentId, updatedGraph);
-                              graphUpdated = true;
-                              
-                              // If node was moved INTO a group (not root), set that group to FREE mode
-                              // User is manually positioning, so disable auto-arrange (LOCK mode)
-                              if (newParentId !== 'root') {
-                                const targetGroup = findNodeInGraph(updatedGraph, newParentId);
-                                if (targetGroup) {
-                                  targetGroup.mode = 'FREE';
-                                }
-                              }
-                              
-                              const newParentAfter = findParentInGraph(updatedGraph, nodeId);
-                              
-                              // CRITICAL: Immediately prevent coordinate jumps by updating ReactFlow first
-                              if (absolutePosBefore) {
-                                
-                                // IMMEDIATELY update ReactFlow to prevent coordinate conversion issues
-                                setNodes((prevNodes) => prevNodes.map((n) => {
-                                  if (n.id === nodeId) {
-                                    const updatedNode = { ...n };
-                                    
-                                    if (newParentId === 'root') {
-                                      // Moving OUT of group: Remove parentId and use absolute position
-                                      delete (updatedNode as any).parentId;
-                                      updatedNode.position = {
-                                        x: absolutePosBefore.x,
-                                        y: absolutePosBefore.y
-                                      };
-                                      
-                                      console.log('🔧 [MOVE-OUT] Node moved to root:', {
-                                        nodeId,
-                                        removedParentId: (n as any).parentId || 'none',
-                                        absolutePosition: `${absolutePosBefore.x},${absolutePosBefore.y}`
-                                      });
-                                    } else {
-                                      // Moving INTO group: Set parentId and calculate relative position
-                                      const groupNode = currentNodes.find(gn => gn.id === newParentId);
-                                      if (groupNode && groupNode.position) {
-                                        (updatedNode as any).parentId = newParentId;
-                                        updatedNode.position = {
-                                          x: absolutePosBefore.x - groupNode.position.x,
-                                          y: absolutePosBefore.y - groupNode.position.y
-                                        };
-                                      }
-                                    }
-                                    
-                                    return updatedNode;
-                                  }
-                                  return n;
-                                }));
-                                
-                                // Update ViewState to match
-                                if (viewStateRef.current) {
-                                  const currentViewState = { ...viewStateRef.current };
-                                  if (!currentViewState.node) currentViewState.node = {};
-                                  
-                                  currentViewState.node[nodeId] = {
-                                    x: absolutePosBefore.x,
-                                    y: absolutePosBefore.y,
-                                    w: absolutePosBefore.w,
-                                    h: absolutePosBefore.h
-                                  };
-                                  
-                                  viewStateRef.current = currentViewState;
-                                }
-                              }
-                              
-                              if (containingGroup) {
-                                // Select the group (not the node) - this will trigger highlighting of contained nodes
-                                setNodes((nds) =>
-                                  nds.map((n) =>
-                                    n.id === containingGroup.id ? { ...n, selected: true } : { ...n, selected: false }
-                                  )
-                                );
-                                setSelectedNodes([containingGroup]);
-                                setSelectedNodeIds([containingGroup.id]);
-                              }
-                            } catch (error) {
-                              console.warn(`Failed to move node ${nodeId} from ${currentParentInGraph} to ${newParentId}:`, error);
-                            }
-                          }
-                        }
-                        // Case 2: Group moved around nodes or other groups
-                        else {
-                          const group = node;
-                          
-                          // First check if the group itself was moved into another group
-                          const containingGroup = findContainingGroup(group, currentNodes, viewStateRef.current);
-                          const currentParentInGraph = findParentInGraph(updatedGraph, nodeId);
-                          const newParentId = containingGroup ? containingGroup.id : 'root';
-                          
-                          if (currentParentInGraph !== newParentId) {
-                            
-                            // Update domain graph: move group to new parent
-                            try {
-                              updatedGraph = moveNode(nodeId, newParentId, updatedGraph);
-                              graphUpdated = true;
-                              
-                              console.log('✅ [GROUP-MOVE] Group moved successfully in domain graph:', {
-                                groupId: nodeId,
-                                newParent: newParentId
-                              });
-                              
-                              if (containingGroup) {
-                                // Select the containing group (not the moved group)
-                                setNodes((nds) =>
-                                  nds.map((n) =>
-                                    n.id === containingGroup.id ? { ...n, selected: true } : { ...n, selected: false }
-                                  )
-                                );
-                                setSelectedNodes([containingGroup]);
-                                setSelectedNodeIds([containingGroup.id]);
-                              }
-                            } catch (error) {
-                              console.error(`❌ [GROUP-MOVE] Failed to move group ${nodeId} from ${currentParentInGraph} to ${newParentId}:`, error);
-                            }
-                          } else {
-                            console.log('⏭️ [GROUP-MOVE] Group parent unchanged, skipping domain update:', {
-                              groupId: nodeId,
-                              parent: currentParentInGraph
-                            });
-                          }
-                          
-                          // Find nodes/groups fully contained in this group
-                          const containedNodes = findFullyContainedNodes(group, currentNodes);
-                          
-                          if (containedNodes.length > 0) {
-                            // Update domain graph: move each contained node/group into the group
-                            containedNodes.forEach((containedNode) => {
-                              try {
-                                updatedGraph = moveNode(containedNode.id, group.id, updatedGraph);
-                                graphUpdated = true;
-                              } catch (error) {
-                                console.warn(`Failed to move ${containedNode.id} into group ${group.id}:`, error);
-                              }
-                            });
-                            
-                            // Set group to FREE mode when nodes are moved into it (user is manually positioning)
-                            const targetGroup = findNodeInGraph(updatedGraph, group.id);
-                            if (targetGroup) {
-                              targetGroup.mode = 'FREE';
-                            }
-                            
-                            // Select the contained nodes
-                            setNodes((nds) =>
-                              nds.map((n) =>
-                                containedNodes.some(cn => cn.id === n.id) ? { ...n, selected: true } : n
-                              )
-                            );
-                            setSelectedNodes(containedNodes);
-                            setSelectedNodeIds(containedNodes.map(n => n.id));
-                          }
-                        }
-                      });
-                      
-                      // Update domain graph if any changes were made
-                      if (graphUpdated) {
-                        // CRITICAL: Preserve viewState when updating domain graph
-                        // This ensures nodes maintain their absolute positions when moved into/out of groups
-                        // The viewstate position should NOT change - only the domain structure changes
-                        const currentViewState = viewStateRef.current;
-                        if (currentViewState) {
-                          (updatedGraph as any).viewState = currentViewState;
-                        }
-                        // Use a small delay to ensure ReactFlow has finished processing the node changes
-                        // before updating the domain graph, which will trigger a re-render
-                        setTimeout(() => {
-                          // Mark as 'user' source to preserve ViewState and skip ELK layout
-                          setRawGraph(updatedGraph, 'user');
-                          
-                          // Log position after update to detect jumps
-                          setTimeout(() => {
-                            movedNodes.forEach((nodeId) => {
-                              const viewStateAfter = viewStateRef.current;
-                              const viewStatePos = viewStateAfter?.node?.[nodeId] || viewStateAfter?.group?.[nodeId];
-                              const reactFlowNode = reactFlowRef.current?.getNodes()?.find(n => n.id === nodeId);
-                              if (viewStatePos && reactFlowNode) {
-                                const viewStateX = viewStatePos.x;
-                                const reactFlowX = reactFlowNode.position.x;
-                                const viewStateY = viewStatePos.y;
-                                const reactFlowY = reactFlowNode.position.y;
-                                const xDiff = Math.abs(viewStateX - reactFlowX);
-                                const yDiff = Math.abs(viewStateY - reactFlowY);
-                                
-                                if (xDiff > 1 || yDiff > 1) {
-                                }
-                              }
-                            });
-                          }, 100);
-                        }, 0);
-                      }
-                    }
+                // Route position changes to DragCoordinator
+                // DragCoordinator handles:
+                // - ViewState updates (absolute positions)
+                // - Reparenting detection and execution (DURING drag)
+                // - Group drag (moving children)
+                // - Persistence (on drag end)
+                const positionChanges = changes.filter(ch => ch.type === 'position');
+                if (positionChanges.length > 0) {
+                  console.log('[🔄 CANVAS] Position changes detected:', {
+                    count: positionChanges.length,
+                    selectedTool,
+                    willRoute: selectedTool !== 'box',
+                    ids: positionChanges.map((ch: any) => ch.id),
                   });
+                          }
+                if (selectedTool !== 'box') {
+                  handleDragPositionChanges(changes);
                 }
               }}
               onEdgesChange={onEdgesChange}

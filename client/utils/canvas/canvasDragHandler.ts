@@ -274,10 +274,33 @@ export async function handleDragEndChanges(params: HandleDragParams): Promise<vo
     const node = currentNodes.find((n: Node) => n.id === nodeId);
     if (!node) continue;
 
-    // Get position from ReactFlow node - should be absolute world coordinates
-    // Since we removed parentId, all nodes are root-level with absolute positions
-    // ReactFlow's node.position is in flow/world coordinates
+    // Get position from ReactFlow node
+    // CRITICAL: If node has parentId, position is RELATIVE; otherwise it's ABSOLUTE
     let newAbsolutePos = { x: node.position.x, y: node.position.y };
+    
+    // If node has a parent, convert relative position to absolute
+    const parentId = (node as any).parentId;
+    if (parentId && viewStateRef.current) {
+      const parentGeom = viewStateRef.current.group?.[parentId];
+      if (parentGeom) {
+        const parentWorldPos = { x: parentGeom.x, y: parentGeom.y };
+        newAbsolutePos = CoordinateService.toWorldFromRelative(newAbsolutePos, parentWorldPos);
+        
+        console.log('[🔄 DRAG-END] Converted relative to absolute:', {
+          nodeId,
+          parentId,
+          relativePos: `${node.position.x},${node.position.y}`,
+          parentPos: `${parentWorldPos.x},${parentWorldPos.y}`,
+          absolutePos: `${newAbsolutePos.x},${newAbsolutePos.y}`,
+        });
+      } else {
+        console.warn('[🔄 DRAG-END] Node has parentId but parent geometry missing:', {
+          nodeId,
+          parentId,
+          availableGroups: Object.keys(viewStateRef.current.group || {}),
+        });
+      }
+    }
     
     // Verify position from change event if available (for debugging)
     const positionChange = dragEndChanges.find((ch: any) => ch.id === nodeId && ch.type === 'position');
@@ -289,7 +312,7 @@ export async function handleDragEndChanges(params: HandleDragParams): Promise<vo
           nodeId,
           nodePosition: newAbsolutePos,
           changePosition: changePos,
-          using: 'node.position'
+          using: 'node.position (converted to absolute)'
         });
       }
     }
@@ -376,7 +399,10 @@ export async function handleDragEndChanges(params: HandleDragParams): Promise<vo
   });
 
   // Persist after all updates
-  if (viewStateRef.current && selectedArchitectureId) {
-    persistViewStateAfterDrag(viewStateRef.current, latestGraph, selectedArchitectureId);
+  // CRITICAL: Use the graph from ref (which should have the latest reparenting changes)
+  // Don't use rawGraph parameter which might be stale
+  const graphToPersist = rawGraphRef.current || latestGraph;
+  if (viewStateRef.current && selectedArchitectureId && graphToPersist) {
+    persistViewStateAfterDrag(viewStateRef.current, graphToPersist, selectedArchitectureId);
   }
 }

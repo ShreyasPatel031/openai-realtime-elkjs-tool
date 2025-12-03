@@ -228,10 +228,33 @@ export const useCanvasEdgeInteractions = ({
 
       const handleClick = (e: MouseEvent) => {
         const targetElement = e.target as HTMLElement;
+        
+        // Check if click is on a connector port - check computed style for connector dot colors
+        // Connector dots can be: green (hover area), blue (selected), or white (default)
+        const isConnectorDotByStyle = (() => {
+          let el: HTMLElement | null = targetElement;
+          while (el) {
+            const style = window.getComputedStyle(el);
+            const bg = style.backgroundColor;
+            const cursor = style.cursor;
+            // Green hover area, blue selected dot, or white default dot with pointer cursor
+            const isGreen = bg.includes('rgb(0, 255, 0)') || bg.includes('rgba(0, 255, 0');
+            const isBlue = bg.includes('rgb(66, 133, 244)') || bg.includes('rgba(66, 133, 244');
+            // Small white dot (8px) with pointer cursor is a connector dot
+            const isSmallWhiteDot = bg.includes('rgb(255, 255, 255)') && cursor === 'pointer' && 
+                                    el.offsetWidth <= 16 && el.offsetHeight <= 16;
+            if (isGreen || isBlue || isSmallWhiteDot) {
+              return true;
+            }
+            el = el.parentElement;
+          }
+          return false;
+        })();
+        
         const isConnectorPortClick =
           targetElement.closest("[data-connector-dot]") ||
-          targetElement.closest('[style*="rgba(0, 255, 0"]') ||
-          targetElement.closest('.react-flow__handle[id*="connector"]');
+          targetElement.closest('.react-flow__handle[id*="connector"]') ||
+          isConnectorDotByStyle;
 
         const isToolbarClick = (() => {
           const toolbarButton = targetElement.closest('[aria-label="Select (V)"]') ||

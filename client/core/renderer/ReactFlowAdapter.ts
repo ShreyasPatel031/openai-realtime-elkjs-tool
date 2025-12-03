@@ -184,9 +184,15 @@ export function toReactFlowWithViewState(
   });
 
   // Override edge waypoints from ViewState if available
+  // Also preserve sourcePosition and targetPosition from domain graph edge data
   const edges = elkEdges.map((edge) => {
     const edgeId = edge.id;
     const edgeGeom = viewState.edge?.[edgeId];
+    
+    // Get port positions from domain graph edge data (if available)
+    const domainEdge = (elkGraph as any).edges?.find((e: any) => e.id === edgeId);
+    const sourcePosition = domainEdge?.data?.sourcePosition || edge.data?.sourcePosition;
+    const targetPosition = domainEdge?.data?.targetPosition || edge.data?.targetPosition;
 
     if (edgeGeom?.waypoints && Array.isArray(edgeGeom.waypoints)) {
       // Use ViewState waypoints (manual routing in FREE mode)
@@ -195,12 +201,21 @@ export function toReactFlowWithViewState(
         data: {
           ...edge.data,
           bendPoints: edgeGeom.waypoints,
+          sourcePosition,
+          targetPosition,
         },
       };
     }
 
-    // Use ELK waypoints (from processLayoutedGraph)
-    return edge;
+    // Use ELK waypoints (from processLayoutedGraph) but preserve port positions
+    return {
+      ...edge,
+      data: {
+        ...edge.data,
+        sourcePosition,
+        targetPosition,
+      },
+    };
   });
 
   return { nodes, edges };

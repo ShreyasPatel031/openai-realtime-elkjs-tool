@@ -3,6 +3,7 @@ import { NodeProps, useReactFlow, Handle, Position } from 'reactflow';
 import { LayoutDashboard, LayoutPanelLeft, CirclePlus } from 'lucide-react';
 import { baseHandleStyle } from '../graph/handles';
 import { useNodeInteractions } from '../../contexts/NodeInteractionContext';
+import { CANVAS_STYLES } from '../graph/styles/canvasStyles';
 
 type DraftGroupState = 'default' | 'create' | 'interaction';
 
@@ -30,6 +31,7 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = (props) => {
   const { setNodes, getNodes, screenToFlowPosition } = useReactFlow();
   const handleAddNodeToGroup = interactions?.handleAddNodeToGroup ?? onAddNode;
   const handleArrangeGroup = interactions?.handleArrangeGroup;
+  const handleGroupResize = interactions?.handleGroupResize;
   const [label, setLabel] = useState(data.label || 'Group');
   
   // Phase 1: Read mode from ViewState first, fallback to data.mode 
@@ -176,6 +178,12 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = (props) => {
             break;
         }
 
+        // Track final dimensions for handleMouseUp
+        (resizeStartRef.current as any).finalWidth = newWidth;
+        (resizeStartRef.current as any).finalHeight = newHeight;
+        (resizeStartRef.current as any).finalPosX = newPosX;
+        (resizeStartRef.current as any).finalPosY = newPosY;
+
         setNodes((nodes) =>
           nodes.map((node) =>
             node.id === id
@@ -192,6 +200,17 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = (props) => {
       };
 
       const handleMouseUp = () => {
+        // Update ViewState with final dimensions
+        const start = resizeStartRef.current as any;
+        if (start && handleGroupResize) {
+          handleGroupResize(
+            id,
+            start.finalWidth || start.startWidth,
+            start.finalHeight || start.startHeight,
+            start.finalPosX ?? start.startPosX,
+            start.finalPosY ?? start.startPosY
+          );
+        }
         resizeStartRef.current = null;
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
@@ -200,7 +219,7 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = (props) => {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
     },
-    [getNodes, id, nodeHeight, nodeWidth, props, screenToFlowPosition, setNodes]
+    [getNodes, id, nodeHeight, nodeWidth, props, screenToFlowPosition, setNodes, handleGroupResize]
   );
 
   const handleLabelChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -226,6 +245,7 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = (props) => {
     position: 'relative',
     boxSizing: 'border-box',
     pointerEvents: 'auto',
+    zIndex: CANVAS_STYLES.zIndex.groups, // Use centralized z-index - groups should be below nodes
   };
 
   // Calculate border color based on hover and selection state
@@ -697,7 +717,7 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = (props) => {
               data-resize-handle="true"
               onMouseEnter={() => setHoveredCorner(corner)}
               onMouseLeave={() => setHoveredCorner((prev) => (prev === corner ? null : prev))}
-            />
+              />
           );
         })}
       </>
@@ -847,7 +867,7 @@ const DraftGroupNode: React.FC<DraftGroupNodeProps> = (props) => {
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        {/* Four corner squares for selection */}
+            {/* Four corner squares for selection */}
         {showSelection && renderSelectionCornerSquares()}
         {renderTopBar()}
         {showSelection && renderSideToolbar()}

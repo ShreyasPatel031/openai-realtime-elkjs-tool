@@ -24,7 +24,8 @@ const ConnectorDots: React.FC<ConnectorDotsProps> = ({
   const clickedPortRef = React.useRef<string | null>(null);
   
   // Track if this port is the selected source
-  const isConnecting = connectingFrom !== null;
+  // CRITICAL: Check for both null and undefined since prop might be undefined
+  const isConnecting = connectingFrom != null && connectingFrom !== '';
   const isConnectingFromThisNode = connectingFrom === nodeId;
   
   // Clear clickedPortRef when connection state is cleared (connection complete or cancelled)
@@ -98,7 +99,7 @@ const ConnectorDots: React.FC<ConnectorDotsProps> = ({
     // Otherwise, start a new connection from this port
     const handleId = `connector-${key}-source`;
     onHandleClick?.(nodeId, handleId);
-  }, [nodeId, onHandleClick, isConnecting, isConnectingFromThisNode]);
+  }, [nodeId, onHandleClick, isConnecting, isConnectingFromThisNode, connectingFrom]);
 
   return (
     <div ref={nodeContainerRef}>

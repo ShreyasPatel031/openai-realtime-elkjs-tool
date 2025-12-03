@@ -66,6 +66,100 @@ const ensureAvoidInstance = async () => {
 const pointsToPath = (points: Point[]): string =>
   points.map((pt, idx) => `${idx === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`).join(' ');
 
+/**
+ * Smart fallback routing when libavoid fails
+ * Routes around obstacles using a simple L-shaped or U-shaped path
+ * Based on Joint.js libavoid fallback pattern
+ */
+const createSmartFallbackRoute = (
+  source: Point,
+  target: Point,
+  sourcePosition: Position,
+  targetPosition: Position,
+  obstacles: NodeRect[]
+): Point[] => {
+  const margin = 20; // Distance to route around obstacles
+  const points: Point[] = [source];
+  
+  // Find obstacles between source and target
+  const blockingObstacles = obstacles.filter(obs => {
+    // Simple check: if obstacle is in the bounding box between source and target
+    const minX = Math.min(source.x, target.x);
+    const maxX = Math.max(source.x, target.x);
+    const minY = Math.min(source.y, target.y);
+    const maxY = Math.max(source.y, target.y);
+    
+    return !(obs.x + obs.width < minX || obs.x > maxX || obs.y + obs.height < minY || obs.y > maxY);
+  });
+  
+  if (blockingObstacles.length === 0) {
+    // No obstacles, use direct path
+    return [source, target];
+  }
+  
+  // Sort obstacles by distance from source
+  blockingObstacles.sort((a, b) => {
+    const distA = Math.abs(a.x - source.x) + Math.abs(a.y - source.y);
+    const distB = Math.abs(b.x - source.x) + Math.abs(b.y - source.y);
+    return distA - distB;
+  });
+  
+  let currentPoint = source;
+  let currentPosition = sourcePosition;
+  
+  for (const obstacle of blockingObstacles) {
+    // Calculate obstacle bounds with margin
+    const obsLeft = obstacle.x - margin;
+    const obsRight = obstacle.x + obstacle.width + margin;
+    const obsTop = obstacle.y - margin;
+    const obsBottom = obstacle.y + obstacle.height + margin;
+    
+    // Determine which side to route around based on source/target positions
+    const dx = target.x - currentPoint.x;
+    const dy = target.y - currentPoint.y;
+    
+    // Choose routing direction based on positions
+    if (currentPosition === Position.Right || currentPosition === Position.Left) {
+      // Horizontal connection - route vertically around obstacle
+      if (dy > 0) {
+        // Target is below - route above obstacle
+        const routeY = Math.min(obsTop, currentPoint.y);
+        points.push({ x: currentPoint.x, y: routeY });
+        points.push({ x: obsRight, y: routeY });
+        currentPoint = { x: obsRight, y: routeY };
+      } else {
+        // Target is above - route below obstacle
+        const routeY = Math.max(obsBottom, currentPoint.y);
+        points.push({ x: currentPoint.x, y: routeY });
+        points.push({ x: obsRight, y: routeY });
+        currentPoint = { x: obsRight, y: routeY };
+      }
+      currentPosition = Position.Right;
+    } else {
+      // Vertical connection - route horizontally around obstacle
+      if (dx > 0) {
+        // Target is to the right - route left of obstacle
+        const routeX = Math.min(obsLeft, currentPoint.x);
+        points.push({ x: routeX, y: currentPoint.y });
+        points.push({ x: routeX, y: obsBottom });
+        currentPoint = { x: routeX, y: obsBottom };
+      } else {
+        // Target is to the left - route right of obstacle
+        const routeX = Math.max(obsRight, currentPoint.x);
+        points.push({ x: routeX, y: currentPoint.y });
+        points.push({ x: routeX, y: obsBottom });
+        currentPoint = { x: routeX, y: obsBottom };
+      }
+      currentPosition = Position.Bottom;
+    }
+  }
+  
+  // Add final point to target
+  points.push(target);
+  
+  return points;
+};
+
 const arePointArraysEqual = (a: Point[], b: Point[]): boolean => {
   if (a === b) return true;
   if (a.length !== b.length) return false;
@@ -107,17 +201,7 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
   } = props;
   const edgeData = data as any;
   
-  // Debug logging for edge-vertical
-  if (id === 'edge-vertical') {
-    console.log(`[StepEdge:${id}] 🔍 MOUNTED`, {
-      source, target,
-      hasStaticObstacleIds: !!edgeData?.staticObstacleIds,
-      obstacleCount: edgeData?.staticObstacleIds?.length,
-      hasRerouteKey: !!edgeData?.rerouteKey,
-      hasStaticObstacles: !!edgeData?.staticObstacles,
-      staticObstaclesCount: edgeData?.staticObstacles?.length
-    });
-  }
+  // Component mounted
   
   const [computedBendPoints, setComputedBendPoints] = useState<Point[]>([]);
   const [debugInfo, setDebugInfo] = useState<any>(null);
@@ -155,7 +239,7 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
       setEdgePath(pointsToPath([{ x: sourceX, y: sourceY }, { x: targetX, y: targetY }]));
       setOptionsVersion(v => {
         const newVersion = v + 1;
-        console.log(`[StepEdge:${id}] 🔄 Options changed (options=${optionsChanged}, spacing=${spacingChanged}), incrementing optionsVersion to ${newVersion}, portEdgeSpacing=${portEdgeSpacing}`);
+        // Options changed
         return newVersion;
       });
     }
@@ -197,14 +281,7 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
       ? edgeData.staticObstacles
       : [];
 
-    // Debug for edge-vertical
-    if (id === 'edge-vertical') {
-      console.log(`[StepEdge:${id}] 🔍 Resolving obstacles`, {
-        staticObstacleIdsCount: staticObstacleIds.length,
-        staticObstaclesCount: staticObstacles.length,
-        condensedNodesCount: condensedNodes.length
-      });
-    }
+    // Resolving obstacles
 
     let result: NodeRect[];
     
@@ -256,13 +333,7 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
     });
     }
     
-    // Debug for edge-vertical - log final resolved obstacles
-    if (id === 'edge-vertical') {
-      console.log(`[StepEdge:${id}] 🔍 Resolved obstacles:`, {
-        count: result.length,
-        sample: result.slice(0, 3).map(r => ({ id: r.id, x: r.x, y: r.y }))
-      });
-    }
+    // Obstacles resolved
     
     return result;
   }, [edgeData?.staticObstacleIds, edgeData?.staticObstacles, condensedNodes, id]);
@@ -305,9 +376,55 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
 
     const routeWithLibavoid = async () => {
       try {
+        // Try to get libavoid instance, but don't fail if it's not available
+        let avoidModule;
+        try {
+          avoidModule = await ensureAvoidInstance();
+        } catch (loadError: any) {
+          // Libavoid failed to load - use fallback immediately
+          console.warn(`[StepEdge:${id}] Libavoid failed to load, using fallback routing:`, loadError?.message || loadError);
+          const sourcePoint = { x: sourceX, y: sourceY };
+          const targetPoint = { x: targetX, y: targetY };
+          const effectiveSourcePosition = edgeData?.sourcePosition 
+            ? (edgeData.sourcePosition === 'right' ? Position.Right :
+               edgeData.sourcePosition === 'left' ? Position.Left :
+               edgeData.sourcePosition === 'top' ? Position.Top : Position.Bottom)
+            : sourcePosition || Position.Right;
+          const effectiveTargetPosition = edgeData?.targetPosition
+            ? (edgeData.targetPosition === 'right' ? Position.Right :
+               edgeData.targetPosition === 'left' ? Position.Left :
+               edgeData.targetPosition === 'top' ? Position.Top : Position.Bottom)
+            : targetPosition || Position.Left;
+          
+          const fallbackPoints = createSmartFallbackRoute(
+            sourcePoint,
+            targetPoint,
+            effectiveSourcePosition,
+            effectiveTargetPosition,
+            resolvedObstacleRects.filter(obs => obs.id !== source && obs.id !== target)
+          );
+          
+          setRoutingStatus('error');
+          setRoutingMessage(`Libavoid unavailable. Using smart fallback.`);
+          setComputedBendPoints(fallbackPoints.slice(1, -1));
+          setEdgePath(pointsToPath(fallbackPoints));
+          setDebugInfo({
+            router: 'fallback',
+            error: loadError?.message || 'Libavoid failed to load',
+            fallbackApplied: true,
+            status: 'error',
+            message: `Libavoid unavailable. Using smart fallback.`,
+          });
+          if (edgeData) {
+            edgeData.routingStatus = 'error';
+            edgeData.routingMessage = `Libavoid unavailable. Using smart fallback.`;
+            edgeData.bendPoints = fallbackPoints.slice(1, -1);
+          }
+          return;
+        }
+        
         // Debug: Log all edge routing to see which edges are being routed
         console.log(`[STRAIGHT-DEBUG:${id}] 🚀 ROUTING STARTED`);
-        avoidModule = await ensureAvoidInstance();
         if (cancelled) return;
 
         // Use a shared router for all edges to enable proper pin sharing
@@ -343,9 +460,9 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
           // Enable sideDirections to enforce side-constrained pins (critical for preventing overlap)
           if (typeof (avoidModule as any).sideDirections === 'number') {
             router.setRoutingOption?.((avoidModule as any).sideDirections, true);
-            console.log(`[StepEdge:ROUTER-CONFIG] ✅ Enabled sideDirections for side-constrained pins`);
+            // Enabled sideDirections
           } else {
-            console.log(`[StepEdge:ROUTER-CONFIG] ⚠️  sideDirections not available in this libavoid build`);
+            // sideDirections not available
           }
           
           // Set routing parameters
@@ -358,7 +475,7 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
           if (typeof avoidModule.idealNudgingDistance === 'number') {
             const nudgingDistance = safeNumber(libavoidOptions?.idealNudgingDistance, 56);
             router.setRoutingParameter?.(avoidModule.idealNudgingDistance, nudgingDistance);
-            console.log(`[StepEdge:ROUTER-CONFIG] ✅ idealNudgingDistance set to ${nudgingDistance}px (uniform edge spacing)`);
+            // idealNudgingDistance set
         }
         if (typeof avoidModule.portDirectionPenalty === 'number') {
           router.setRoutingParameter?.(avoidModule.portDirectionPenalty, 50);
@@ -419,7 +536,14 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
           height: number;
         };
 
-        const shapeMap = new Map<string, ShapeInfo>();
+        // CRITICAL: Use shared shapeMap on router to avoid creating duplicate shapes
+        // Each edge should reuse existing shapes, not create new ones
+        // The shapeMap is keyed by routerVersion to ensure shapes are recreated when router changes
+        const shapeMapKey = `__shapeMap_${routerVersion}`;
+        if (!(window as any)[shapeMapKey]) {
+          (window as any)[shapeMapKey] = new Map<string, ShapeInfo>();
+        }
+        const shapeMap: Map<string, ShapeInfo> = (window as any)[shapeMapKey];
         
         const pinIdMap = (router as any).__pinIdMap;
         let nextPinId = (router as any).__nextPinId;
@@ -434,15 +558,12 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
 
         const obstacleRects: NodeRect[] = resolvedObstacleRects;
 
-        // DEBUG: Log obstacle registration
-        console.log(`[StepEdge:${id}] 🔍 OBSTACLES: ${obstacleRects.length} nodes to register as obstacles:`, 
-          obstacleRects.map(n => `${n.id}(${Math.round(n.x)},${Math.round(n.y)},${Math.round(n.width)}x${Math.round(n.height)})`).join(', '));
 
         // CRITICAL FIX: Skip routing if all obstacles are at origin (0,0)
         // This prevents routing with invalid positions before nodes are positioned
         const allAtOrigin = obstacleRects.length > 0 && obstacleRects.every(n => n.x === 0 && n.y === 0);
         if (allAtOrigin) {
-          console.log(`[StepEdge:${id}] ⏳ SKIPPING ROUTING - all obstacles at origin (0,0), waiting for valid positions`);
+          // Skipping routing - obstacles at origin
           return;
         }
 
@@ -450,7 +571,12 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
         // Obstacles are registered synchronously, so they're guaranteed to be in router before connections
         // IMPORTANT: Do NOT exclude source/target nodes - they need to be obstacles too!
         // Only the pins on source/target should allow connections, the rest of the node should be an obstacle
+        // CRITICAL: Only create shapes that don't already exist to avoid duplicates
         obstacleRects.forEach((node) => {
+          // Skip if shape already exists for this node
+          if (shapeMap.has(node.id)) {
+            return;
+          }
           const width = safeNumber(node.width, DEFAULT_NODE_WIDTH);
           const height = safeNumber(node.height, DEFAULT_NODE_HEIGHT);
           const topLeft = register(new avoidModule.Point(node.x, node.y));
@@ -518,10 +644,12 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
         // Convert string positions from edge data to Position enum
         const stringToPosition = (pos: string | undefined): Position | undefined => {
           if (!pos) return undefined;
-          if (pos === 'right' || pos.includes('right')) return Position.Right;
-          if (pos === 'left' || pos.includes('left')) return Position.Left;
-          if (pos === 'top' || pos.includes('top')) return Position.Top;
-          if (pos === 'bottom' || pos.includes('bottom')) return Position.Bottom;
+          const posLower = pos.toLowerCase();
+          if (posLower === 'right' || posLower.includes('right')) return Position.Right;
+          if (posLower === 'left' || posLower.includes('left')) return Position.Left;
+          if (posLower === 'top' || posLower.includes('top')) return Position.Top;
+          if (posLower === 'bottom' || posLower.includes('bottom')) return Position.Bottom;
+          // stringToPosition failed
           return undefined;
         };
         
@@ -536,16 +664,7 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
         
         // Debug: Log position resolution for edge-vertical
         if (id === 'edge-vertical') {
-          console.log(`[StepEdge:${id}] 🔍 POSITION DEBUG:`, {
-            edgeDataSourcePos: edgeData?.sourcePosition,
-            edgeDataTargetPos: edgeData?.targetPosition,
-            dataSourcePosition: dataSourcePosition ? Position[dataSourcePosition] : 'undefined',
-            dataTargetPosition: dataTargetPosition ? Position[dataTargetPosition] : 'undefined',
-            effectiveSourcePosition: Position[effectiveSourcePosition],
-            effectiveTargetPosition: Position[effectiveTargetPosition],
-            baseSourcePosition: Position[baseSourcePosition],
-            baseTargetPosition: Position[baseTargetPosition],
-          });
+          // Position resolved
         }
         
         
@@ -773,8 +892,8 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
             const pinObjectMap = (router as any).__pinObjectMap as Map<number, any>;
             pinObjectMap.set(pinId, pinObj);
             
-            // Debug pin creation for moving edges
-            if (id === 'edge-straight' || id.startsWith('edge-port-')) {
+            // Debug pin creation for moving edges and edge-vertical
+            if (id === 'edge-straight' || id.startsWith('edge-port-') || id === 'edge-vertical') {
               const pixelX = origin.x + clampedOffsetX * width;
               const pixelY = origin.y + clampedOffsetY * height;
               const pinType = nodeId === source ? 'SRC' : nodeId === target ? 'TGT' : 'OTHER';
@@ -839,20 +958,13 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
         // Check if we already have a route from coordinator (either from state or coordinator cache)
         let routeFromCoordinator = coordinatorPathPoints || coordinatorInstance.getRoute(id);
         
-        // If route not ready, check if we should force process
-        if (!routeFromCoordinator || routeFromCoordinator.length === 0) {
-          const status = coordinatorInstance.getStatus();
-          if (status.registeredEdgeCount >= status.expectedEdgeCount && status.expectedEdgeCount > 0 && !status.batchProcessed) {
-            // All edges registered but batch not processed yet - force it
-            console.log(`[StepEdge:${id}] ⚠️ All edges registered but batch not processed, forcing...`);
-            coordinatorInstance.forceProcess();
-            routeFromCoordinator = coordinatorInstance.getRoute(id);
-          }
-        }
+        // If route not ready, let the coordinator's debounce handle it
+        // DO NOT forceProcess here - it causes race conditions where not all connections are registered yet
+        // The coordinator will process the batch after all edges have had a chance to register
         
         // If still no route, wait for batch processing
         if (!routeFromCoordinator || routeFromCoordinator.length === 0) {
-          console.log(`[StepEdge:${id}] ⏳ Waiting for batch processing to complete...`);
+          // Waiting for batch processing
           return; // Exit early, will be called again when route is ready via callback
         }
         
@@ -865,12 +977,12 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
         // CRITICAL FIX: If we got a routed path (more than 2 points), don't allow it to be overwritten by a straight line
         // This prevents race conditions where a later routing with fewer obstacles overwrites a correct route
         if (pathPoints.length > 2) {
-          console.log(`[StepEdge:${id}] 🎯 ROUTED PATH FOUND with ${pathPoints.length} points - marking as stable`);
+          // Routed path found
           (window as any).__stableEdgePaths = (window as any).__stableEdgePaths || {};
           (window as any).__stableEdgePaths[id] = pathPoints;
         } else if ((window as any).__stableEdgePaths?.[id]?.length > 2) {
           // If we have a stable routed path and the new path is a straight line, use the stable path
-          console.log(`[StepEdge:${id}] ⚠️ IGNORING STRAIGHT LINE - using stable routed path with ${(window as any).__stableEdgePaths[id].length} points`);
+          // Using stable routed path
           pathPoints.length = 0;
           pathPoints.push(...(window as any).__stableEdgePaths[id]);
         }
@@ -1250,44 +1362,57 @@ const StepEdge: React.FC<EdgeProps> = (props) => {
         console.error(`[StepEdge:${id}] routing error`, error);
         if (!cancelled) {
           const message = error instanceof Error ? error.message : String(error);
+          
+          // Use smart fallback routing instead of straight line
+          const sourcePoint = { x: sourceX, y: sourceY };
+          const targetPoint = { x: targetX, y: targetY };
+          const effectiveSourcePosition = edgeData?.sourcePosition 
+            ? (edgeData.sourcePosition === 'right' ? Position.Right :
+               edgeData.sourcePosition === 'left' ? Position.Left :
+               edgeData.sourcePosition === 'top' ? Position.Top : Position.Bottom)
+            : sourcePosition || Position.Right;
+          const effectiveTargetPosition = edgeData?.targetPosition
+            ? (edgeData.targetPosition === 'right' ? Position.Right :
+               edgeData.targetPosition === 'left' ? Position.Left :
+               edgeData.targetPosition === 'top' ? Position.Top : Position.Bottom)
+            : targetPosition || Position.Left;
+          
+          const fallbackPoints = createSmartFallbackRoute(
+            sourcePoint,
+            targetPoint,
+            effectiveSourcePosition,
+            effectiveTargetPosition,
+            resolvedObstacleRects.filter(obs => obs.id !== source && obs.id !== target)
+          );
+          
           setRoutingStatus('error');
-          setRoutingMessage(message);
-          setComputedBendPoints([]);
+          setRoutingMessage(`Libavoid failed: ${message}. Using smart fallback.`);
+          setComputedBendPoints(fallbackPoints.slice(1, -1));
           setDebugInfo({
-            router: 'libavoid-js',
+            router: 'fallback',
             error: message,
             fallbackApplied: true,
             status: 'error',
-            message,
+            message: `Libavoid failed: ${message}. Using smart fallback.`,
           });
-          const fallbackLine = pointsToPath([
-            { x: sourceX, y: sourceY },
-            { x: targetX, y: targetY },
-          ]);
-          setEdgePath((prevPath) => (prevPath === fallbackLine ? prevPath : fallbackLine));
+          const fallbackPath = pointsToPath(fallbackPoints);
+          setEdgePath((prevPath) => (prevPath === fallbackPath ? prevPath : fallbackPath));
           if (typeof window !== 'undefined') {
             window.__edgeDebug = window.__edgeDebug ?? {};
             window.__edgeDebug[id] = {
               rawPolyline: [],
-              snappedPoints: [
-                { x: sourceX, y: sourceY },
-                { x: targetX, y: targetY },
-              ],
-              collision: {
-                collides: true,
-                details: [message || 'Libavoid routing failed'],
-              },
+              snappedPoints: fallbackPoints,
               fallbackApplied: true,
               status: 'error',
-              message,
-              sourcePosition,
-              targetPosition,
+              message: `Libavoid failed: ${message}. Using smart fallback.`,
+              sourcePosition: effectiveSourcePosition,
+              targetPosition: effectiveTargetPosition,
             };
           }
           if (edgeData) {
             edgeData.routingStatus = 'error';
-            edgeData.routingMessage = message;
-            edgeData.bendPoints = [];
+            edgeData.routingMessage = `Libavoid failed: ${message}. Using smart fallback.`;
+            edgeData.bendPoints = fallbackPoints.slice(1, -1);
           }
         }
       } finally {

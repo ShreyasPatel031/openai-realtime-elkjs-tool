@@ -100,7 +100,7 @@ const VIEW_MODE_CONFIGS: Record<ViewMode, Omit<ViewModeConfig, 'mode' | 'isEmbed
     autoLoadLibavoidFixtures: true,
     showLibavoidTuningPanel: true,
     libavoidDefaults: {
-      shapeBufferDistance: 24, // Increased buffer to push edges apart
+      shapeBufferDistance: 16, // Balanced buffer: enough spacing but allows routing through gaps
       portEdgeSpacing: 16, // Port spacing for multiple edges from same port (reverted)
       routingType: 'orthogonal', // Force orthogonal routing
       hateCrossings: true,

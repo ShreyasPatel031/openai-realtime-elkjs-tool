@@ -49,7 +49,10 @@ export function initializeOrchestrator(
   setNodes?: (nodes: any[]) => void,
   setEdges?: (edges: any[]) => void
 ) {
-  console.log('[🔄 INIT] Orchestrator initialized synchronously (handles both FREE and AI/LOCK modes)');
+  console.log('[🔄 INIT] Orchestrator initialized:', {
+    graphRefChildrenCount: graphRef.current?.children?.length || 0,
+    graphRefId: graphRef.current?.id,
+  });
   
   graphStateRef = graphRef;
   viewStateRef = vsRef;
@@ -57,6 +60,19 @@ export function initializeOrchestrator(
   setGraphRef.current = setGraph || null;
   setNodesRef.current = setNodes || null;
   setEdgesRef.current = setEdges || null;
+}
+
+/**
+ * Get the current domain graph from the orchestrator
+ * This is the authoritative source of truth for the domain structure
+ */
+export function getOrchestratorDomain(): RawGraph | null {
+  console.log('[🔄 ORCH] getOrchestratorDomain called:', {
+    hasRef: !!graphStateRef,
+    hasCurrent: !!graphStateRef?.current,
+    childrenCount: graphStateRef?.current?.children?.length || 0,
+  });
+  return graphStateRef.current;
 
   // 🔧 FIX: If initialized with existing data, trigger immediate render
   // This fixes persistence - restored nodes should appear immediately

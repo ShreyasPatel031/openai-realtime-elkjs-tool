@@ -330,6 +330,10 @@ const addEdgeWrapper = (edgeId: string, sourceId: string, targetId: string, labe
   
   // Keep rawGraphRef in sync
   useEffect(() => {
+    console.log('[🔄 ELK-HOOK] Syncing rawGraphRef:', {
+      oldChildrenCount: rawGraphRef.current?.children?.length || 0,
+      newChildrenCount: rawGraph?.children?.length || 0,
+    });
     rawGraphRef.current = rawGraph;
   }, [rawGraph]);
 
@@ -361,9 +365,9 @@ const addEdgeWrapper = (edgeId: string, sourceId: string, targetId: string, labe
     // **THIS HOOK IS ONLY FOR AI/LOCK MODE WITH ELK**
     // FREE mode and restoration should NEVER reach this hook
     
-    if (mutation?.source === 'user' || mutation?.source === 'restore') {
-      // FREE mode or restoration - should not be here, return immediately
-      console.log('🔍 [ELK] FREE/restore mode detected - should not be in ELK hook, skipping entirely');
+    if (mutation?.source === 'user') {
+      // FREE mode - should not be here, return immediately
+      console.log('🔍 [ELK] FREE mode detected - should not be in ELK hook, skipping entirely');
       return;
     }
     
@@ -618,6 +622,7 @@ const addEdgeWrapper = (edgeId: string, sourceId: string, targetId: string, labe
               edge: { ...(viewStateRef.current.edge || {}) },
             }
           : { node: {}, group: {}, edge: {} };
+        
 
         updated.forEach((node) => {
           // CRITICAL: Only update ViewState positions for actual position changes (user dragging)
@@ -651,13 +656,38 @@ const addEdgeWrapper = (edgeId: string, sourceId: string, targetId: string, labe
           if (isPositionChange && !parentChanged && !isChildNode) {
             // ROOT NODE being dragged - skip ViewState update, let containment detection handle it
             
-            // Preserve existing ViewState position during drag
+            // CRITICAL: Read dimensions from viewStateRef.current (live), not nextViewState (snapshot)
+            // This ensures we get the latest dimensions if they were updated by handleGroupResize
+            const liveGeom = viewStateRef.current?.node?.[node.id] || viewStateRef.current?.group?.[node.id];
             const existingGeom = nextViewState.node[node.id] || nextViewState.group?.[node.id];
+            
+            // Use live dimensions if available, otherwise fall back to snapshot
+            const finalW = liveGeom?.w ?? existingGeom?.w ?? (node.data as any)?.width ?? (node.style as any)?.width ?? 96;
+            const finalH = liveGeom?.h ?? existingGeom?.h ?? (node.data as any)?.height ?? (node.style as any)?.height ?? 96;
+            
+            // CRITICAL: Preserve dimensions from ReactFlow node (which has the resized dimensions)
+            // The node.style.width/height are updated by the resize handler
+            const rfWidth = (node.style as any)?.width ?? (node.data as any)?.width;
+            const rfHeight = (node.style as any)?.height ?? (node.data as any)?.height;
+            
+            // Use ReactFlow dimensions if they're larger than defaults (indicates resize happened)
+            const preservedW = (rfWidth && rfWidth > 200) ? rfWidth : finalW;
+            const preservedH = (rfHeight && rfHeight > 150) ? rfHeight : finalH;
+            
+            if (node.type === 'group' && nextViewState.group[node.id]) {
+              nextViewState.group[node.id].w = preservedW;
+              nextViewState.group[node.id].h = preservedH;
+            }
+            if (nextViewState.node[node.id]) {
+              nextViewState.node[node.id].w = preservedW;
+              nextViewState.node[node.id].h = preservedH;
+            }
+            
             if (existingGeom) {
               geometry = {
                 ...existingGeom,
-                w: existingGeom.w ?? (node.data as any)?.width ?? (node.style as any)?.width ?? 96,
-                h: existingGeom.h ?? (node.data as any)?.height ?? (node.style as any)?.height ?? 96,
+                w: finalW,
+                h: finalH,
               };
             } else {
               // Fallback for new nodes
@@ -681,12 +711,20 @@ const addEdgeWrapper = (edgeId: string, sourceId: string, targetId: string, labe
               }
             }
             
-            const existingGeom = nextViewState.node[node.id];
+            // Check both node and group stores for existing geometry (groups are stored in group store)
+            // CRITICAL: Read dimensions from viewStateRef.current (live), not nextViewState (snapshot)
+            const liveGeom = viewStateRef.current?.node?.[node.id] || viewStateRef.current?.group?.[node.id];
+            const existingGeom = nextViewState.node[node.id] || nextViewState.group?.[node.id];
+            
+            // Use live dimensions if available, otherwise fall back to snapshot
+            const finalW = liveGeom?.w ?? existingGeom?.w ?? (node.data as any)?.width ?? (node.style as any)?.width ?? 96;
+            const finalH = liveGeom?.h ?? existingGeom?.h ?? (node.data as any)?.height ?? (node.style as any)?.height ?? 96;
+            
             geometry = {
               x: absoluteX,
               y: absoluteY,
-              w: existingGeom?.w ?? (node.data as any)?.width ?? (node.style as any)?.width ?? 96,
-              h: existingGeom?.h ?? (node.data as any)?.height ?? (node.style as any)?.height ?? 96,
+              w: finalW,
+              h: finalH,
             };
           } else {
             // Not a position change OR parent changed - preserve existing ViewState position
@@ -731,19 +769,7 @@ const addEdgeWrapper = (edgeId: string, sourceId: string, targetId: string, labe
           }
         });
 
-        // DEBUG: Log ViewState update to trace position jumps
-        const prevViewState = viewStateRef.current;
         viewStateRef.current = nextViewState;
-        
-        // Log any position changes for debugging
-        if (process.env.NODE_ENV !== 'production') {
-          Object.keys(nextViewState.node).forEach(nodeId => {
-            const prev = prevViewState?.node?.[nodeId];
-            const next = nextViewState.node[nodeId];
-            if (prev && (prev.x !== next.x || prev.y !== next.y)) {
-            }
-          });
-        }
 
         if (process.env.NODE_ENV !== 'production') {
           const movedIds = snappedChanges
@@ -808,6 +834,25 @@ const addEdgeWrapper = (edgeId: string, sourceId: string, targetId: string, labe
 
     try {
       handlers.handleAddEdge(id, source, target, undefined, sourceHandle || undefined, targetHandle || undefined);
+      
+      // Also update React Flow edges directly for FREE mode (ELK hook skips user mutations)
+      const newEdge: Edge = {
+        id,
+        source,
+        target,
+        sourceHandle: sourceHandle || undefined,
+        targetHandle: targetHandle || undefined,
+        type: 'step',
+        data: {
+          sourcePosition: sourceHandle?.includes('top') ? 'top' : 
+                          sourceHandle?.includes('bottom') ? 'bottom' :
+                          sourceHandle?.includes('left') ? 'left' : 'right',
+          targetPosition: targetHandle?.includes('top') ? 'top' :
+                          targetHandle?.includes('bottom') ? 'bottom' :
+                          targetHandle?.includes('left') ? 'left' : 'right',
+        },
+      };
+      setEdges((eds) => [...eds, newEdge]);
     } catch (error) {
       console.error('❌ [onConnect] Failed to create edge:', error);
       pendingConnectionsRef.current.delete(connectionKey);

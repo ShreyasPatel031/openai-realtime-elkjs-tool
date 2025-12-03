@@ -30,8 +30,8 @@ test.describe('Actual Canvas Rendering', () => {
     page.on('console', msg => {
       const text = msg.text();
       // Only log relevant messages
-      if (text.includes('BATCH') || text.includes('edge-port-from') || text.includes('Loading libavoid')) {
-        console.log('BROWSER:', text.substring(0, 300));
+      if (text.includes('edge-vertical') || text.includes('BatchRoutingCoordinator') || text.includes('Processing batch') || text.includes('ROUTER-CONFIG')) {
+        console.log('BROWSER:', text.substring(0, 600));
       }
     });
     

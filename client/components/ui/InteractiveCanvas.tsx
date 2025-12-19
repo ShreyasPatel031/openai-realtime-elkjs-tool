@@ -514,6 +514,21 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const setShowDebugButtonRef = useRef(setShowDebugButton);
   useEffect(() => {
     setShowDebugButtonRef.current = setShowDebugButton;
+    
+    // Register toggleDebug immediately when ref is set
+    (window as any).toggleDebug = () => {
+      if (!setShowDebugButtonRef.current) {
+        console.error('❌ toggleDebug: setShowDebugButton not available yet. Component may not be mounted.');
+        console.log('💡 Try refreshing the page or waiting a moment for the component to mount.');
+        return;
+      }
+      setShowDebugButtonRef.current((prev: boolean) => {
+        const newState = !prev;
+        console.log(`🔧 Debug button ${newState ? 'shown' : 'hidden'}`);
+        return newState;
+      });
+    };
+    console.log('✅ toggleDebug() function registered and available');
   }, [setShowDebugButton]);
   
   // Console commands to toggle default architectures
@@ -685,7 +700,7 @@ const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     console.log('  - loadComplexDefault()   → Load complex GCP test architecture');
     console.log('  - clearAndReload()       → Clear localStorage and reload (fixes grid alignment)');
     console.log('  - resetCanvas()          → Reset to empty canvas');
-    console.log('  - toggleDebug()           → Toggle debug panel visibility');
+    console.log('  - toggleDebug()           → Toggle debug button visibility');
     console.log('  - testSelection()         → Test selection tracking (check if selections are being tracked)');
 
     // Cleanup - but DON'T delete toggleDebug to keep it available

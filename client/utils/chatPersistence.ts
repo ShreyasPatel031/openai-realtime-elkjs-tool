@@ -83,6 +83,7 @@ export function saveChatMessage(message: string, sender: 'user' | 'assistant' = 
 
 /**
  * Get the current conversation (last user message + any assistant responses)
+ * Filters out incomplete conversations (only user messages without assistant responses)
  */
 export function getCurrentConversation(): PersistedChatMessage[] {
   try {
@@ -90,7 +91,21 @@ export function getCurrentConversation(): PersistedChatMessage[] {
     if (!stored) return [];
     
     const messages = JSON.parse(stored) as PersistedChatMessage[];
-    return Array.isArray(messages) ? messages : [];
+    if (!Array.isArray(messages) || messages.length === 0) return [];
+    
+    // Check if this is an incomplete conversation (only user messages, no assistant responses)
+    const hasAssistantMessage = messages.some(msg => msg.sender === 'assistant');
+    const lastMessage = messages[messages.length - 1];
+    
+    // If there's only a user message without any assistant response, clear it (incomplete conversation)
+    // This prevents showing example button clicks or abandoned messages on page load
+    if (!hasAssistantMessage && lastMessage?.sender === 'user') {
+      localStorage.removeItem(CURRENT_CONVERSATION_KEY);
+      console.log('🧹 Cleared incomplete conversation (user message without assistant response)');
+      return [];
+    }
+    
+    return messages;
   } catch (error) {
     console.warn('Failed to load current conversation:', error);
     return [];

@@ -58,9 +58,17 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
 }) => {
   const { config } = useViewMode();
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const messagesRef = useRef<ChatMessage[]>([]) // Ref to store latest messages for use in setTimeout callbacks
   const [inputValue, setInputValue] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isDiagramGenerating, setIsDiagramGenerating] = useState(false)
+  // Use ref for synchronous duplicate prevention (state updates are async)
+  const isDiagramGeneratingRef = useRef(false)
+  const diagramGenerationInProgressRef = useRef<string | null>(null) // Track the requirements being processed
+  const pendingAutoTriggerRef = useRef<Set<string>>(new Set()) // Track pending auto-triggers to prevent duplicates
+  const apiCallQueuedRef = useRef<Set<string>>(new Set()) // Track if setTimeout has already been queued for a triggerKey
+  const apiCallProcessingRef = useRef<Set<string>>(new Set()) // Track which triggerKeys are currently being processed by setTimeout callback
+  const apiCallMadeRef = useRef<Set<string>>(new Set()) // Track which triggerKeys have already had API calls made
   const [isMinimized, setIsMinimized] = useState(false)
   const [pastedImages, setPastedImages] = useState<string[]>([]) // Array of data URLs
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string | string[]>>({})
@@ -104,6 +112,11 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
     // Clear the embed-to-canvas flag after loading messages
     clearEmbedToCanvasFlag();
   }, []);
+
+  // Keep messagesRef in sync with messages state for use in setTimeout callbacks
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     loadMessages();
@@ -209,7 +222,7 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
     setPastedImages(prev => prev.filter((_, i) => i !== index));
   }, []);
 
-  const callOpenAI = async (userMessage: string, images?: string[]) => {
+  const callOpenAI = async (userMessage: string, images?: string[], messagesOverride?: ChatMessage[]) => {
     // #region agent log
     fetch('http://127.0.0.1:7242/ingest/cc01c551-14ba-42f2-8fd9-8753b66b462f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:211',message:'callOpenAI called',data:{userMessage:userMessage.substring(0,100),hasImages:!!images,imagesCount:images?.length||0,isDiagramGenerating},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
     // #endregion
@@ -243,20 +256,35 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
     console.log('🎯 Selected nodes for context:', selectedNodeIdsFromGlobal);
     console.log('🎯 Selected edges for context:', selectedEdgeIdsFromGlobal);
     
+    // Use messagesOverride if provided (for immediate use of updated state), otherwise use current messages state
+    const messagesToUse = messagesOverride || messages;
     // Ensure messages array is valid
-    const validMessages = Array.isArray(messages) ? messages : [];
+    const validMessages = Array.isArray(messagesToUse) ? messagesToUse : [];
+    
+    // Check if userMessage already exists in messages (avoid duplicates)
+    const userMessageAlreadyInHistory = validMessages.some(m => 
+      m.role === 'user' && m.content === userMessage
+    );
     
     // Build request body
     const requestBody = {
-      messages: [
-        ...validMessages.map(msg => ({ role: msg.role, content: msg.content || '' })),
-        { role: 'user', content: userMessage }
-      ],
+      messages: userMessageAlreadyInHistory
+        ? validMessages.map(msg => ({ role: msg.role, content: msg.content || '' }))
+        : [
+            ...validMessages.map(msg => ({ role: msg.role, content: msg.content || '' })),
+            { role: 'user', content: userMessage }
+          ],
       currentGraph: safeCurrentGraph, // Always send valid graph object
       images: Array.isArray(images) ? images : [],
       selectedNodeIds: selectedNodeIdsFromGlobal,
       selectedEdgeIds: selectedEdgeIdsFromGlobal
     };
+    
+    // #region agent log - Log conversation history being sent to API
+    const questionMessages = requestBody.messages.filter(m => m.content?.includes('Question') || m.content?.includes('?'));
+    const answerMessages = requestBody.messages.filter(m => m.content?.toLowerCase().startsWith('selected:'));
+    fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:260',message:'callOpenAI: conversation history being sent',data:{totalMessages:requestBody.messages.length,questionMessagesCount:questionMessages.length,answerMessagesCount:answerMessages.length,last3Messages:requestBody.messages.slice(-3).map(m=>({role:m.role,content:m.content?.substring(0,100)})),userMessage:userMessage.substring(0,100)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     
     // DEBUG: Log full request body
     console.log('📤 FULL REQUEST BODY TO CHAT API:');
@@ -364,7 +392,7 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
               if (parsed.type === 'diagram_creation') {
                 // #region agent log
                 const diagramCreationId = `${Date.now()}_${Math.random().toString(36).substring(7)}`;
-                fetch('http://127.0.0.1:7242/ingest/cc01c551-14ba-42f2-8fd9-8753b66b462f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:364',message:'Frontend: diagram_creation message received',data:{diagramCreationId,message:parsed.message?.substring(0,100),requirements:parsed.requirements?.substring(0,100),requirementsFull:parsed.requirements,isDiagramGenerating,processedTriggerIdsSize:processedTriggerIds.current.size,processedTriggerIdsArray:Array.from(processedTriggerIds.current)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:379',message:'Frontend: diagram_creation message received',data:{diagramCreationId,message:parsed.message?.substring(0,100),requirements:parsed.requirements?.substring(0,100),requirementsFull:parsed.requirements,isDiagramGenerating,isDiagramGeneratingRef:isDiagramGeneratingRef.current,inProgressRequirements:diagramGenerationInProgressRef.current,processedTriggerIdsSize:processedTriggerIds.current.size,processedTriggerIdsArray:Array.from(processedTriggerIds.current)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
                 // #endregion
                 
                 // #region agent log
@@ -372,10 +400,11 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
                 // #endregion
                 
                 // Skip if diagram is already generating (prevents concurrent generation)
-                if (isDiagramGenerating) {
-                  console.log('⏭️ Skipping: Diagram already generating')
+                // Use ref for synchronous check (state updates are async)
+                if (isDiagramGeneratingRef.current) {
+                  console.log('⏭️ Skipping: Diagram already generating (ref check)')
                   // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/cc01c551-14ba-42f2-8fd9-8753b66b462f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:358',message:'Skipped duplicate - isDiagramGenerating=true',data:{diagramCreationId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                  fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:390',message:'Skipped duplicate - isDiagramGeneratingRef.current=true',data:{diagramCreationId,inProgressRequirements:diagramGenerationInProgressRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
                   // #endregion
                   continue
                 }
@@ -386,17 +415,29 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
                 fetch('http://127.0.0.1:7242/ingest/cc01c551-14ba-42f2-8fd9-8753b66b462f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:365',message:'Checking processedTriggerIds for duplicate',data:{diagramCreationId,requirementsHash,isDuplicate,processedTriggerIdsSize:processedTriggerIds.current.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
                 // #endregion
                 
-                // Check for duplicate using processedTriggerIds
-                if (isDuplicate) {
-                  console.log('⏭️ Skipping: Duplicate diagram creation (already processed)')
+                // Check for duplicate using processedTriggerIds OR if any diagram is currently generating
+                // Also check if a diagram with similar requirements was already processed (within last 30 seconds)
+                const similarRequirementsHash = requirementsHash.substring(0, 100); // Use first 100 chars for similarity check
+                const hasSimilarRequirements = Array.from(processedTriggerIds.current).some(hash => 
+                  hash.substring(0, 100) === similarRequirementsHash
+                );
+                
+                if (isDuplicate || hasSimilarRequirements || isDiagramGeneratingRef.current) {
+                  console.log('⏭️ Skipping: Duplicate or similar diagram creation (already processed or in progress)')
                   // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/cc01c551-14ba-42f2-8fd9-8753b66b462f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:370',message:'Skipped duplicate - found in processedTriggerIds',data:{diagramCreationId,requirementsHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                  fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:408',message:'Skipped duplicate/similar - found in processedTriggerIds or in progress',data:{diagramCreationId,requirementsHash,similarRequirementsHash,isDuplicate,hasSimilarRequirements,isDiagramGeneratingRef:isDiagramGeneratingRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
                   // #endregion
                   continue
                 }
                 
-                // Mark as processed
+                // Mark as processed IMMEDIATELY (before async state updates)
                 processedTriggerIds.current.add(requirementsHash);
+                isDiagramGeneratingRef.current = true;
+                diagramGenerationInProgressRef.current = requirementsHash;
+                
+                // #region agent log
+                fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:414',message:'Marked diagram generation in progress (ref)',data:{diagramCreationId,requirementsHash,isDiagramGeneratingRef:isDiagramGeneratingRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                // #endregion
                 
                 console.log('🚀 Agent decided to create diagram:', parsed.message)
                 console.log('🔍 Requirements:', parsed.requirements)
@@ -415,11 +456,11 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
                   )
                 )
                 
-                // Set loading state for diagram generation
+                // Set loading state for diagram generation (ref already set above)
                 setIsDiagramGenerating(true)
                 console.log('🔄 Set diagram generation loading state to true')
                 // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/cc01c551-14ba-42f2-8fd9-8753b66b462f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:419',message:'Frontend: Set isDiagramGenerating=true',data:{diagramCreationId,requirementsHash,isDiagramGeneratingBefore:false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:438',message:'Frontend: Set isDiagramGenerating=true (state + ref)',data:{diagramCreationId,requirementsHash,isDiagramGeneratingRef:isDiagramGeneratingRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
                 // #endregion
                 
                 // Set global state (needed for naming and other functions)
@@ -458,11 +499,13 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
                   fetch('http://127.0.0.1:7242/ingest/cc01c551-14ba-42f2-8fd9-8753b66b462f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:415',message:'handleChatSubmit error',data:{diagramCreationId,requirementsHash,error:error instanceof Error ? error.message : String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
                   // #endregion
                 } finally {
-                  // Clear loading state after completion
+                  // Clear loading state after completion (both state and ref)
                   setIsDiagramGenerating(false)
+                  isDiagramGeneratingRef.current = false;
+                  diagramGenerationInProgressRef.current = null;
                   console.log('✅ Set diagram generation loading state to false')
                   // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/cc01c551-14ba-42f2-8fd9-8753b66b462f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:422',message:'Diagram generation complete - isDiagramGenerating set to false',data:{diagramCreationId,requirementsHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                  fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:490',message:'Diagram generation complete - cleared state and ref',data:{diagramCreationId,requirementsHash},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
                   // #endregion
                 }
                 continue // Continue processing other messages in the same chunk
@@ -493,8 +536,21 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
                     return true
                   })
                   
+                  // Check if this exact question already exists (prevent duplicate questions)
+                  const questionContent = parsed.question || '';
+                  const duplicateQuestion = filtered.find(msg => 
+                    msg.role === 'assistant' && 
+                    (msg.type === 'radio-question' || msg.type === 'checkbox-question' || msg.type === 'question') &&
+                    msg.content === questionContent
+                  );
+                  
+                  if (duplicateQuestion) {
+                    console.log('⚠️ Skipping duplicate question:', questionContent);
+                    return filtered; // Don't add duplicate question
+                  }
+                  
                   const questionMessage: ChatMessage = {
-                    id: `question-${Date.now()}`,
+                    id: `question-${Date.now()}-${Math.random().toString(36).substring(7)}`, // Ensure unique ID
                     role: 'assistant',
                     content: parsed.question || '',
                     timestamp: new Date(),
@@ -506,9 +562,11 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
                 })
                 
                 // Also cancel any diagram generation that might have started
-                if (isDiagramGenerating) {
+                if (isDiagramGenerating || isDiagramGeneratingRef.current) {
                   console.log('🛑 Cancelling diagram generation - question takes priority')
                   setIsDiagramGenerating(false)
+                  isDiagramGeneratingRef.current = false;
+                  diagramGenerationInProgressRef.current = null;
                 }
                 
                 continue // Continue processing other messages in the same chunk
@@ -810,18 +868,38 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
                                 // Use a unique key to prevent duplicate triggers
                                 const triggerKey = `${id}_${JSON.stringify(newOptions[id])}`;
                                 
-                                // Check if this trigger is already pending
-                                if (pendingAutoTriggers.current.has(triggerKey)) {
+                                // Check if this trigger is already pending or API call already queued (check all refs)
+                                if (pendingAutoTriggers.current.has(triggerKey) || pendingAutoTriggerRef.current.has(triggerKey) || apiCallQueuedRef.current.has(triggerKey)) {
                                   // #region agent log
-                                  fetch('http://127.0.0.1:7242/ingest/cc01c551-14ba-42f2-8fd9-8753b66b462f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:798',message:'Skipping duplicate auto-trigger',data:{triggerKey,questionId:id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+                                  fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:850',message:'Skipping duplicate auto-trigger',data:{triggerKey,questionId:id,pendingAutoTriggers:pendingAutoTriggers.current.has(triggerKey),pendingAutoTriggerRef:pendingAutoTriggerRef.current.has(triggerKey),apiCallQueued:apiCallQueuedRef.current.has(triggerKey)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
                                   // #endregion
                                   return newOptions;
                                 }
                                 
-                                // Mark as pending
+                                // Mark as pending in ALL refs (defense in depth)
                                 pendingAutoTriggers.current.add(triggerKey);
+                                pendingAutoTriggerRef.current.add(triggerKey);
+                                apiCallQueuedRef.current.add(triggerKey); // Mark that setTimeout is about to be queued
                                 
                                 setTimeout(() => {
+                                  // CRITICAL: Check if this triggerKey is already being processed by another setTimeout callback
+                                  // Use a separate ref to track which callbacks are actively processing
+                                  if (apiCallProcessingRef.current.has(triggerKey)) {
+                                    // Another setTimeout callback is already processing this, skip this one
+                                    // #region agent log
+                                    fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:863',message:'Skipping - API call already processing in another setTimeout',data:{triggerKey},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                                    // #endregion
+                                    // Clean up pending refs
+                                    pendingAutoTriggers.current.delete(triggerKey);
+                                    pendingAutoTriggerRef.current.delete(triggerKey);
+                                    apiCallQueuedRef.current.delete(triggerKey);
+                                    return;
+                                  }
+                                  
+                                  // Mark as processing and clear the "queued" flag
+                                  apiCallProcessingRef.current.add(triggerKey);
+                                  apiCallQueuedRef.current.delete(triggerKey);
+                                  
                                   const selectedValues = newOptions[id];
                                   if (selectedValues && (Array.isArray(selectedValues) ? selectedValues.length > 0 : selectedValues)) {
                                     try {
@@ -834,27 +912,102 @@ const RightPanelChat: React.FC<RightPanelChatProps> = ({
                                         // Send the selected options to get next question or create diagram
                                         const selectionMessage = `Selected: ${optionTexts.join(', ')}`;
                                         console.log('🔄 Auto-triggering with selection:', selectionMessage);
-                                        // #region agent log
-                                        fetch('http://127.0.0.1:7242/ingest/cc01c551-14ba-42f2-8fd9-8753b66b462f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:810',message:'Question answer auto-triggering new API call',data:{selectionMessage,questionId:id,isDiagramGenerating,triggerKey},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-                                        // #endregion
-                                        callOpenAI(selectionMessage, []);
                                         
-                                        // Remove from pending after a delay (allow for API call to complete)
+                                        // #region agent log - Log BEFORE adding answer to messages
+                                        const messagesBeforeAnswer = messages;
+                                        const questionCountBefore = messagesBeforeAnswer.filter(m => m.type === 'radio-question' || m.type === 'checkbox-question').length;
+                                        const answerCountBefore = messagesBeforeAnswer.filter(m => m.role === 'user' && m.content?.toLowerCase().startsWith('selected:')).length;
+                                        fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:877',message:'BEFORE answer: messages state',data:{messagesCount:messagesBeforeAnswer.length,questionCount:questionCountBefore,answerCount:answerCountBefore,messages:messagesBeforeAnswer.map(m=>({role:m.role,type:m.type,content:m.content?.substring(0,50),id:m.id})),selectionMessage,questionId:id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                                        // #endregion
+                                        
+                                        // CRITICAL FIX: Add answer to messages FIRST, then call API OUTSIDE callback
+                                        // The setMessages callback may execute multiple times - check for duplicate before adding
+                                        setMessages(prev => {
+                                          // Check if this answer was already added (prevent duplicate from strict mode)
+                                          const lastMessage = prev[prev.length - 1];
+                                          if (lastMessage?.role === 'user' && lastMessage.content === selectionMessage) {
+                                            // #region agent log
+                                            fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:912',message:'Skipping duplicate answer message',data:{selectionMessage,lastMessageContent:lastMessage.content},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                                            // #endregion
+                                            return prev; // Don't add duplicate
+                                          }
+                                          
+                                          const answerMessage: ChatMessage = {
+                                            id: `answer-${Date.now()}-${Math.random().toString(36).substring(7)}`, // Ensure unique ID
+                                            role: 'user',
+                                            content: selectionMessage,
+                                            timestamp: new Date()
+                                          };
+                                          const messagesWithAnswer = [...prev, answerMessage];
+                                          
+                                          // Immediately sync messagesRef for the inner setTimeout to read
+                                          messagesRef.current = messagesWithAnswer;
+                                          
+                                          // #region agent log - Log AFTER adding answer to messages
+                                          const questionCountAfter = messagesWithAnswer.filter(m => m.type === 'radio-question' || m.type === 'checkbox-question').length;
+                                          const answerCountAfter = messagesWithAnswer.filter(m => m.role === 'user' && m.content?.toLowerCase().startsWith('selected:')).length;
+                                          fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:923',message:'AFTER adding answer: messages state',data:{messagesCount:messagesWithAnswer.length,questionCount:questionCountAfter,answerCount:answerCountAfter,lastMessage:{role:answerMessage.role,content:answerMessage.content,id:answerMessage.id}},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+                                          // #endregion
+                                          
+                                          return messagesWithAnswer;
+                                        });
+                                        
+                                        // Call API OUTSIDE of setMessages callback to prevent multiple invocations
+                                        // Use setTimeout(0) to ensure state update completes first, then use messagesRef
                                         setTimeout(() => {
+                                          // CRITICAL: Check if API call already made for this triggerKey
+                                          // This prevents duplicate calls even if this setTimeout fires multiple times
+                                          if (apiCallMadeRef.current.has(triggerKey)) {
+                                            // #region agent log
+                                            fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:932',message:'Skipping - API call already made for this triggerKey',data:{triggerKey},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                                            // #endregion
+                                            return;
+                                          }
+                                          
+                                          // Mark as made BEFORE calling API to prevent race conditions
+                                          apiCallMadeRef.current.add(triggerKey);
+                                          
+                                          // Use messagesRef instead of setMessages callback to avoid double execution
+                                          const currentMessages = messagesRef.current;
+                                          
+                                          // #region agent log
+                                          fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'RightPanelChat.tsx:945',message:'Question answer auto-triggering new API call',data:{selectionMessage,questionId:id,isDiagramGenerating,triggerKey,messagesCount:currentMessages.length,hasSelectionMessage:currentMessages.some(m=>m.content===selectionMessage)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                                          // #endregion
+                                          
+                                          callOpenAI(selectionMessage, [], currentMessages);
+                                          
+                                          // Clean up ALL refs after API call
                                           pendingAutoTriggers.current.delete(triggerKey);
-                                        }, 5000);
+                                          pendingAutoTriggerRef.current.delete(triggerKey);
+                                          apiCallQueuedRef.current.delete(triggerKey);
+                                          apiCallProcessingRef.current.delete(triggerKey);
+                                          
+                                          // Clean up apiCallMadeRef after a delay (allow for next question cycle)
+                                          setTimeout(() => {
+                                            apiCallMadeRef.current.delete(triggerKey);
+                                          }, 5000);
+                                        }, 0);
                                       } else {
                                         // Remove immediately if no valid selection
                                         pendingAutoTriggers.current.delete(triggerKey);
+                                        pendingAutoTriggerRef.current.delete(triggerKey);
+                                        apiCallQueuedRef.current.delete(triggerKey);
+                                        apiCallProcessingRef.current.delete(triggerKey);
                                       }
                                     } catch (error) {
                                       console.error('❌ Error in auto-trigger:', error);
-                                      // Remove on error
+                                      // Remove on error - clean up all refs
                                       pendingAutoTriggers.current.delete(triggerKey);
+                                      pendingAutoTriggerRef.current.delete(triggerKey);
+                                      apiCallQueuedRef.current.delete(triggerKey);
+                                      apiCallProcessingRef.current.delete(triggerKey);
                                     }
                                   } else {
-                                    // Remove if no selection
+                                    // Remove if no selection - clean up all refs
                                     pendingAutoTriggers.current.delete(triggerKey);
+                                    pendingAutoTriggerRef.current.delete(triggerKey);
+                                    apiCallQueuedRef.current.delete(triggerKey);
+                                    apiCallProcessingRef.current.delete(triggerKey);
                                   }
                                 }, 300);
                                 

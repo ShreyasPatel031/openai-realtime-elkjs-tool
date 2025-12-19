@@ -38,19 +38,18 @@ export function useCanvasState(params?: any): any {
   const [useReactFlow, setUseReactFlow] = useState(true);
   const [showElkDebug, setShowElkDebug] = useState(false);
   
-  // Initialize showElkDomainGraph from localStorage, default to true
+  // Initialize showElkDomainGraph - always default to false on startup
+  // Clear any existing localStorage value to ensure it doesn't auto-open
   const showElkDomainGraphInitialValue = (() => {
     if (typeof window !== 'undefined') {
       try {
-        const stored = localStorage.getItem('atelier_showElkDomainGraph');
-        if (stored !== null) {
-          return JSON.parse(stored);
-        }
+        // Always clear localStorage on startup to ensure it starts hidden
+        localStorage.removeItem('atelier_showElkDomainGraph');
       } catch (error) {
-        console.warn('Failed to load showElkDomainGraph from localStorage:', error);
+        console.warn('Failed to clear showElkDomainGraph from localStorage:', error);
       }
     }
-    return true; // Default to visible
+    return false; // Always default to hidden
   })();
   
   const [showElkDomainGraph, setShowElkDomainGraph] = useState(showElkDomainGraphInitialValue);

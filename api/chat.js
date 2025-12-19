@@ -445,25 +445,88 @@ ${JSON.stringify(currentGraph, null, 2)}`
       });
     };
     
-    // Helper: Check if there's an unanswered question (sequential tracking)
-    const hasUnansweredQuestion = (messages) => {
-      const lastAssistant = messages.filter(m => m.role === 'assistant').pop();
-      if (!lastAssistant) return false;
+    // Helper: Properly track questions and answers by ID
+    const getQuestionAnswerTracking = (messages) => {
+      const questionsAsked = new Map(); // questionId -> { questionId, content, timestamp, index }
+      const answersGiven = new Set(); // questionId (which questions have been answered)
       
-      if (lastAssistant.type === 'question') {
-        const lastUser = messages.filter(m => m.role === 'user').pop();
-        if (!lastUser) return true;
+      messages.forEach((msg, index) => {
+        // Track all question messages (by type or by content pattern)
+        const isQuestion = msg.type === 'question' || 
+                          msg.type === 'radio-question' || 
+                          msg.type === 'checkbox-question' ||
+                          (msg.role === 'assistant' && (
+                            msg.content?.includes('Question') ||
+                            msg.content?.includes('?') ||
+                            msg.content?.includes('What is') ||
+                            msg.content?.includes('Where will') ||
+                            msg.content?.includes('Which') ||
+                            msg.content?.includes('How')
+                          ));
         
-        if (lastUser.content?.toLowerCase().startsWith('selected:')) {
-          return false;
+        if (isQuestion && msg.role === 'assistant') {
+          // Use message ID as question ID, or generate one if missing
+          const questionId = msg.id || `question-${index}-${Date.now()}`;
+          questionsAsked.set(questionId, {
+            questionId,
+            content: msg.content,
+            timestamp: msg.timestamp || new Date(),
+            index,
+            type: msg.type
+          });
         }
         
-        const questionIndex = messages.findIndex(m => m.id === lastAssistant.id);
-        const lastUserIndex = messages.findIndex(m => m.id === lastUser.id);
-        return questionIndex > lastUserIndex;
-      }
+        // Track answers - answers reference their question ID
+        if (msg.role === 'user' && msg.content?.toLowerCase().startsWith('selected:')) {
+          // Try to find the question this answer belongs to by looking backwards
+          for (let i = index - 1; i >= 0; i--) {
+            const prevMsg = messages[i];
+            if (prevMsg.role === 'assistant') {
+              const isPrevQuestion = prevMsg.type === 'question' || 
+                                    prevMsg.type === 'radio-question' || 
+                                    prevMsg.type === 'checkbox-question' ||
+                                    (prevMsg.content?.includes('?') ||
+                                     prevMsg.content?.includes('What is') ||
+                                     prevMsg.content?.includes('Where will') ||
+                                     prevMsg.content?.includes('Which') ||
+                                     prevMsg.content?.includes('How'));
+              
+              if (isPrevQuestion) {
+                const questionId = prevMsg.id || `question-${i}-${Date.now()}`;
+                answersGiven.add(questionId);
+                break; // Only mark the immediately preceding question as answered
+              }
+            }
+          }
+        }
+      });
       
-      return false;
+      return { questionsAsked, answersGiven };
+    };
+    
+    // Helper: Check if there's an unanswered question (proper tracking by ID)
+    const hasUnansweredQuestion = (messages) => {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/chat.js:449',message:'hasUnansweredQuestion: entry',data:{messagesCount:messages.length,allMessages:messages.map(m=>({role:m.role,type:m.type,content:m.content?.substring(0,80),id:m.id}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      
+      const { questionsAsked, answersGiven } = getQuestionAnswerTracking(messages);
+      
+      // Check if ANY question is unanswered
+      let unansweredQuestions = [];
+      questionsAsked.forEach((question, questionId) => {
+        if (!answersGiven.has(questionId)) {
+          unansweredQuestions.push(questionId);
+        }
+      });
+      
+      const result = unansweredQuestions.length > 0;
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/chat.js:492',message:'hasUnansweredQuestion: result',data:{totalQuestions:questionsAsked.size,answeredQuestions:answersGiven.size,unansweredCount:unansweredQuestions.length,unansweredQuestionIds:unansweredQuestions,result},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      
+      return result;
     };
     
     // Helper: Get current question sequence count (resets after answer)
@@ -513,23 +576,25 @@ ${JSON.stringify(currentGraph, null, 2)}`
         hasSelection: (selectedNodeIds?.length > 0) || (selectedEdgeIds?.length > 0),
         hasGroupSelection: getSelectedGroupIds(currentGraph, selectedNodeIds).length > 0
       },
-      conversation: {
-        allMessages: messages,
-        messageCount: messages.length,
-        hasUnansweredQuestion: hasUnansweredQuestion(messages),
-        currentQuestionCount: getCurrentQuestionSequence(messages),
-        totalQuestionsAsked: messages.filter(m => m.type === 'question').length,
-        questionsAnswered: messages.filter(m => 
-          m.role === 'user' && m.content?.toLowerCase().startsWith('selected:')
-        ).length,
-        lastUserMessage: messages.filter(m => m.role === 'user').pop()?.content || null,
-        lastAssistantMessage: messages.filter(m => m.role === 'assistant').pop() || null,
-        conversationSummary: messages.slice(-10).map(m => ({
-          role: m.role,
-          content: m.content?.substring(0, 200),
-          type: m.type || null
-        }))
-      },
+      conversation: (() => {
+        const { questionsAsked, answersGiven } = getQuestionAnswerTracking(messages);
+        return {
+          allMessages: messages,
+          messageCount: messages.length,
+          hasUnansweredQuestion: hasUnansweredQuestion(messages),
+          currentQuestionCount: getCurrentQuestionSequence(messages),
+          totalQuestionsAsked: questionsAsked.size,
+          questionsAnswered: answersGiven.size,
+          unansweredQuestions: Array.from(questionsAsked.keys()).filter(qId => !answersGiven.has(qId)),
+          lastUserMessage: messages.filter(m => m.role === 'user').pop()?.content || null,
+          lastAssistantMessage: messages.filter(m => m.role === 'assistant').pop() || null,
+          conversationSummary: messages.slice(-10).map(m => ({
+            role: m.role,
+            content: m.content?.substring(0, 200),
+            type: m.type || null
+          }))
+        };
+      })(),
       images: {
         count: images?.length || 0,
         hasImages: (images?.length || 0) > 0,
@@ -585,6 +650,7 @@ ${JSON.stringify(agentContext.selection.selectedGroupDetails, null, 2)}
 3. CONVERSATION STATE:
    - Total messages: ${agentContext.conversation.messageCount}
    - Has unanswered question: ${agentContext.conversation.hasUnansweredQuestion}
+   - **UNANSWERED QUESTIONS COUNT: ${agentContext.conversation.unansweredQuestions.length}** (MUST be 0 before asking new questions)
    - Total questions asked: ${agentContext.conversation.totalQuestionsAsked}
    - Questions answered: ${agentContext.conversation.questionsAnswered}
    - Last user message: "${agentContext.conversation.lastUserMessage}"
@@ -603,7 +669,7 @@ ${selectionContext}
 
 - **If images provided:** Create architecture from the image (don't ask questions)
 
-- **If there's an unanswered question:** Wait for the user to answer before asking another or creating a diagram
+- **CRITICAL: If there's an unanswered question:** DO NOT ask new questions. Wait for ALL unanswered questions to be answered before asking another question or creating a diagram. Check `conversation.unansweredQuestions` count - if > 0, you MUST wait.
 
 - **When to ask a clarifying question:**
   - The user's request is vague or ambiguous and you need information to create an accurate design
@@ -657,7 +723,7 @@ ${selectionContext}
     console.log('  - hasUnansweredQuestion:', agentContext.conversation.hasUnansweredQuestion);
     console.log('  - toolChoiceValue:', toolChoiceValue);
     console.log('  - Context provided, LLM will decide based on prompt');
-    fetch('http://127.0.0.1:7242/ingest/cc01c551-14ba-42f2-8fd9-8753b66b462f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/chat.js:683',message:'Tool choice decision (non-deterministic)',data:{hasUnansweredQuestion:agentContext.conversation.hasUnansweredQuestion,toolChoiceValue,canvasIsEmpty:agentContext.canvas.isEmpty,hasImages:agentContext.images.hasImages,hasSelection:agentContext.selection.hasSelection,totalQuestionsAsked:agentContext.conversation.totalQuestionsAsked,questionsAnswered:agentContext.conversation.questionsAnswered,currentGraphChildren:currentGraph?.children?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7243/ingest/2c91d607-2790-4bbf-a7ab-0b4d8e1cfe86',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/chat.js:695',message:'Tool choice decision made',data:{hasUnansweredQuestion:agentContext.conversation.hasUnansweredQuestion,toolChoiceValue,totalQuestionsAsked:agentContext.conversation.totalQuestionsAsked,questionsAnswered:agentContext.conversation.questionsAnswered,messageCount:messages.length,lastUserMessage:agentContext.conversation.lastUserMessage?.substring(0,100),messagesStructure:messages.map(m=>({role:m.role,type:m.type,content:m.content?.substring(0,50)}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
     // #endregion
     
     // Create chat completion with streaming and tools
@@ -681,7 +747,7 @@ ${selectionContext}
           type: "function",
           function: {
             name: "ask_clarifying_question",
-            description: "Ask ONE clarifying question when the user's request is vague or ambiguous (e.g., 'make llm assessor', 'create a payment system', 'build a chat app') and you need information to create an accurate design. For vague new design requests, asking a question FIRST improves accuracy. Ask questions that enable more accurate design communication. Wait for the user to answer before asking another. DO NOT use if there's an unanswered question pending.",
+            description: "Ask ONE clarifying question when the user's request is vague or ambiguous (e.g., 'make llm assessor', 'create a payment system', 'build a chat app') and you need information to create an accurate design. For vague new design requests, asking a question FIRST improves accuracy. Ask questions that enable more accurate design communication. **CRITICAL: DO NOT use this tool if there are ANY unanswered questions (check conversation.unansweredQuestions count - must be 0). Wait for ALL unanswered questions to be answered before asking a new question.**",
             parameters: {
               type: "object",
               properties: {

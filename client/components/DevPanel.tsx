@@ -1705,7 +1705,7 @@ const DevPanelContent: React.FC<Omit<DevPanelProps, 'onTriggerLayout'> & { onTri
             <label className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded text-sm cursor-pointer hover:bg-gray-200">
               <input
                 type="checkbox"
-                checked={showElkDomainGraph ?? true}
+                checked={showElkDomainGraph ?? false}
                 onChange={(e) => setShowElkDomainGraph?.(e.target.checked)}
                 className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
               />
